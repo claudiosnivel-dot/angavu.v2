@@ -97,17 +97,17 @@ queste voci per nome.
 | ID | Decisione | Stato |
 |---|---|---|
 | `DI-001` | Tecnologia: **SwiftUI nativo** | ✅ confermato dall'utente |
-| `DI-002` | v1 **tutto-free**, Pro (pagamento unico) rimandato | 🟡 assunto come default in BOOTSTRAP — da confermare |
-| `DI-003` | iOS minimo **17.0** (iOS 18 aesthetics come progressive enhancement) | 🟡 assunto come default in BOOTSTRAP — da confermare |
-| `DI-004` | Persistenza indice: **SwiftData** (vs Core Data) | 🟡 assunto come default in BOOTSTRAP — da confermare |
+| `DI-002` | v1 **tutto-free**, Pro (pagamento unico) rimandato | ✅ confermato dall'utente |
+| `DI-003` | iOS minimo **17.0** (iOS 18 aesthetics come progressive enhancement) | ✅ confermato dall'utente |
+| `DI-004` | Persistenza indice: **SwiftData** (vs Core Data) | ✅ confermato dall'utente |
 | `DI-005` | Nome/brand su App Store: **Angavu** | ✅ confermato dall'utente |
 | `DI-006` | **Compressione video in v1** (primo candidato al de-scope sotto slittamento estremo) | ✅ confermato dall'utente |
 | `DI-007` | **Dominio extra-foto (contatti + calendario) in v1** | ✅ confermato dall'utente |
-| `DI-008` | Mercati di lancio: Italia soft-launch → EN → ES/PT/DE | 🟡 assunto come default in BOOTSTRAP — da confermare |
+| `DI-008` | Mercati di lancio: Italia soft-launch → EN → ES/PT/DE | ✅ confermato dall'utente |
 
-> Le decisioni bloccate (`✅`) si modificano **solo** con emendamento esplicito
-> registrato qui. Le `🟡` sono i default che BOOTSTRAP assume (come previsto da
-> `docs/FEASIBILITY-iOS.md` §11.1) e che l'utente può confermare o cambiare.
+> Tutte le decisioni sono ora **bloccate** (`✅`): `DI-002/003/004/008`, assunte
+> come default in BOOTSTRAP, sono state confermate dall'utente. Una decisione
+> bloccata si modifica **solo** con emendamento esplicito registrato qui.
 
 ## 5. Fonti di verità
 

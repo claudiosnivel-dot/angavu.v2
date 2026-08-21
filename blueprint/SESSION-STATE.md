@@ -65,7 +65,8 @@
 
 ## 6. Prossimi passi
 
-- Confermare i default `🟡` del decision ledger (`DI-002/003/004/008`, 00-INDEX §4).
+- Decision ledger **interamente confermato**: `DI-002/003/004/008` bloccati
+  dall'utente (nessuna decisione pendente).
 - Aprire la prossima sessione in modalità **BUILD** (apple-skills) sul macrotask
   `foundation` (T-001 scaffold), rispettando il DAG.
 - Il dispatch alla prossima sessione (blueprint + SESSION-STATE presenti) sceglie

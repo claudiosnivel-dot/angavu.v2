@@ -6,7 +6,7 @@
 > Fonte: il repo Android [`angavu`](https://github.com/claudiosnivel-dot/angavu)
 > (README, `blueprint/VISION-AND-CONSTRAINTS.md`, `blueprint/00-INDEX.md`) e la
 > conoscenza delle API Apple. Dove il salto a iOS cambia una decisione, è
-> registrata nel decision ledger (§9), da confermare.
+> registrata nel decision ledger (§9), ora interamente confermato dall'utente.
 
 | | |
 |---|---|
@@ -147,7 +147,7 @@ Shortcuts/App Intents, macOS/iPadOS dedicati.
 | Tipo | Vincolo |
 |---|---|
 | Ecosistema | Swift + SwiftUI nativo; **zero backend** |
-| iOS minimo | **iOS 17.0** proposto (`DI-003`) — copre la stragrande maggioranza dei device 2026 e semplifica Vision/SwiftData; iOS 18 aesthetics come *progressive enhancement* |
+| iOS minimo | **iOS 17.0** (`DI-003`, confermato) — copre la stragrande maggioranza dei device 2026 e semplifica Vision/SwiftData; iOS 18 aesthetics come *progressive enhancement* |
 | Permessi | `NSPhotoLibraryUsageDescription` (foto), e solo se le feature entrano: `NSContactsUsageDescription`, `NSCalendarsUsageDescription`. Niente permesso non usato |
 | Privacy | Nessun dato lascia il device; **PrivacyInfo.xcprivacy** con required-reason API dichiarate; nessun tracking |
 | Dimensione app | Snella: Vision è di sistema, **nessun modello Core ML bundolato** → app piccola, coerente con l'ethos "<15 MB" dell'Android |
@@ -159,18 +159,18 @@ Shortcuts/App Intents, macOS/iPadOS dedicati.
 > **Nota budget.** A differenza dei 25 $ una-tantum di Google Play, Apple chiede
 > 99 $/anno. È l'unica voce di costo strutturalmente nuova del progetto iOS.
 
-## 9. Decision ledger (da confermare)
+## 9. Decision ledger (interamente confermato)
 
 | ID | Decisione | Stato |
 |---|---|---|
 | `DI-001` | Tecnologia: **SwiftUI nativo** (no cross-platform: la logica riusabile Android è minima, il grosso è API di piattaforma) | ✅ confermato dall'utente |
-| `DI-002` | v1 **tutto-free**, Pro (pagamento unico) rimandato — come `D-002` Android | 🟡 proposto |
-| `DI-003` | iOS minimo **17.0** | 🟡 proposto |
-| `DI-004` | Persistenza indice: **SwiftData** (vs Core Data) | 🟡 proposto |
+| `DI-002` | v1 **tutto-free**, Pro (pagamento unico) rimandato — come `D-002` Android | ✅ confermato dall'utente |
+| `DI-003` | iOS minimo **17.0** | ✅ confermato dall'utente |
+| `DI-004` | Persistenza indice: **SwiftData** (vs Core Data) | ✅ confermato dall'utente |
 | `DI-005` | Nome/brand su App Store: **Angavu** | ✅ confermato dall'utente |
 | `DI-006` | **Compressione video in v1** (feature più a rischio tecnico: primo candidato al de-scope solo sotto slittamento estremo) | ✅ confermato dall'utente |
 | `DI-007` | **Dominio extra-foto (contatti + calendario) in v1** | ✅ confermato dall'utente |
-| `DI-008` | Mercati di lancio: Italia soft-launch → EN → ES/PT/DE (come Android)? | 🟡 proposto |
+| `DI-008` | Mercati di lancio: Italia soft-launch → EN → ES/PT/DE (come Android) | ✅ confermato dall'utente |
 
 ## 10. Architettura proposta (bozza)
 
@@ -193,10 +193,10 @@ App (SwiftUI)               UI, navigazione, onboarding-manifesto
 
 ## 11. Prossimi passi
 
-1. Decisioni di scope chiuse (`DI-005` Angavu, `DI-006` compressione video in v1,
-   `DI-007` extra-foto in v1). Restano da confermare solo le proposte `DI-002/003/004/008`,
-   che il BOOTSTRAP può assumere come default e registrare.
-2. **Trueline BOOTSTRAP** (prossima sessione) su questo documento → blueprint tecnico (`blueprint/`):
+1. Decision ledger **interamente confermato** dall'utente (`DI-001…008` tutti `✅`):
+   scope chiuso, nessuna decisione pendente.
+2. **Trueline BOOTSTRAP** — **completato**: da questo documento è stato generato il
+   blueprint tecnico (`blueprint/`):
    macrotask, task atomici con `definition_of_done` / `acceptance_criteria` /
    `target_tests`, e la mappa delle degradazioni degli oracoli (Kotlin/Android
    non era coperto; **Swift/iOS nemmeno** — si dichiareranno le sostituzioni

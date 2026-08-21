@@ -30,6 +30,7 @@ grafo dei moduli come oracolo di altitudine, e i tool degli `apple-skills`),
   altitudine, mappa delle degradazioni degli oracoli Swift/iOS in `00-INDEX` §7,
   3 prompt di lifecycle in `blueprint/prompts/`). Self-check **strutturale**
   verde (`validate_blueprint.mjs blueprint` → exit 0) e semantico applicato.
+- Decision ledger **interamente confermato** (`DI-001…008` tutti `✅`; i default
+  `DI-002/003/004/008` confermati dall'utente): nessuna decisione pendente.
 - Prossimo passo: **BUILD** con la suite **apple-skills** sul macrotask
-  `foundation` (scaffold multi-modulo), rispettando il DAG. Restano da confermare
-  i default del decision ledger `DI-002/003/004/008` (`blueprint/00-INDEX.md` §4).
+  `foundation` (scaffold multi-modulo), rispettando il DAG.
