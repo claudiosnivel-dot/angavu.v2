@@ -42,11 +42,28 @@ nessuna installazione manuale dei plugin.
   verde (`validate_blueprint.mjs blueprint` → exit 0) e semantico applicato.
 - Decision ledger **interamente confermato** (`DI-001…008` tutti `✅`; i default
   `DI-002/003/004/008` confermati dall'utente): nessuna decisione pendente.
-- **BUILD `foundation` completato**: `Package.swift` a 3 moduli (AngavuDomain puro
-  / AngavuData / AngavuFeatures) + app SwiftUI `App/` iOS 17.0, oracolo di
-  altitudine (import `domain→data` rompe la build), gate `-warnings-as-errors`,
-  motore d'analisi cancellabile nel Domain. `swift build`/`swift test` verdi
-  (11 pass, 2 skip). `swiftlint` dichiarato non coperto nel sandbox (L-COL-006),
-  da girare al confine Apple con `make lint`.
-- Prossimo passo: **BUILD** del macrotask `library_index` (PhotoKit + indice
-  SwiftData), rispettando il DAG.
+- **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
+  `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS.
+  È qui che l'oracolo Swift emette verde/rosso (L-COL-002), senza possedere un Mac.
+- **BUILD verificati (CI Apple verde)**: `foundation`, `library_index`,
+  `safety_net`, `dashboard`. `dashboard` chiuso al run #6 (`success`): T-020
+  (aggregazione per categoria, exact/estimated separati), T-021 (caveat iCloud,
+  riusa `DeletedAssetSize`), T-022 (banner limited). Package a 3 moduli
+  (AngavuDomain puro / AngavuData / AngavuFeatures) + app SwiftUI `App/` iOS 17.0;
+  oracolo di altitudine (import `domain→data` rompe la build), gate
+  `-warnings-as-errors`.
+- Prossimo passo: **BUILD** del macrotask `exact_duplicates` (SHA-256 sui candidati
+  per dimensione; elimina via `safety_net`), rispettando il DAG.
+
+## Lifecycle di sessione (vincolante)
+
+- **Inizio sessione**: eseguire `blueprint/prompts/session-start.md` (recupero
+  contesto da `SESSION-STATE`, scelta macrotask sul DAG, ripetizione
+  task/criteri/test, branch pronto).
+- **Fine sessione — automatica sul verde**: **ogni volta che il macrotask della
+  sessione è verde** (oracolo Apple in CI = run `success` su build+test+lint),
+  eseguire `blueprint/prompts/session-end.md` e chiudere: marcare il macrotask
+  `done` in `SESSION-STATE.md`, registrare il commit e l'esito del gate, indicare
+  il prossimo macrotask. Regola confermata dall'utente (2026-08-21) per tutte le
+  sessioni future. NB: è una convenzione di repo letta da ogni sessione, non un
+  hook dell'harness (non esiste un evento harness "macrotask verde").
