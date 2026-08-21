@@ -12,9 +12,14 @@ let warningsAsErrors: [SwiftSetting] = [
 
 let package = Package(
     name: "Angavu",
-    // Deployment target unico dei moduli: iOS 17.0 (DI-003). Nessun target sotto 17.0.
+    // Deployment target dei moduli: iOS 17.0 (DI-003) è il target di prodotto.
+    // macOS 14 è dichiarato SOLO per far girare gli oracoli sull'host in CI
+    // (`swift build`/`test` su runner macOS): abilita le API PhotoKit (macOS 11+)
+    // e SwiftData (macOS 14+) senza `#available` sparsi. L'app resta iOS-only
+    // (target Xcode via App/project.yml).
     platforms: [
-        .iOS(.v17)
+        .iOS(.v17),
+        .macOS(.v14)
     ],
     products: [
         .library(name: "AngavuDomain", targets: ["AngavuDomain"]),
