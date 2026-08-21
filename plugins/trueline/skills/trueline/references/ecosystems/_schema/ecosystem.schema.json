@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trueline.dev/schemas/ecosystem.schema.json",
+  "title": "Trueline Ecosystem Manifest",
+  "description": "Contratto fra l'engine generico e un ecosistema (SP-0). Vocabolario categorie = finding.schema.json. 'authz-surface' e un RUOLO su un binding, non una categoria.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id","version","languages","backend","detect","triggers","oracles","floor","verified_set","coverage_policy"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" },
+    "languages": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "backend": { "type": "string", "minLength": 1 },
+    "detect": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "files_any": { "type": "array", "items": { "type": "string" } },
+        "lang_any":  { "type": "array", "items": { "type": "string" } },
+        "deps_any":  { "type": "array", "items": { "type": "string" }, "description": "Fase 0 (eco-F6): nomi-dipendenza (package.json/requirements.txt); presenza di uno = segnale forte come files_any. Opzionale; default-invariante (pack senza deps_any non cambiano comportamento)." }
+      }
+    },
+    "triggers": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "oracles": {
+      "type": "object",
+      "description": "Chiave = finding-category (o gruppo 'a|b|c'). Valore = binding.",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": true,
+        "required": ["tool"],
+        "properties": {
+          "tool": { "type": "string", "minLength": 1 },
+          "shared": { "type": "boolean" },
+          "role": { "type": "string", "enum": ["authz-surface"] },
+          "ruleset": { "type": "string" },
+          "lockfiles": { "type": "array", "items": { "type": "string" } },
+          "kind": { "type": "string" }
+        }
+      }
+    },
+    "test_runner": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "detect": { "type": "array", "items": { "type": "string" } } }
+    },
+    "floor": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "verified_set": { "type": "array", "items": { "type": "string" } },
+    "coverage_policy": { "type": "string", "enum": ["declared"] }
+  }
+}

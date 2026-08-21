@@ -1,0 +1,54 @@
+# Ruleset Semgrep PLACEHOLDER per l'oracolo semgrep di Trueline (03 §5.1).
+#
+# TODO M4: sostituire col ruleset curato completo (07 §4).
+#
+# Questo file esiste solo per far girare e smoke-testare il wrapper docker in M0
+# (lo script trueline/scripts/oracles/run_semgrep.mjs lo monta nel container ed
+# esegue `semgrep scan`). NON e il ruleset di detection: la detection reale di
+# S6 (injection) e S7 (authz) e DIFFERITA a M4 e NON fa parte del gate M0.
+#
+# Contiene due regole semplici e volutamente generiche, marcate come segnaposto:
+#   - sql-string-concat : concatenazione di stringhe in una query SQL
+#   - hardcoded-secret-literal : literal che assomiglia a una chiave/segreto
+# La loro mappatura native->finding (categoria/severita/OWASP) verra rifinita
+# col ruleset curato in M4 (07 §4); qui i metadata servono solo da esempio.
+
+rules:
+  # TODO M4: sostituire col ruleset curato completo (07 §4).
+  - id: sql-string-concat
+    languages:
+      - typescript
+      - javascript
+    severity: WARNING
+    message: >-
+      PLACEHOLDER (TODO M4): possibile costruzione di SQL per concatenazione di
+      stringhe. La regola curata di M4 (categoria injection) sostituira questa.
+    metadata:
+      category: injection
+      placeholder: true
+      owasp_source: "A03:2021"
+      cwe: "CWE-89"
+      note: "TODO M4: sostituire col ruleset curato completo (07 §4)."
+    patterns:
+      - pattern-either:
+          - pattern: '"$SQL" + $X'
+          - pattern: '$X + "$SQL"'
+
+  # TODO M4: sostituire col ruleset curato completo (07 §4).
+  - id: hardcoded-secret-literal
+    languages:
+      - typescript
+      - javascript
+    severity: WARNING
+    message: >-
+      PLACEHOLDER (TODO M4): literal che assomiglia a una chiave/segreto
+      hardcoded. Sui segreti l'oracolo autoritativo resta gitleaks (03 §6,
+      dedup per fingerprint+categoria); questa regola e solo segnaposto.
+    metadata:
+      category: secret
+      placeholder: true
+      owasp_source: "A07:2021"
+      cwe: "CWE-798"
+      note: "TODO M4: sostituire col ruleset curato completo (07 §4)."
+    patterns:
+      - pattern-regex: '(sk_live_|service_role)[A-Za-z0-9_]{16,}'

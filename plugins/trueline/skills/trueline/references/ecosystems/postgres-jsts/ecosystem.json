@@ -1,0 +1,22 @@
+{
+  "id": "postgres-jsts",
+  "version": "1.1.0",
+  "languages": ["js", "ts"],
+  "backend": "postgres",
+  "detect": { "lang_any": ["package.json"] },
+  "triggers": ["postgres", "pg", "prisma", "drizzle", "next", "nextjs", "express", "node", "secret", "segret", "authz", "authorization", "autorizzazione", "route", "rotta", "endpoint", "blueprint", "audit", "remediat", "bonific", "macrotask", "oracol", "js", "ts", "javascript", "typescript", "sicur", "security"],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true, "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"] },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "crypto":          { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "knip" },
+    "duplication":     { "tool": "jscpd", "min_tokens": 50 },
+    "architecture":    { "tool": "madge" }
+  },
+  "test_runner": { "detect": ["vitest", "jest", "node:test"] },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret", "dead-code"],
+  "coverage_policy": "declared"
+}

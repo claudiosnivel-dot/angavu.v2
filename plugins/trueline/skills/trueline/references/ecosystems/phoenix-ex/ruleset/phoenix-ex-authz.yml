@@ -1,0 +1,97 @@
+# =============================================================================
+# phoenix-ex-authz.yml — Ruleset Semgrep route-authz del pack `phoenix-ex`
+# (eco-F4, tier DETECTION).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` Phoenix/Elixir (route-authz nel controller, non RLS-al-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# per lo stack Elixir/Phoenix: un'action MUTANTE (create/update/delete) in un
+# controller Phoenix che NON ha un plug di autenticazione applicato nel modulo.
+#
+# NOTA SPERIMENTALE (eco-F4): il supporto Elixir in Semgrep è SPERIMENTALE
+# (confidenza bassa → oracolo futuro F6). Il ruleset è best-effort: può non
+# catturare tutti i pattern o produrre falsi negativi. NON è un fallimento se
+# semgrep non è disponibile nel sandbox; il gate degrada onestamente (L-COL-006).
+#
+# SINK (action mutanti) coperti:
+#   - create/2, update/2, delete/2 in un controller Phoenix
+#     (`use MyAppWeb, :controller` o `use Phoenix.Controller`).
+#
+# CONTESTO: l'action deve essere in un modulo controller che NON ha
+#   `plug :require_authenticated_user` o `plug :authenticate_user`.
+#
+# ESCLUSIONE (auth check Phoenix) — `pattern-not-inside`:
+#   - `plug :require_authenticated_user` nel modulo
+#   - `plug :authenticate_user` nel modulo
+#   - `conn.assigns[:current_user]` usato nel corpo dell'action
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti con
+#   il registry e con la normalize di 04 — A01:2025 è già 2025-canonico).
+#
+# PRECISIONE: sulla fixture EX-S3 deve colpire SOLO il controller non protetto
+#   (PostsController senza plug auth) e NON il SecurePostsController (con plug
+#   :require_authenticated_user). Il router (router.ex) non è un target.
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs col 2° arg
+#   ruleset path = questa dir); `semgrep scan --config <dir>`.
+# =============================================================================
+
+rules:
+  # SEED EX-S3. Action Phoenix MUTANTE (create/update/delete) in un controller
+  # che NON applica un plug di autenticazione: chiunque raggiunga l'endpoint
+  # può mutare i dati (CWE-862, Broken Access Control, A01:2025).
+  - id: phoenix-authz-mutating-action-no-auth-plug
+    languages: [elixir]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Action mutante senza check identità/ruolo (route-authz Phoenix)"
+        - "eco-F4 — authz-surface Elixir/Phoenix (sperimentale, best-effort)"
+    message: >-
+      Action Phoenix MUTANTE (create/update/delete) senza plug di autenticazione
+      applicato al controller: chiunque raggiunga l'endpoint può mutare i dati
+      (CWE-862, Broken Access Control). Applicare `plug :require_authenticated_user`
+      nel modulo controller o verificare `conn.assigns[:current_user]` prima
+      di eseguire la scrittura.
+    patterns:
+      # 1) IL NODO: una funzione mutante tipica di un controller Phoenix.
+      - pattern-either:
+          - pattern: |
+              def create($CONN, $PARAMS) do
+                ...
+              end
+          - pattern: |
+              def update($CONN, $PARAMS) do
+                ...
+              end
+          - pattern: |
+              def delete($CONN, $PARAMS) do
+                ...
+              end
+      # 2) ESCLUSIONE — plug di autenticazione nel modulo (pattern-not-inside).
+      #    Se il modulo ha plug :require_authenticated_user O plug :authenticate_user,
+      #    NON è un finding (il check è già garantito dal pipeline Plug).
+      - pattern-not-inside: |
+          defmodule $MOD do
+            ...
+            plug :require_authenticated_user
+            ...
+          end
+      - pattern-not-inside: |
+          defmodule $MOD do
+            ...
+            plug :authenticate_user
+            ...
+          end
+      # 3) ESCLUSIONE — verifica esplicita di current_user nel corpo dell'action.
+      #    Se conn.assigns[:current_user] è letto nel corpo, NON è un finding.
+      - pattern-not-inside: |
+          def $ACTION($CONN, $PARAMS) do
+            ...
+            $CONN.assigns[:current_user]
+            ...
+          end

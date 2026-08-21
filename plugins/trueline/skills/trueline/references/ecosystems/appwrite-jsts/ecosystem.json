@@ -1,0 +1,22 @@
+{
+  "$comment": "authz verified = appwrite_perms_check STATICO ri-eseguito pulito (collection senza read(\"any\") → owner-scoped); NON invarianza runtime (Appwrite instance non disponibile) — L-COL-006.",
+  "id": "appwrite-jsts",
+  "version": "1.0.0",
+  "languages": ["js", "ts"],
+  "backend": "appwrite",
+  "detect": { "files_any": ["appwrite.json"], "lang_any": ["package.json"] },
+  "triggers": ["appwrite", "node-appwrite", "appwrite-sdk", "appwrite.json", "appwrite collection", "appwrite permission", "authz", "permission", "js", "ts", "javascript", "typescript", "blueprint", "audit", "remediat", "bonific", "macrotask", "oracol", "sicur", "security", "secret", "segret"],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true, "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"] },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+    "authz":           { "tool": "appwrite_perms_check", "kind": "appwrite-perms", "scan": ["."], "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "knip" },
+    "duplication":     { "tool": "jscpd", "min_tokens": 50 },
+    "architecture":    { "tool": "madge" }
+  },
+  "test_runner": { "detect": ["vitest", "jest", "mocha"] },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret", "dead-code", "authz"],
+  "coverage_policy": "declared"
+}

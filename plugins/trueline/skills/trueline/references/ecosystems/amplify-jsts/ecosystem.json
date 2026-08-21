@@ -1,0 +1,50 @@
+{
+  "$comment": "authz verified = appsync_auth_check STATICO ri-eseguito pulito (schema.graphql senza allow: public → owner-scoped); NON invarianza runtime (AppSync non disponibile nel sandbox) — L-COL-006. ⚠ GEN1 SOLTANTO: il floor SDL @auth copre Amplify Gen1; la sintassi Gen2 (a.allow.publicApiKey() in TypeScript) resta detection-only.",
+  "id": "amplify-jsts",
+  "version": "1.0.0",
+  "languages": ["js", "ts"],
+  "backend": "amplify",
+  "detect": {
+    "files_any": ["schema.graphql", "amplify/"],
+    "lang_any": ["package.json"]
+  },
+  "triggers": [
+    "amplify", "appsync", "aws-amplify", "schema.graphql", "amplify/",
+    "@model", "@auth", "graphql", "appsync-auth", "authz", "authori",
+    "js", "ts", "javascript", "typescript",
+    "blueprint", "audit", "remediat", "bonific", "macrotask",
+    "oracol", "sicur", "security", "secret", "segret"
+  ],
+  "oracles": {
+    "secret": {
+      "tool": "gitleaks",
+      "shared": true,
+      "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"]
+    },
+    "dependency-vuln": {
+      "tool": "osv",
+      "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"]
+    },
+    "authz": {
+      "tool": "appsync_auth_check",
+      "kind": "appsync-auth",
+      "scan": [".", "amplify"],
+      "role": "authz-surface"
+    },
+    "injection": {
+      "tool": "semgrep",
+      "ruleset": "ruleset/"
+    },
+    "dead-code": {
+      "tool": "knip"
+    },
+    "duplication": { "tool": "jscpd", "min_tokens": 50 },
+    "architecture": { "tool": "madge" }
+  },
+  "test_runner": {
+    "detect": ["vitest", "jest", "mocha"]
+  },
+  "floor": ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret", "dead-code", "authz"],
+  "coverage_policy": "declared"
+}

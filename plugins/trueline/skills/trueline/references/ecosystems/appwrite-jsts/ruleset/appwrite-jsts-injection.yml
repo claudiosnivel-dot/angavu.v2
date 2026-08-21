@@ -1,0 +1,153 @@
+# =============================================================================
+# appwrite-jsts-injection.yml — Ruleset Semgrep injection del pack `appwrite-jsts`
+# (eco-F2).
+#
+# version: 1.0.0
+#
+# RUOLO `injection` (non-floor, extra) per stack JS/TS su Appwrite (Cloud
+# Functions / funzioni serverless Appwrite): rileva due classi di injection
+# critiche nei sorgenti Node.js/TS eseguiti server-side.
+#
+# CLASSI COPERTE:
+#
+#   AW-S4-A: Command Injection (CWE-77) — child_process exec/execSync/spawn
+#   con input concatenato o interpolato. Un attaccante che controlla l'input
+#   può iniettare comandi shell arbitrari sul container serverless.
+#   Sink: require('child_process').exec / execSync / spawnSync / execFile
+#         con argomento costruito tramite template literal `${x}`, +concat,
+#         o variabile non-literal come primo argomento.
+#   Contrasto: passare array di argomenti a spawn() / execFile() senza shell=true;
+#              oppure validare/escape l'input (allowlist rigorosa).
+#
+#   AW-S4-B: Code Injection via eval (CWE-95) — eval() / new Function()
+#   con input utente. Consente esecuzione di codice JS arbitrario lato server.
+#   Sink: eval($INPUT), new Function($INPUT) dove $INPUT non è un literal statico.
+#
+# PRECISIONE: le regole non catturano exec() con literal statici
+# (nessuna concatenazione nel sito di chiamata). Analogamente, eval() su literal
+# costanti non è un finding. L'obiettivo è zero falsi positivi su invocazioni
+# sicure tipiche di funzioni serverless Appwrite.
+#
+# NOTA Appwrite-specifica: le query Appwrite usano l'SDK strutturato
+# (Query.equal, Query.greaterThan, ecc.) — nessuna stringa SQL costruita
+# dinamicamente. CWE-89 (SQL injection) NON si applica ad Appwrite;
+# questo ruleset NON include regole SQL. Il rischio injection in Appwrite
+# è concentrato su child_process (funzioni serverless che invocano processi
+# esterni) e eval.
+#
+# metadata: category=injection, owasp="A05:2025", cwe="CWE-77"/"CWE-95"
+#   (coerenti con registry AW-S4 e normalizer 04; category=injection passa
+#   invariato nella tassonomia 04).
+#   OWASP A05:2025 = Security Misconfiguration / Injection (mapping 2025).
+#
+# INVOCAZIONE: montato dal wrapper run_semgrep.mjs (SP-1/T2.0);
+#   `semgrep scan --config <dir>`. Immagine semgrep pinnata (L-COL-002).
+# Clone strutturale di firebase-jsts-injection.yml (eco-F2, BIT-invariante).
+# =============================================================================
+
+rules:
+  # ---------------------------------------------------------------------------
+  # AW-S4-A: Command Injection — child_process con input concatenato/interpolato.
+  # Un valore come "foo; rm -rf /" nel template literal altera il comando shell
+  # (CWE-77). Sink: exec / execSync / execFile / spawnSync col primo argomento
+  # costruito dinamicamente (template literal, +-concat, variabile non-literal).
+  # ---------------------------------------------------------------------------
+  - id: aw-injection-child-process-template-literal
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-77"
+      references:
+        - "eco-F2 — appwrite-jsts injection: command injection serverless"
+        - "AW-S4-A: child_process exec con template literal / input concatenato"
+    message: >-
+      Command injection (CWE-77): primo argomento di exec/execSync/execFile/spawnSync
+      costruito con template literal o concatenazione di stringhe con input variabile.
+      Un attaccante che controlla l'input può iniettare comandi shell arbitrari.
+      Usare spawn() / execFile() con array di argomenti e senza { shell: true },
+      oppure validare l'input con una allowlist rigorosa prima di passarlo al processo.
+    patterns:
+      - pattern-either:
+          # Template literal con interpolazione: exec(`cmd ${userInput}`)
+          - pattern: |
+              require('child_process').exec(`...`, ...)
+          - pattern: |
+              require('child_process').execSync(`...`, ...)
+          - pattern: |
+              require('child_process').execFile(`...`, ...)
+          - pattern: |
+              require('child_process').spawnSync(`...`, ...)
+          # +-concat con variabile: exec("cmd " + userInput)
+          - pattern: |
+              require('child_process').exec($STR + $VAR, ...)
+          - pattern: |
+              require('child_process').execSync($STR + $VAR, ...)
+          # Variabile non-literal come primo argomento: exec(cmd) dove cmd è variabile
+          - pattern: |
+              require('child_process').exec($CMD, ...)
+          - pattern: |
+              require('child_process').execSync($CMD, ...)
+
+  - id: aw-injection-child-process-import-template-literal
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-77"
+      references:
+        - "eco-F2 — appwrite-jsts injection: command injection serverless (ESM import)"
+        - "AW-S4-A: child_process import + exec con template literal"
+    message: >-
+      Command injection (CWE-77): exec/execSync chiamato su binding importato con
+      template literal o concatenazione. Usare execFile() con array argomenti senza shell.
+    patterns:
+      - pattern-either:
+          # import { exec } from 'child_process'; exec(`cmd ${x}`)
+          - pattern: |
+              $EXEC(`...`, ...)
+          - pattern: |
+              $EXEC($STR + $VAR, ...)
+      - metavariable-pattern:
+          metavariable: $EXEC
+          patterns:
+            - pattern-either:
+                - pattern: exec
+                - pattern: execSync
+                - pattern: execFile
+                - pattern: spawnSync
+
+  # ---------------------------------------------------------------------------
+  # AW-S4-B: Code Injection via eval / new Function — esecuzione di codice JS
+  # arbitrario con input utente come sorgente (CWE-95).
+  # Sink: eval($INPUT), new Function($INPUT) dove $INPUT non è un literal.
+  # ---------------------------------------------------------------------------
+  - id: aw-injection-eval-user-input
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-95"
+      references:
+        - "eco-F2 — appwrite-jsts injection: eval di input utente (CWE-95)"
+        - "AW-S4-B: eval / new Function con variabile non-literal"
+    message: >-
+      Code injection (CWE-95): eval() o new Function() chiamato con un argomento
+      variabile (non un literal statico). Un attaccante che controlla l'input può
+      eseguire codice JS arbitrario lato server (funzioni serverless Appwrite).
+      Eliminare eval(); sostituire con strutture dati (JSON.parse, Map) o dispatch
+      esplicito su valori consentiti.
+    patterns:
+      - pattern-either:
+          # eval con variabile non-literal
+          - pattern: eval($INPUT)
+          # new Function con variabile
+          - pattern: new Function($INPUT)
+          # new Function multi-arg: new Function("a", userCode)
+          - pattern: new Function(..., $INPUT)
+      - pattern-not:
+          # esclude eval su literal statico — non è un finding
+          - pattern: eval("...")

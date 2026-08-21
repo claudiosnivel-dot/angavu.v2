@@ -1,0 +1,87 @@
+# =============================================================================
+# postgres-py-injection.yml — Ruleset Semgrep injection del pack `postgres-py`
+# (SP-2, T2.2).
+#
+# version: 1.0.0
+#
+# RUOLO `injection` per stack Python su Postgres non-Supabase (psycopg /
+# psycopg2 / SQLAlchemy raw): SQL injection da costruzione DINAMICA della stringa
+# SQL passata a `cursor.execute(...)` / `connection.execute(...)`.
+#
+# SINK: una chiamata  <obj>.execute(<arg>)  (cursor o connection) dove <arg> NON
+# e' un literal statico ne' una variabile gia' pronta, ma una STRINGA COSTRUITA
+# dinamicamente da input:
+#   - f-string:      cur.execute(f"... {x} ...")
+#   - %-format:      cur.execute("... %s ..." % x)        (formattazione Python,
+#                    NON il placeholder posizionale del driver)
+#   - +-concat:      cur.execute("..." + x)  /  cur.execute(x + "...")
+#   - .format():     cur.execute("... {} ...".format(x))
+#
+# PRECISIONE (08 §5, L-COL-028): nessuna regola acchiappa-tutto. La query
+# PARAMETRIZZATA di contrasto NON e' un finding: il placeholder posizionale del
+# driver  cur.execute("... WHERE id = %s", (x,))  passa l'input come 2o argomento
+# (params), non lo concatena nel testo SQL -> psycopg lo cita/escapa. Allo stesso
+# modo  cur.execute(query, params)  con `query` gia' variabile NON e' bersaglio
+# (nessuna costruzione dinamica nel sito di chiamata). Distinguiamo il `%`-format
+# PYTHON (operatore di formattazione: `"..." % x`, FINDING) dal placeholder `%s`
+# del driver (literal statico + tupla params, PULITO): solo il primo costruisce
+# la stringa SQL.
+#
+# Sulla fixture T1.2 (eval/ecosystems/postgres-py/reference-app) deve colpire
+# SOLO SEED:PY-S4 (app/routes/bookings.py get_booking_unsafe, f-string) e NON:
+#   - get_booking_safe (stesso file): cur.execute("... %s", (booking_id,))  pulito
+#   - app/db.py fetch_all/fetch_one: cur.execute(query, params)             pulito
+#
+# metadata: category=injection, owasp="A03:2025", cwe="CWE-89" (coerenti col
+#   registry T1.2 e con la normalize di 04 — A03:2025 e' gia' 2025-canonico, passa
+#   invariato; category=injection in tassonomia 04).
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs col 2o arg
+#   ruleset path = questa dir, SP-1/T2.0); `semgrep scan --config <dir>`. Immagine
+#   semgrep pinnata (L-COL-002).
+# =============================================================================
+
+rules:
+  # SEED PY-S4. SQL injection: la stringa SQL passata a cursor/connection.execute
+  # e' COSTRUITA DINAMICAMENTE (f-string / %-format Python / +-concat / .format())
+  # con input, invece di usare i placeholder parametrizzati del driver. Un valore
+  # come "1 OR 1=1" altera la semantica della query (CWE-89).
+  - id: py-injection-sql-execute-dynamic-string
+    languages: [python]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A03:2025"
+      cwe: "CWE-89"
+      references:
+        - "07 §4.2 — SQL per concatenazione/template con input"
+        - "SP-2 T2.2 — injection psycopg/SQLAlchemy raw (.execute dinamico)"
+    message: >-
+      Query SQL passata a cursor/connection.execute() costruita DINAMICAMENTE
+      (f-string / %-format / concatenazione / .format()) con input: SQL injection
+      (CWE-89). Usare i placeholder parametrizzati del driver — cur.execute("...
+      WHERE id = %s", (id,)) — passando i valori come 2o argomento (params), mai
+      interpolati nel testo SQL.
+    patterns:
+      # IL NODO: una chiamata .execute(<arg>) su un oggetto qualsiasi (cursor o
+      # connection), col PRIMO argomento costruito dinamicamente. L'execute
+      # parametrizzato sicuro ha la forma .execute("literal statico", params):
+      # quel literal NON matcha nessuno dei pattern dinamici qui sotto.
+      - pattern-either:
+          # f-string: l'interpolazione {x} avviene NEL literal SQL.
+          #   cur.execute(f"SELECT ... {booking_id}")   (SEED:PY-S4)
+          - pattern: $OBJ.execute(f"...", ...)
+          # %-format PYTHON: operatore di formattazione su una stringa.
+          #   cur.execute("SELECT ... %s ..." % booking_id)
+          # (NB: e' l'operatore `%` su una stringa nel SITO di chiamata, distinto
+          #  dal placeholder del driver dove `%s` resta nel literal e i valori
+          #  vanno come 2o argomento -> quella forma non matcha.)
+          - pattern: $OBJ.execute("..." % $ARG, ...)
+          - pattern: $OBJ.execute($FMT % $ARG, ...)
+          # +-concat: literal SQL concatenato con un'espressione (o viceversa).
+          #   cur.execute("SELECT ... WHERE id = " + booking_id)
+          - pattern: $OBJ.execute("..." + $X, ...)
+          - pattern: $OBJ.execute($X + "...", ...)
+          # .format(): costruzione della stringa via str.format con input.
+          #   cur.execute("SELECT ... {} ...".format(booking_id))
+          - pattern: $OBJ.execute("...".format(...), ...)

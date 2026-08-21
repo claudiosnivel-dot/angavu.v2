@@ -1,0 +1,24 @@
+{
+  "id": "laravel-php",
+  "version": "1.1.0",
+  "languages": ["php"],
+  "backend": "laravel-app",
+  "detect": { "lang_any": ["composer.json"] },
+  "triggers": [
+    "laravel", "php", "composer", "artisan", "eloquent", "blade",
+    "route", "middleware", "controller", "sanctum", "passport",
+    "authz", "authorization", "autorizzazione", "sicur", "security",
+    "secret", "segret", "audit", "remediat", "bonific",
+    "blueprint", "macrotask", "oracol"
+  ],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["composer.lock"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "psalm" }
+  },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret"],
+  "coverage_policy": "declared"
+}

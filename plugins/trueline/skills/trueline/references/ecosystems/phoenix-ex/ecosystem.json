@@ -1,0 +1,25 @@
+{
+  "$comment": "Pack di rilevamento eco-F4 per Elixir/Phoenix (tier DETECTION). detect.lang_any=['mix.exs'] — segnale build della lingua; nessun files_any forte -> passata 2 (lang-only). floor:[secret,dependency-vuln]; verified_set:[]; coverage_policy:'declared'. GAP DICHIARATO L-COL-006: authz NON è nel floor. Il binding authz=semgrep(ruleset/) Elixir resta come BONUS non-floor (role:authz-surface), ma l'engine OSS di Semgrep (immagine pinnata semgrep/semgrep:latest) NON può parsare Elixir — emette 'Missing plugin ... Missing Semgrep extension needed for parsing Elixir target. Try adding --pro-languages' e 0 finding: il parsing Elixir richiede l'engine proprietario Pro (--pro-languages) non disponibile nel sandbox. route-authz Elixir via Semgrep è quindi INAFFIDABILE (sperimentale, low-conf) e degrada onestamente: NON nel floor, oracolo futuro F6 (binding conservato per la fixture/seed EX-S3). dead-code=compiler (dichiarato, non nel floor). Lockfile osv: mix.lock.",
+  "id": "phoenix-ex",
+  "version": "1.1.0",
+  "languages": ["elixir"],
+  "backend": "phoenix-app",
+  "detect": { "lang_any": ["mix.exs"] },
+  "triggers": [
+    "phoenix", "elixir", "mix", "mix.exs", "mix.lock", "ecto", "plug", "plug_cowboy",
+    "absinthe", "liveview", "live_view", "channel", "heex", "sigil_H",
+    "blueprint", "audit", "remediat", "bonific", "macrotask", "oracol",
+    "sicur", "security", "secret", "segret", "authz", "authorization",
+    "autorizzazione", "route", "rotta", "endpoint", "controller", "router"
+  ],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["mix.lock"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "compiler" }
+  },
+  "floor":        ["secret", "dependency-vuln"],
+  "verified_set": ["secret"],
+  "coverage_policy": "declared"
+}

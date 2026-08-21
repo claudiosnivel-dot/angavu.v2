@@ -1,0 +1,9 @@
+# amplify-jsts-injection.yml — ruleset SEMGREP (bonus, non-floor) per injection
+# su AWS Amplify / AppSync (JS/TS). Queste regole integrano la copertura del
+# floor (authz, secret, dep-vuln, dead-code). PLACEHOLDER: le rule concrete
+# verranno aggiunte nell'iterazione del piano F3 §injection-bonus.
+#
+# Scope: injection / A03:2025 (Injection), CWE-89/CWE-79/CWE-400.
+# needsDocker: false (semgrep open-source, node).
+
+rules: []

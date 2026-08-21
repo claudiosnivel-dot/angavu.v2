@@ -1,0 +1,137 @@
+# =============================================================================
+# dynamodb-jsts-authz.yml — Ruleset Semgrep route-authz del pack `dynamodb-jsts`
+# (eco-F6, tier DETECTION, best-effort).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` DynamoDB (route-authz nell'app, non RLS-al-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# per stack JS/TS su AWS DynamoDB (@aws-sdk/client-dynamodb / aws-sdk): un handler
+# di rotta MUTANTE (.post/.put/.delete/.patch) che invia un comando DynamoDB
+# MUTANTE (PutItemCommand / UpdateItemCommand / DeleteItemCommand) via client.send()
+# SENZA un controllo d'identità/ruolo nel corpo (CWE-862).
+#
+# SINK (scrittura DynamoDB) coperti:
+#   - $CLIENT.send(new PutItemCommand(...))    — scrittura/creazione item
+#   - $CLIENT.send(new UpdateItemCommand(...)) — aggiornamento item
+#   - $CLIENT.send(new DeleteItemCommand(...)) — cancellazione item
+# Coprono sia @aws-sdk/client-dynamodb (v3) sia l'SDK v2 (new AWS.DynamoDB()).
+#
+# CONTESTO: il sink deve stare DENTRO un route handler MUTANTE Express/Next:
+#   $ROUTER.post|put|delete|patch($PATH, …, async ($REQ, $RES) => { … })
+#
+# ESCLUSIONE (auth check): `pattern-not-inside` — se il corpo dell'handler verifica
+# l'identità/ruolo PRIMA del sink, NON è un finding:
+#     verifyToken($REQ), requireAuth($REQ), $REQ.user, $X = verifyToken(...).
+#
+# MODELLO: postgres-jsts-authz.yml (stesso pattern JS/TS, sink diversi). Si usano
+# (...) per parametri e pattern-either per le varianti, idioma JS semgrep corretto
+# (evita PatternParseError). Le ellissi ... nell'arrow-function body coprono 0..N
+# statement prima/dopo il sink.
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti col
+#   registry eco-F6 e con la normalize di 04 — A01:2025 è già 2025-canonico).
+#
+# BEST-EFFORT (eco-F6): semgrep richiede docker. Se assente -> degrada onesto
+#   (exit non 0). Quando disponibile, la regola DEVE colpire SOLO SEED:DYNAMO-S3
+#   (router.post('/items') con PutItemCommand senza auth) e NON il contrasto
+#   (/items/secure con verifyToken()). Precisione: 1 finding / 0 FP sul contrasto.
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs col 2° arg
+#   ruleset path = questa dir, T2.0); `semgrep scan --config <dir>`. Immagine
+#   semgrep pinnata (L-COL-002).
+# =============================================================================
+
+rules:
+  # SEED DYNAMO-S3. Handler di route MUTANTE (POST/PUT/DELETE/PATCH) che invia un
+  # comando DynamoDB MUTANTE (PutItemCommand/UpdateItemCommand/DeleteItemCommand) via
+  # client.send() SENZA verifica d'identità/ruolo nel corpo: chiunque raggiunga
+  # l'endpoint può modificare la tabella DynamoDB (CWE-862, A01:2025).
+  - id: dynamodb-authz-mutating-route-no-identity-check
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Handler DynamoDB che scrive senza check identità/ruolo (route-authz)"
+        - "eco-F6 DYNAMO-S3 — authz-surface dynamodb-jsts (PutItem/UpdateItem/DeleteItem)"
+    message: >-
+      Route handler MUTANTE (POST/PUT/DELETE/PATCH) che invia un comando DynamoDB
+      MUTANTE (PutItemCommand/UpdateItemCommand/DeleteItemCommand) SENZA verifica di
+      identità/ruolo nel corpo: chiunque raggiunga l'endpoint può modificare i dati
+      nel database (CWE-862 Missing Authorization, A01:2025 Broken Access Control).
+      Verificare l'identità del chiamante (req.user / verifyToken / requireAuth)
+      PRIMA dell'operazione DynamoDB.
+    patterns:
+      # 1) IL SINK: un comando DynamoDB mutante inviato al client.
+      #    Copre PutItemCommand, UpdateItemCommand, DeleteItemCommand via client.send().
+      #    Semgrep JS/TS normalizza `await client.send(...)` al match di `client.send(...)`.
+      - pattern-either:
+          - pattern: $CLIENT.send(new PutItemCommand(...))
+          - pattern: $CLIENT.send(new UpdateItemCommand(...))
+          - pattern: $CLIENT.send(new DeleteItemCommand(...))
+      # 2) il sink deve stare DENTRO un route handler MUTANTE Express/Next
+      #    (arrow function o function expression, POST/PUT/DELETE/PATCH).
+      - pattern-either:
+          - pattern-inside: $ROUTER.post(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.post(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.put(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.put(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.delete(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.delete(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.patch(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.patch(..., async function ($REQ, $RES) { ... })
+      # 3) ESCLUSIONE: se nel corpo dell'handler c'è un check d'identità/ruolo
+      #    PRIMA del sink, NON è un finding. Coperti: req.user, req.session,
+      #    verifyToken/requireAuth (arrow o function). Pattern-not-inside con
+      #    arrow function; varianti function expression.
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $REQ.user
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $REQ.session
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = await verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            requireAuth(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async function ($REQ, $RES) {
+            ...
+            $REQ.user
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async function ($REQ, $RES) {
+            ...
+            $X = verifyToken(...);
+            ...
+          })

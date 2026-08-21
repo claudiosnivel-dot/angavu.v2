@@ -1,0 +1,32 @@
+{
+  "$comment": "authz verified = hasura_metadata_check statico ri-eseguito pulito (permission anonima rimossa / owner-scoped); NON invarianza runtime (Hasura engine non disponibile: analisi statica metadata YAML) — eco-F3.",
+  "id": "hasura-jsts",
+  "version": "1.0.0",
+  "languages": ["js", "ts"],
+  "backend": "hasura",
+  "detect": {
+    "files_any": ["config.yaml", "metadata/databases/databases.yaml"],
+    "lang_any": ["package.json"]
+  },
+  "triggers": [
+    "hasura", "graphql", "hasura-metadata", "metadata", "hasura_metadata_check",
+    "hasura-jsts", "config.yaml", "databases.yaml", "tables.yaml",
+    "select_permissions", "insert_permissions", "update_permissions", "delete_permissions",
+    "X-Hasura-User-Id", "hasura-graphql-engine", "authz", "authorization",
+    "js", "ts", "javascript", "typescript", "blueprint", "audit", "remediat",
+    "bonific", "macrotask", "oracol", "sicur", "security", "secret", "segret"
+  ],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true, "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"] },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+    "authz":           { "tool": "hasura_metadata_check", "kind": "hasura-metadata", "scan": ["metadata", "."], "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "knip" },
+    "duplication":     { "tool": "jscpd", "min_tokens": 50 },
+    "architecture":    { "tool": "madge" }
+  },
+  "test_runner": { "detect": ["vitest", "jest", "mocha"] },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret", "dead-code", "authz"],
+  "coverage_policy": "declared"
+}

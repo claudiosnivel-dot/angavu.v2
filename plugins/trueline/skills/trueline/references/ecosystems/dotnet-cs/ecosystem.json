@@ -1,0 +1,24 @@
+{
+  "id": "dotnet-cs",
+  "version": "1.1.0",
+  "languages": ["csharp"],
+  "backend": "aspnet-app",
+  "detect": { "lang_any": ["global.json", "app.csproj"] },
+  "triggers": [
+    "dotnet", "csharp", "aspnet", "asp.net", "nuget", "c#", "c sharp",
+    "controller", "authorize", "blazor", "webapi", "web api",
+    "secret", "segret", "authz", "authorization", "autorizzazione",
+    "route", "rotta", "endpoint", "blueprint", "audit", "remediat",
+    "bonific", "macrotask", "oracol", "sicur", "security"
+  ],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["packages.lock.json"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "roslyn-analyzer", "note": "Roslyn/analyzer IDE (F5 opz., non verificato in fase 1)" }
+  },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret"],
+  "coverage_policy": "declared"
+}

@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trueline.dev/schemas/finding.schema.json",
+  "title": "Trueline Finding",
+  "description": "Contratto unico (L-COL-011) fra oracoli (03), loop di fix (05) e triage (08). L'LLM ragiona su questo oggetto strutturato, mai sul dump nativo del tool. Vedi 04-FINDINGS-MODEL.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fingerprint",
+    "category",
+    "severity",
+    "location",
+    "evidence",
+    "source_oracle",
+    "fix_state",
+    "baseline_status",
+    "run_id"
+  ],
+  "properties": {
+    "fingerprint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identita stabile-per-riga del finding = hash(oracle, rule_id, normalized_path, match_signature). NON il numero di riga. Chiave del baseline-delta (04 §6)."
+    },
+    "id": {
+      "type": "string",
+      "description": "Handle leggibile locale al run (es. F-014); non e l'identita persistente."
+    },
+    "category": {
+      "type": "string",
+      "description": "Categoria chiusa (04 §3). Ogni categoria mappa all'oracolo che la produce.",
+      "enum": [
+        "secret",
+        "rls",
+        "dead-code",
+        "injection",
+        "authz",
+        "crypto",
+        "dependency-vuln",
+        "config",
+        "misc",
+        "duplication",
+        "architecture"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "description": "Severita normalizzata dall'output nativo dell'oracolo (04 §4).",
+      "enum": [
+        "CRITICAL",
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+      ]
+    },
+    "location": {
+      "type": "object",
+      "description": "Localizzazione di display. L'identita resta il fingerprint, non la riga.",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "start_line",
+        "end_line"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Percorso del file (normalizzato) o della migration."
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Riga iniziale (display)."
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Riga finale (display)."
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Simbolo/identificatore coinvolto (es. nome funzione, tabella, policy)."
+        }
+      }
+    },
+    "evidence": {
+      "type": "string",
+      "description": "Snippet/messaggio redatto a monte (04 §7). MAI il valore di un segreto in chiaro."
+    },
+    "source_oracle": {
+      "type": "object",
+      "description": "Chi ha prodotto il finding.",
+      "additionalProperties": false,
+      "required": [
+        "oracle",
+        "rule_id"
+      ],
+      "properties": {
+        "oracle": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Nome dell'oracolo (es. gitleaks, rls-check, knip, semgrep, osv-scanner)."
+        },
+        "tool_version": {
+          "type": "string",
+          "description": "Versione del tool/oracolo che ha emesso il finding."
+        },
+        "rule_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identificatore della regola/controllo nativo (es. RuleID gitleaks, check_id semgrep, id-controllo rls)."
+        }
+      }
+    },
+    "owasp": {
+      "type": "string",
+      "description": "Codice OWASP canonico 2025 (L-COL-026). Normalizzato nell'adapter; le regole curate emettono gia 2025.",
+      "pattern": "^A[0-9]{2}:2025$"
+    },
+    "owasp_source": {
+      "type": "string",
+      "description": "Codice OWASP/CWE grezzo come emesso dalla fonte (es. A01:2021, CWE-89). Display/audit, non usato per il gating."
+    },
+    "cwe": {
+      "type": "string",
+      "description": "Identificatore CWE preciso della debolezza (es. CWE-89), quando l'oracolo lo fornisce.",
+      "pattern": "^CWE-[0-9]+$"
+    },
+    "fix_state": {
+      "type": "string",
+      "description": "Stato nel ciclo di vita della fix (04 §5). Stato iniziale dopo normalize = detected. Solo l'oracolo porta a verified (L-COL-002).",
+      "enum": [
+        "detected",
+        "triaged",
+        "fix-proposed",
+        "fix-applied",
+        "verified",
+        "verification-failed",
+        "mitigated-residual",
+        "accepted-risk"
+      ]
+    },
+    "baseline_status": {
+      "type": "string",
+      "description": "Stato rispetto alla baseline, calcolato al checkpoint (04 §6).",
+      "enum": [
+        "new",
+        "pre-existing"
+      ]
+    },
+    "scope_relevance": {
+      "type": "string",
+      "description": "Rilevanza rispetto al codice toccato dal macrotask corrente (BUILD).",
+      "enum": [
+        "in-scope",
+        "out-of-scope"
+      ]
+    },
+    "remediation_hint": {
+      "type": "string",
+      "description": "Suggerimento da oracolo o da convenzione (07); NON un verdetto dell'LLM."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identificatore del run che ha prodotto il finding."
+    },
+    "created_at": {
+      "type": "string",
+      "description": "Timestamp di creazione del finding (ISO 8601)."
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Metadati di triage (08) — rationale di priorita; MAI un via libera."
+    }
+  }
+}

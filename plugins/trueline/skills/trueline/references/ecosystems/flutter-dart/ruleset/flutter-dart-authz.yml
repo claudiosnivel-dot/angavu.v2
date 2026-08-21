@@ -1,0 +1,84 @@
+# =============================================================================
+# flutter-dart-authz.yml — Ruleset Semgrep route-authz del pack `flutter-dart`
+# (eco-F4, tier detection).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` — Mutazione Supabase senza verifica identità (Dart).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# per stack Dart/Flutter su Supabase: una chiamata MUTANTE al client Supabase
+# (supabase.from(...).insert/update/delete) eseguita SENZA un controllo
+# di identità/sessione nel corpo della funzione.
+#
+# SINK (scrittura DB) coperti:
+#   - supabase.from(<table>).insert(...)  — inserimento record
+#   - supabase.from(<table>).update(...)  — aggiornamento record
+#   - supabase.from(<table>).delete()     — cancellazione record
+#
+# ESCLUSIONE (auth check Supabase Dart) — `pattern-not-inside`: se PRIMA del
+#   sink il corpo della funzione LEGA l'identità in una variabile a partire da
+#   `supabase.auth.currentUser` (`final user = supabase.auth.currentUser;`),
+#   il sink seguente NON è un finding (l'identità è già verificata).
+#
+# NOTE SEMGREP DART (best-effort) — FORMA DELL'ESCLUSIONE:
+#   Il supporto Dart in semgrep è sperimentale (community). VERIFICATO
+#   EMPIRICAMENTE (semgrep/semgrep:latest, 1.165.0): il parser Dart sperimentale
+#   RIFIUTA l'operatore deep-expression `... $SUPA.auth.currentUser ...`
+#   (Invalid pattern for Dart: Stdlib.Parsing.Parse_error) e i pattern-blocco con
+#   guard inline `if (... == null) { ... }`. Il SINK
+#   (`$SUPA.from($TABLE).insert/update/delete(...)`) invece parsa e combacia
+#   correttamente. Quindi l'esclusione è espressa in FORMA-STATEMENT — la
+#   dichiarazione che lega l'identità seguita da ellissi di statement
+#   (`final/var/<Tipo> $U = $SUPA.auth.currentUser; ...`), che il parser Dart
+#   accetta. Su questa fixture: 2 finding (createPost/deletePost, SENZA check) e
+#   0 falsi positivi sul contrasto (createPostSafe/updatePostSafe, CON check).
+#   Resta best-effort (L-COL-006): codice Dart che verifica l'identità con altri
+#   idiomi (guard inline, helper) può sfuggire all'esclusione → al più un falso
+#   positivo, MAI un falso verde sul SEED. Semgrep assente nel sandbox → oracolo
+#   degradato onesto: NON è un fallimento del floor, è scoperta differita.
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti col
+#   registry FD-S3 e con la normalize di 04 — A01:2025 è già 2025-canonico).
+#
+# INVOCAZIONE: `semgrep scan --config <dir>` con immagine semgrep pinnata.
+# =============================================================================
+
+rules:
+  # SEED FD-S3. Funzione Dart che esegue una SCRITTURA su Supabase (insert/update/
+  # delete via supabase.from(...)) SENZA verifica di identità/sessione nel corpo.
+  # Chiunque richiami la funzione può mutare i dati (CWE-862, A01:2025).
+  - id: flutter-dart-supabase-mutate-no-auth-check
+    languages: [dart]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Handler che scrive senza check identità/ruolo (route-authz)"
+        - "eco-F4 — authz-surface flutter-dart (Supabase, Dart)"
+    message: >-
+      Chiamata MUTANTE a Supabase (insert/update/delete) SENZA verifica di
+      identità/sessione: chiunque richiami questa funzione può mutare i dati
+      (CWE-862, Broken Access Control). Verificare supabase.auth.currentUser
+      e che il record appartenga all'utente PRIMA della scrittura.
+    patterns:
+      # 1) IL SINK: una scrittura mutante sul client Supabase.
+      - pattern-either:
+          - pattern: $SUPA.from($TABLE).insert(...)
+          - pattern: $SUPA.from($TABLE).update(...)
+          - pattern: $SUPA.from($TABLE).delete()
+      # 2) ESCLUSIONE: se PRIMA del sink il corpo lega l'identità in una variabile
+      #    a partire da supabase.auth.currentUser, il sink NON è un finding
+      #    (l'identità è già verificata). FORMA-STATEMENT (la sola che il parser
+      #    Dart sperimentale accetta — vedi NOTE SEMGREP DART in testa al file):
+      #    dichiarazione `final`/`var`/`<Tipo>` seguita da ellissi di statement.
+      - pattern-not-inside: |
+          final $U = $SUPA.auth.currentUser;
+          ...
+      - pattern-not-inside: |
+          var $U = $SUPA.auth.currentUser;
+          ...
+      - pattern-not-inside: |
+          $T $U = $SUPA.auth.currentUser;
+          ...

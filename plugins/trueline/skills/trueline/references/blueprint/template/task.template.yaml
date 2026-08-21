@@ -1,0 +1,47 @@
+# Template del TASK ATOMICO — schema 11 §3 (L-COL-019).
+#
+# BOOTSTRAP riempie questo scheletro con gli INPUT DELL'UTENTE, non con
+# invenzioni dell'LLM (stessa regola di 11 §4 e 01 §3.1). I placeholder sono
+# in forma {{snake_case}}. Identificatori/chiavi in inglese, prosa in italiano
+# (convenzione di progetto).
+#
+# I tre campi CARDINE (obbligatori, non vuoti): definition_of_done +
+# acceptance_criteria + target_tests. Un task che ne è privo rende il blueprint
+# NON valido: validate_blueprint.mjs (11 §5.1) lo rifiuta e BUILD non lo consuma.
+#
+# Copia questo blocco una volta per task dentro un modulo del blueprint
+# (vedi blueprint-module.template.md), in un fence ```yaml.
+
+- id: {{task_id}}                       # ID stabile e univoco (es. T-014); MAI riusato
+  title: "{{task_title}}"               # titolo breve e descrittivo
+  macrotask: "{{macrotask_name}}"       # macrotask ESISTENTE a cui il task appartiene
+  depends_on: [{{dependency_ids}}]      # lista di id (DAG aciclico); [] se nessuna dipendenza
+
+  objective: >                          # COSA deve ottenere il task (prosa)
+    {{objective_prose}}
+
+  definition_of_done:                   # IL LAVORO è completo quando… (artefatti OSSERVABILI)
+    - "{{dod_item_1}}"
+    - "{{dod_item_2}}"
+    # …almeno una voce, ognuna osservabile
+
+  acceptance_criteria:                  # COME si prova che fa la cosa giusta (TESTABILE)
+    - id: {{ac_id_1}}                   # ogni criterio: id + given + when + then
+      given: "{{ac1_given}}"            # precondizione osservabile
+      when: "{{ac1_when}}"              # azione
+      then: "{{ac1_then}}"              # esito osservabile/misurabile (no "robusto/sicuro" da soli)
+    - id: {{ac_id_2}}
+      given: "{{ac2_given}}"
+      when: "{{ac2_when}}"
+      then: "{{ac2_then}}"
+
+  target_tests:                         # il ponte criterio→eseguibile: l'oracolo del controllo 4
+    - file: "{{test_file_path}}"        # ogni acceptance_criteria coperto da >=1 entry "covers"
+      covers: [{{covered_ac_ids}}]      # es. [AC-014-1, AC-014-2]
+
+  security_notes:                       # OBBLIGATORIO se il task tocca dati/auth (11 §5.2 p.9, 07)
+    - "{{security_note_1}}"             # es. RLS isolation per tenant; nessun segreto hardcoded
+    # rimuovi l'intera chiave se il task NON tocca dati/auth
+
+  out_of_scope:                         # OPZIONALE: argine allo scope creep
+    - "{{out_of_scope_item}}"           # rimuovi se non serve

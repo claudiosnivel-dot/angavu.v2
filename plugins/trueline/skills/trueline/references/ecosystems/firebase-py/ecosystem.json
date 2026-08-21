@@ -1,0 +1,23 @@
+{
+  "$comment": "firebase-py — Firebase/Firestore su Python. Incrocio supabase-py (lingua/tie-break) x firebase-jsts (backend/authz Firestore).",
+  "id": "firebase-py",
+  "version": "1.0.0",
+  "languages": ["py"],
+  "backend": "firebase",
+  "detect": {
+    "files_any": ["firebase.json", "firestore.rules"],
+    "lang_any": ["pyproject.toml", "requirements.txt", "Pipfile", "setup.py"]
+  },
+  "triggers": ["firebase", "firestore", "firebase-admin", "python"],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["requirements.txt", "poetry.lock", "Pipfile.lock"] },
+    "authz":           { "tool": "firestore_rules_check", "kind": "firestore-rules", "scan": ["."], "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "vulture" }
+  },
+  "test_runner": { "detect": ["pytest", "unittest"] },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret", "dead-code", "authz"],
+  "coverage_policy": "declared"
+}

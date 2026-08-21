@@ -1,0 +1,398 @@
+# =============================================================================
+# trueline-ai-ruleset.yml — Ruleset Semgrep CURATO di Trueline (07 §4).
+#
+# version: 1.0.0   (versione propria e pinnata del ruleset, 09 §4; bump ad ogni
+#                   aggiunta/modifica di regole — tracciata nel manifest del .skill)
+#
+# Forma eseguibile della tabella dei "pattern vietati" (07 §4): secrets,
+# injection, authz, crypto, sink pericolosi — JS/TS + Supabase. Ogni regola
+# porta i metadata { category, owasp:"A..:2025", cwe } gia in tassonomia
+# canonica 2025 (07 §3.1, L-COL-026): i NOSTRI oracoli emettono 2025 a regime.
+#
+# CONFINE (07 §4, nota): qui vivono SOLO i pattern STATICAMENTE rilevabili.
+# Cio che richiede ragionamento ("questo endpoint dovrebbe essere admin-only?")
+# NON e una regola Semgrep: emerge dall'enumerazione (07 §6) e diventa una
+# security_note o un finding detection-only, mai un verde automatico.
+#
+# PRECISIONE (08 §5, L-COL-028): nessuna regola "acchiappa-tutto". Le regole
+# vincolano il contesto (concatenazione DENTRO SQL, mutazione SENZA authz) cosi
+# da NON colpire le controparti pulite della reference app:
+#   - src/db.ts  listBookingsForTenant  -> .from().select().eq() tipato (pulito)
+#   - src/routes/health.ts              -> handler GET non mutante     (pulito)
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs) ed eseguito
+# con `semgrep scan --config <questo-file>`. Pin immagine semgrep 1.165.0
+# (L-COL-002): la riproducibilita dell'oracolo dipende dal pin.
+#
+# COPERTURA seminata (eval/harness/expected/registry.json):
+#   - S6 injection  src/db.ts findBookingByIdUnsafe  -> col-injection-sql-string-concat
+#   - S7 authz      src/routes/bookings.ts POST/PUT  -> col-authz-mutating-route-no-identity-check
+# Gli altri pattern (07 §4) sono curati anche se non seminati: NON devono
+# falsare-positivo sulla reference app.
+# =============================================================================
+
+rules:
+  # ===========================================================================
+  # 1) SECRETS — category: secret (07 §4.1)
+  # ===========================================================================
+
+  # service_role key hardcoded o usata fuori da contesto server-side: bypassa
+  # RLS, espone l'intero DB. Rete ridondante a gitleaks (dedup per fingerprint,
+  # 03 §6): qui si cattura il PATTERN D'USO (createClient con la service_role
+  # come literal), non la sola entropia.
+  - id: col-secret-service-role-literal
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: secret
+      owasp: "A07:2025"
+      cwe: "CWE-798"
+      references:
+        - "07 §4.1 — Segreti inline / chiavi hardcoded"
+    message: >-
+      service_role key passata a createClient come STRING LITERAL hardcoded:
+      bypassa RLS ed espone l'intero DB. Usare la anon key lato client e leggere
+      la service_role da process.env / Deno.env.get, solo server-side e con
+      authz applicativa esplicita.
+    patterns:
+      - pattern-either:
+          - pattern: createClient($URL, "sk_live_...", ...)
+          - pattern: createClient($URL, "service_role...", ...)
+          - pattern: createClient($URL, "eyJ...", ...)
+
+  # Segreto/chiave/token/password come string literal assegnato a un simbolo il
+  # cui nome tradisce la sensibilita. Si VINCOLA il nome del binding (key/secret/
+  # token/password/service_role) per non colpire qualunque stringa: niente
+  # acchiappa-tutto. La anon key (pubblica per design) non e bersaglio.
+  - id: col-secret-hardcoded-credential-literal
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: secret
+      owasp: "A07:2025"
+      cwe: "CWE-798"
+      references:
+        - "07 §4.1 — Segreti inline / chiavi hardcoded"
+    message: >-
+      Credenziale (key/secret/token/password/service_role) assegnata come string
+      literal hardcoded ad alta entropia. Leggerla da process.env / secret
+      manager, mai committarla, e ruotare la credenziale esposta.
+    patterns:
+      - pattern-regex: |
+          (?i)\b(service[_-]?role[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?token|auth[_-]?token|password|private[_-]?key)\s*[:=]\s*['"](sk_live_|sk_test_|service_role|eyJ|-----BEGIN)[^'"]{12,}
+
+  # Private key / PEM inline.
+  - id: col-secret-private-key-pem-inline
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: secret
+      owasp: "A02:2025"
+      cwe: "CWE-321"
+      references:
+        - "07 §4.1 — Private key / PEM inline"
+    message: >-
+      Private key / blocco PEM inline nel sorgente. Spostare in un secret store /
+      env e ruotare la chiave.
+    patterns:
+      - pattern-regex: '-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----'
+
+  # ===========================================================================
+  # 2) INJECTION — category: injection (07 §4.2)
+  # ===========================================================================
+
+  # SEED S6. SQL costruito per CONCATENAZIONE di stringhe con input non tipato.
+  # Si richiede che (a) un operando sia un literal che CONTIENE sintassi SQL
+  # (SELECT/INSERT/UPDATE/DELETE/WHERE/FROM ...) e (b) ci sia concatenazione con
+  # una variabile. Cosi NON colpisce concatenazioni innocue di stringhe non-SQL
+  # ne il query builder tipato (.from().select().eq()).
+  - id: col-injection-sql-string-concat
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-89"
+      references:
+        - "07 §4.2 — SQL per concatenazione/template con input"
+    message: >-
+      Query SQL costruita per concatenazione di stringhe con input non tipato:
+      SQL injection (CWE-89). Usare query parametrizzate ($1) o il query builder
+      tipato (.eq()/.in()) con valori validati; mai interpolare input nella
+      stringa SQL.
+    patterns:
+      - pattern-either:
+          # "SELECT ... <kw> ... " + $X   (literal SQL a sinistra, poi concat).
+          # Si richiede una STRUTTURA SQL reale: una keyword di apertura
+          # (SELECT/INSERT/UPDATE/DELETE) E una clausola/sintassi SQL (WHERE/
+          # FROM/VALUES/SET/=) nello stesso literal, cosi prose come "select
+          # fallita" non basta.
+          - pattern-regex: '"\s*(?i:SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b[^"]*\b(?i:FROM|WHERE|VALUES|SET)\b[^"]*"\s*\+\s*[A-Za-z_$]'
+          # $X + " ... <clausola> ... "   (literal SQL a destra del concat).
+          - pattern-regex: '[A-Za-z_$][\w$]*\s*\+\s*"[^"]*\b(?i:WHERE|VALUES|SET|FROM)\b[^"]*"?'
+          # template string con interpolazione in POSIZIONE SQL: keyword di
+          # apertura (SELECT/INSERT INTO/UPDATE/DELETE FROM) E una clausola
+          # SQL (FROM/WHERE/VALUES/SET) seguita piu avanti da ${x}. Cosi prose
+          # come `select fallita: ${err}` (niente clausola SQL) non matcha.
+          - pattern-regex: '`[^`]*\b(?i:SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b[^`]*\b(?i:FROM|WHERE|VALUES|SET)\b[^`]*\$\{[^}]+\}'
+
+  # PostgREST filter injection: input interpolato dentro .or("...")/.filter("...")
+  # di supabase-js. La controparte sicura e .eq()/.in() tipato. Si VINCOLA alla
+  # presenza di interpolazione (template o concat) dentro l'argomento di .or/.filter:
+  # .or("static") senza interpolazione NON e bersaglio.
+  - id: col-injection-postgrest-filter-interpolation
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-89"
+      references:
+        - "07 §4.2 — PostgREST filter injection (.or()/.filter())"
+    message: >-
+      Input interpolato in un filtro PostgREST (.or()/.filter()) di supabase-js:
+      injection sulla Data API (CWE-89). Usare .eq()/.in() tipati con valori
+      validati; mai costruire la stringa di filtro per interpolazione.
+    patterns:
+      - pattern-either:
+          - pattern: $Q.or(`...${$X}...`)
+          - pattern: $Q.filter(`...${$X}...`)
+          - pattern: $Q.or($A + $B)
+          - pattern: $Q.filter($A + $B)
+
+  # Command injection: child_process.exec / execSync con stringa interpolata.
+  # La controparte sicura e execFile con array di argomenti (no shell).
+  - id: col-injection-command-shell-interpolation
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-78"
+      references:
+        - "07 §4.2 — child_process.exec con input"
+    message: >-
+      Comando di shell costruito con input interpolato (child_process.exec/
+      execSync): command injection (CWE-78). Usare execFile/spawn con un ARRAY di
+      argomenti e senza shell.
+    patterns:
+      - pattern-either:
+          - pattern: exec(`...${$X}...`, ...)
+          - pattern: execSync(`...${$X}...`, ...)
+          - pattern: exec($A + $B, ...)
+          - pattern: execSync($A + $B, ...)
+          - pattern: child_process.exec(`...${$X}...`, ...)
+          - pattern: child_process.execSync(`...${$X}...`, ...)
+
+  # ===========================================================================
+  # 3) AUTHZ — category: authz (07 §4.3)
+  # ===========================================================================
+
+  # SEED S7. Handler di route MUTANTE (POST/PUT/DELETE/PATCH) che scrive sul DB
+  # via supabase (.insert()/.update()/.delete()/.upsert()) SENZA alcun check di
+  # identita/ruolo nel corpo dell'handler (nessun auth.getUser()/getSession/JWT
+  # o verifica del token). Con la service_role la mutazione bypassa RLS: l'authz
+  # DEVE essere applicativa.
+  #
+  # Precisione (08 §5): la regola usa pattern-inside per legarsi al CORPO di un
+  # handler express MUTANTE e pattern-not per ESCLUDERE gli handler che fanno il
+  # check di identita. Cosi:
+  #   - colpisce  router.post(...,  async ... { supabase.from().insert() }      (S7)
+  #   - NON colpisce un handler con dentro auth.getUser()/getSession/getClaims
+  #   - NON colpisce healthRouter.get("/health", ...)  (GET, non mutante, no DB)
+  #   - NON colpisce la lettura GET /bookings/:id (non muta il DB)
+  - id: col-authz-mutating-route-no-identity-check
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Handler che scrive senza check identita/ruolo"
+        - "07 §5 R7 — service_role bypassa RLS: authz applicativa esplicita"
+    message: >-
+      Route handler MUTANTE (POST/PUT/DELETE/PATCH) che scrive sul DB via
+      supabase SENZA verifica di identita/ruolo: chiunque raggiunga l'endpoint
+      puo mutare (CWE-862). Con la service_role la scrittura bypassa RLS:
+      verificare auth.getUser()/JWT e che la risorsa appartenga al chiamante
+      PRIMA della mutazione.
+    # IDIOMA: il NODO matchato e' la scrittura DB (sink mutante $Q.insert/update/
+    # delete/upsert); e' VINCOLATO a stare DENTRO un route handler MUTANTE
+    # (pattern-inside POST/PUT/DELETE/PATCH). L'ESCLUSIONE del check di identita
+    # usa pattern-not-inside con lo STESSO handler che contiene un auth.getUser()/
+    # getSession()/getClaims(): se il corpo verifica l'identita, il sink NON e
+    # un finding. Cosi un handler protetto (auth prima della mutazione) non
+    # produce FP, mentre S7 (POST/PUT senza alcun check) viene colto.
+    patterns:
+      # 1) il nodo: una scrittura DB mutante.
+      - pattern-either:
+          - pattern: $Q.insert(...)
+          - pattern: $Q.update(...)
+          - pattern: $Q.upsert(...)
+          - pattern: $Q.delete(...)
+      # 2) deve stare dentro un route handler MUTANTE (POST/PUT/DELETE/PATCH).
+      - pattern-either:
+          - pattern-inside: $ROUTER.post(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.post(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.put(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.put(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.delete(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.delete(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.patch(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.patch(..., async function ($REQ, $RES) { ... })
+      # 3) ESCLUSIONE: NON e un finding se il sink sta dentro un handler che
+      #    verifica l'identita/ruolo (auth.getUser/getSession/getClaims o helper
+      #    di guardia). pattern-not-inside con l'auth-call dentro il corpo.
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $AUTH.getUser(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = $AUTH.getUser(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = await $AUTH.getUser(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async function ($REQ, $RES) {
+            ...
+            $X = await $AUTH.getUser(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = await $AUTH.getSession(...);
+            ...
+          })
+
+  # ===========================================================================
+  # 4) CRYPTO — category: crypto (07 §4.4)
+  # ===========================================================================
+
+  # Math.random() per token/segreti: non crittograficamente sicuro.
+  - id: col-crypto-math-random-for-secret
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: crypto
+      owasp: "A04:2025"
+      cwe: "CWE-338"
+      references:
+        - "07 §4.4 — Math.random() per token/segreti"
+    message: >-
+      Math.random() usato per generare token/segreti/identificatori: PRNG non
+      crittografico (CWE-338). Usare crypto.randomUUID() / crypto.randomBytes() /
+      crypto.getRandomValues().
+    patterns:
+      - pattern: Math.random()
+      - pattern-either:
+          - pattern-inside: |
+              const $V = ...;
+          - pattern-inside: |
+              let $V = ...;
+          - pattern-inside: |
+              return ...;
+      - metavariable-regex:
+          metavariable: $V
+          regex: '(?i).*(token|secret|key|nonce|otp|password|salt|session|csrf).*'
+
+  # Hash deboli (MD5/SHA-1) per password/credenziali.
+  - id: col-crypto-weak-hash
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: crypto
+      owasp: "A04:2025"
+      cwe: "CWE-327"
+      references:
+        - "07 §4.4 — MD5/SHA-1 per password"
+    message: >-
+      Algoritmo di hash debole (MD5/SHA-1) per password/credenziali (CWE-327).
+      Usare bcrypt/scrypt/argon2 per le password.
+    patterns:
+      - pattern-either:
+          - pattern: crypto.createHash("md5")
+          - pattern: crypto.createHash("sha1")
+          - pattern: createHash("md5")
+          - pattern: createHash("sha1")
+
+  # ===========================================================================
+  # 5) SINK PERICOLOSI — category: injection / misc (07 §4.5)
+  # ===========================================================================
+
+  # eval / new Function / setTimeout("stringa"): esecuzione di stringhe.
+  - id: col-sink-dynamic-code-eval
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-95"
+      references:
+        - "07 §4.5 — eval / new Function / setTimeout(stringa)"
+    message: >-
+      Esecuzione dinamica di codice da stringa (eval/new Function/setTimeout con
+      stringa): code injection (CWE-95). Eliminare l'esecuzione di stringhe;
+      esprimere la logica in modo esplicito.
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+          - pattern: setTimeout("...", ...)
+          - pattern: setInterval("...", ...)
+
+  # SSRF: fetch(userUrl) non validato (07 §4.5; A01:2025 — SSRF assorbita).
+  # Si VINCOLA a una variabile-URL il cui nome tradisce origine non fidata
+  # (req/body/query/param/userUrl/input), per non colpire fetch(costante).
+  - id: col-sink-ssrf-unvalidated-fetch
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A01:2025"
+      cwe: "CWE-918"
+      references:
+        - "07 §4.5 — fetch(userUrl) non validato (SSRF)"
+    message: >-
+      fetch() su URL derivato da input non validato: SSRF (CWE-918). Applicare
+      una allowlist di host/schemi e vietare i redirect ciechi.
+    patterns:
+      - pattern-either:
+          - pattern: fetch($REQ.body.$U, ...)
+          - pattern: fetch($REQ.query.$U, ...)
+          - pattern: fetch($REQ.params.$U, ...)
+          - pattern: fetch(`...${$REQ.body.$U}...`, ...)
+          - pattern: fetch(`...${$REQ.query.$U}...`, ...)
+
+  # Path traversal: path da input concatenato a una base di filesystem/storage.
+  - id: col-sink-path-traversal
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A01:2025"
+      cwe: "CWE-22"
+      references:
+        - "07 §4.5 — Path da input non sanificato"
+    message: >-
+      Percorso filesystem/storage costruito da input non sanificato: path
+      traversal (CWE-22). Normalizzare e confinare il percorso a una base dir
+      (path.resolve + verifica del prefisso).
+    patterns:
+      - pattern-either:
+          - pattern: fs.readFile(path.join($BASE, $REQ.params.$P), ...)
+          - pattern: fs.readFileSync(path.join($BASE, $REQ.params.$P), ...)
+          - pattern: fs.readFile(path.join($BASE, $REQ.query.$P), ...)
+          - pattern: fs.readFileSync(path.join($BASE, $REQ.query.$P), ...)
+          - pattern: fs.readFile($BASE + $REQ.params.$P, ...)
+          - pattern: fs.readFileSync($BASE + $REQ.params.$P, ...)

@@ -1,0 +1,33 @@
+{
+  "name": "angavu-local",
+  "owner": {
+    "name": "claudiosnivel-dot",
+    "url": "https://github.com/claudiosnivel-dot"
+  },
+  "description": "Marketplace locale e ispezionabile di Angavu iOS: distribuisce i plugin vendorizzati in questo repo (nessun registry pubblico, nessun auto-update).",
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "name": "trueline",
+      "source": "./plugins/trueline",
+      "description": "Trueline — lifecycle skill di security review e remediation, blueprint-first, con oracoli deterministici. In questo repo usato SOLO in modalita BOOTSTRAP per generare il blueprint tecnico dell'app iOS.",
+      "version": "0.4.1",
+      "author": { "name": "Trueline" },
+      "license": "MIT",
+      "homepage": "https://github.com/claudiosnivel-dot/Trueline-Skill",
+      "category": "workflow",
+      "tags": ["blueprint", "bootstrap", "oracles", "planning"]
+    },
+    {
+      "name": "apple-skills",
+      "source": "./plugins/apple-skills",
+      "description": "164 skill di sviluppo per piattaforme Apple su 23 categorie (iOS, SwiftUI, SwiftData, Core ML/Vision, testing, security, performance, App Store). Vendorizzato da rshankras/claude-code-apple-skills.",
+      "version": "1.0.0",
+      "author": { "name": "Ravi Shankar" },
+      "license": "MIT",
+      "homepage": "https://github.com/rshankras/claude-code-apple-skills",
+      "category": "development",
+      "tags": ["ios", "swift", "swiftui", "swiftdata", "core-ml", "vision", "app-store", "testing"]
+    }
+  ]
+}

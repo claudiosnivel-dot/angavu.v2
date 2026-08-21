@@ -1,0 +1,32 @@
+{
+  "id": "dynamodb-jsts",
+  "version": "1.1.0",
+  "languages": ["js", "ts"],
+  "backend": "dynamodb",
+  "detect": {
+    "deps_any": ["@aws-sdk/client-dynamodb", "aws-sdk"],
+    "lang_any": ["package.json"]
+  },
+  "triggers": [
+    "dynamodb", "aws", "aws-sdk", "@aws-sdk", "nosql", "no-sql",
+    "PutItemCommand", "UpdateItemCommand", "DeleteItemCommand", "GetItemCommand",
+    "DynamoDBClient", "DocumentClient", "DynamoDB", "dynamo",
+    "secret", "segret", "authz", "authorization", "autorizzazione",
+    "route", "rotta", "endpoint",
+    "blueprint", "audit", "remediat", "bonific", "macrotask", "oracol",
+    "js", "ts", "javascript", "typescript", "sicur", "security"
+  ],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true, "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"] },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["package-lock.json"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "knip" },
+    "duplication":     { "tool": "jscpd", "min_tokens": 50 },
+    "architecture":    { "tool": "madge" }
+  },
+  "test_runner": { "detect": ["vitest", "jest", "node:test"] },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret", "dead-code"],
+  "coverage_policy": "declared"
+}

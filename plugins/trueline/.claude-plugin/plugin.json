@@ -1,0 +1,9 @@
+{
+  "name": "trueline",
+  "version": "0.4.1",
+  "description": "Trueline — lifecycle skill di security review e remediation per progetti JS/TS su Supabase: blueprint-first, build macrotask-per-macrotask, verifica con oracoli deterministici (security/secret/RLS/dead-code). Modalità BOOTSTRAP/BUILD/REMEDIATE.",
+  "author": {
+    "name": "Trueline"
+  },
+  "license": "MIT"
+}

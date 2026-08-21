@@ -1,0 +1,27 @@
+{
+  "id": "cloudflare-d1-jsts",
+  "version": "1.2.0",
+  "languages": ["js", "ts"],
+  "backend": "cloudflare-d1",
+  "detect": { "files_any": ["wrangler.toml"], "lang_any": ["package.json"] },
+  "triggers": [
+    "cloudflare", "cloudflare-d1", "d1", "wrangler", "workers", "workers-types",
+    "cloudflare workers", "cloudflare d1", "kv", "durable objects",
+    "secret", "segret", "authz", "authorization", "autorizzazione",
+    "route", "rotta", "endpoint", "blueprint", "audit", "remediat",
+    "bonific", "macrotask", "oracol", "js", "ts", "javascript", "typescript",
+    "sicur", "security"
+  ],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true, "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"] },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["package-lock.json"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "knip" },
+    "duplication":     { "tool": "jscpd", "min_tokens": 50 },
+    "architecture":    { "tool": "madge" }
+  },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret", "dead-code"],
+  "coverage_policy": "declared"
+}

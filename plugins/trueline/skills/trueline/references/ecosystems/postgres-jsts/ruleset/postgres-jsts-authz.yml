@@ -1,0 +1,193 @@
+# =============================================================================
+# postgres-jsts-authz.yml — Ruleset Semgrep route-authz del pack `postgres-jsts`
+# (SP-1, T2.2).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` NON-Supabase (route-authz nell'app, non RLS-al-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# ma per stack JS/TS su Postgres non-Supabase (client `pg`/Prisma/Drizzle,
+# Next.js / Node API): un handler di rotta MUTANTE (.post/.put/.delete/.patch)
+# che esegue una SCRITTURA su DB SENZA un controllo d'identità/ruolo nel corpo.
+#
+# SINK (scrittura DB) coperti:
+#   - pg:      pool.query / db.query / client.query con SQL mutante
+#              (INSERT / UPDATE / DELETE) — il SELECT (lettura) NON è bersaglio;
+#   - Prisma:  prisma.<model>.create / update / delete / upsert / createMany /
+#              updateMany / deleteMany;
+#   - Drizzle: db.insert(...) / db.update(...) / db.delete(...).
+#
+# CONTESTO: il sink deve stare DENTRO un route handler MUTANTE Express/Next
+#   ($ROUTER.post|put|delete|patch($PATH, …, async ($REQ,$RES) => { … })).
+#
+# ESCLUSIONE (auth check NON-Supabase) — `pattern-not-inside`: se il corpo
+#   dell'handler verifica l'identità/ruolo PRIMA del sink, NON è un finding:
+#     req.user, req.session, getServerSession(...), requireAuth/ensureAuth,
+#     verifyToken(...)/verifyJwt(...).
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti col
+#   registry T1.2 e con la normalize di 04 — A01:2025 è già 2025-canonico).
+#
+# PRECISIONE (08 §5, L-COL-028): nessuna regola acchiappa-tutto. Sulla fixture
+#   T1.2 deve colpire SOLO SEED:PG-S3 (router.post("/bookings") senza auth) e
+#   NON la rotta di contrasto router.post("/bookings/secure") (con verifyToken)
+#   né health.ts (GET, nessun sink). Il sink di lettura (SELECT, GET) è escluso
+#   per costruzione (handler non mutante + SQL non mutante).
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs col 2° arg
+#   ruleset path = questa dir, T2.0); `semgrep scan --config <dir>`. Immagine
+#   semgrep pinnata (L-COL-002).
+# =============================================================================
+
+rules:
+  # SEED PG-S3. Handler di route MUTANTE (POST/PUT/DELETE/PATCH) che SCRIVE sul
+  # DB (pg pool/db/client.query con INSERT/UPDATE/DELETE; Prisma create/update/
+  # delete/upsert; Drizzle insert/update/delete) SENZA verifica d'identità/ruolo
+  # nel corpo. Chiunque raggiunga l'endpoint può mutare (CWE-862).
+  - id: pg-authz-mutating-route-no-identity-check
+    languages: [typescript, javascript]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Handler che scrive senza check identità/ruolo (route-authz)"
+        - "SP-1 T2.2 — authz-surface non-Supabase (pg/Prisma/Drizzle)"
+    message: >-
+      Route handler MUTANTE (POST/PUT/DELETE/PATCH) che scrive sul DB (pg/Prisma/
+      Drizzle) SENZA verifica di identità/ruolo: chiunque raggiunga l'endpoint
+      può mutare i dati (CWE-862, Broken Access Control). Verificare l'identità
+      del chiamante (req.user / sessione / verifyToken/verifyJwt /
+      getServerSession / middleware requireAuth) e che la risorsa gli appartenga
+      PRIMA della scrittura.
+    patterns:
+      # 1) IL NODO: una scrittura DB mutante (sink).
+      - pattern-either:
+          # --- pg: pool/db/client.query con SQL MUTANTE (INSERT/UPDATE/DELETE).
+          #     Si VINCOLA il primo argomento a essere SQL mutante via
+          #     metavariable-regex su $SQL, così SELECT (lettura) NON è bersaglio.
+          - patterns:
+              - pattern-either:
+                  - pattern: $POOL.query($SQL, ...)
+                  - pattern: $POOL.query($SQL)
+              - metavariable-regex:
+                  metavariable: $SQL
+                  regex: '(?i)^["''`]\s*(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b'
+          # --- Prisma: prisma.<model>.create/update/delete/upsert(...) (+ Many).
+          - pattern: $PRISMA.$MODEL.create(...)
+          - pattern: $PRISMA.$MODEL.createMany(...)
+          - pattern: $PRISMA.$MODEL.update(...)
+          - pattern: $PRISMA.$MODEL.updateMany(...)
+          - pattern: $PRISMA.$MODEL.delete(...)
+          - pattern: $PRISMA.$MODEL.deleteMany(...)
+          - pattern: $PRISMA.$MODEL.upsert(...)
+          # --- Drizzle: db.insert(...)/update(...)/delete(...).
+          - pattern: $DB.insert(...)
+          - pattern: $DB.update(...)
+          - pattern: $DB.delete(...)
+      # 2) deve stare DENTRO un route handler MUTANTE (POST/PUT/DELETE/PATCH).
+      - pattern-either:
+          - pattern-inside: $ROUTER.post(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.post(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.put(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.put(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.delete(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.delete(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.patch(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.patch(..., async function ($REQ, $RES) { ... })
+      # 3) ESCLUSIONE (auth check NON-Supabase): se nel corpo dell'handler c'è
+      #    una verifica d'identità/ruolo, il sink NON è un finding. Coperti:
+      #    req.user, req.session, getServerSession, requireAuth/ensureAuth,
+      #    verifyToken/verifyJwt.
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $REQ.user
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $REQ.session
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            getServerSession(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = await getServerSession(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            requireAuth(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            ensureAuth(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = await verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            verifyJwt(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = verifyJwt(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = await verifyJwt(...);
+            ...
+          })
+      # varianti con `async function (...)` invece dell'arrow.
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async function ($REQ, $RES) {
+            ...
+            $REQ.user
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async function ($REQ, $RES) {
+            ...
+            $X = verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async function ($REQ, $RES) {
+            ...
+            $X = await getServerSession(...);
+            ...
+          })

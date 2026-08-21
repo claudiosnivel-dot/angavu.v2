@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "angavu-local": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  },
+  "enabledPlugins": {
+    "trueline@angavu-local": true,
+    "apple-skills@angavu-local": true
+  }
+}

@@ -1,0 +1,111 @@
+# =============================================================================
+# postgres-go-authz.yml — Ruleset Semgrep route-authz del pack `postgres-go`
+# (Eco-F4, tier DETECTION).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` NON-Supabase (route-authz nell'app, non RLS-al-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# ma per stack Go su Postgres non-Supabase (client `database/sql` lib/pq o pgx,
+# net/http / Gorilla Mux / Chi / Gin / Echo): un handler HTTP MUTANTE che esegue
+# una SCRITTURA su DB SENZA un controllo d'identità/ruolo nel corpo.
+#
+# SINK (scrittura DB) coperti:
+#   - database/sql:  db.Exec / db.ExecContext con SQL mutante
+#                    (INSERT / UPDATE / DELETE) — il SELECT (lettura) NON è bersaglio;
+#   - pgx:           pool.Exec / pool.Exec con SQL mutante.
+#
+# CONTESTO: il sink deve stare DENTRO un handler HTTP con firma
+#   func($W http.ResponseWriter, $R *http.Request) oppure registrato via
+#   http.HandleFunc / router.HandleFunc.
+#
+# ESCLUSIONE (auth check) — `pattern-not-inside`: se il corpo dell'handler
+#   verifica l'identità PRIMA del sink, NON è un finding:
+#     r.Header.Get("Authorization")
+#     r.Context().Value(...)  (user context middleware)
+#     requireAuth / AuthMiddleware
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti con
+#   il registry Eco-F4 e con normalize di 04 — A01:2025 2025-canonico).
+#
+# PRECISIONE: sulla fixture GO-S3 (createBookingHandler senza auth) deve colpire
+#   SOLO il difetto e NON la rotta di contrasto (createBookingSecureHandler con
+#   Authorization check) né healthHandler (GET, nessun sink mutante).
+#
+# BEST-EFFORT (Eco-F4): semgrep assente nel sandbox → questa regola è DICHIARATA
+#   per la parity linguistica ma non verificata qui; la verifica è demandata al
+#   gate F6 su macchina con semgrep (L-COL-006).
+# =============================================================================
+
+rules:
+  # SEED GO-S3. Handler HTTP che SCRIVE sul DB (database/sql db.Exec/ExecContext
+  # o pgx pool.Exec con SQL mutante INSERT/UPDATE/DELETE) SENZA verifica
+  # d'identità/ruolo nel corpo. Chiunque raggiunga l'endpoint può mutare (CWE-862).
+  - id: go-authz-mutating-handler-no-identity-check
+    languages: [go]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Handler che scrive senza check identità/ruolo (route-authz)"
+        - "Eco-F4 — authz-surface non-Supabase (Go + postgres, database/sql / pgx)"
+    message: >-
+      Handler HTTP Go che scrive sul DB (database/sql o pgx) SENZA verifica di
+      identità/ruolo: chiunque raggiunga l'endpoint può mutare i dati (CWE-862,
+      Broken Access Control). Verificare l'identità del chiamante
+      (r.Header.Get("Authorization") / r.Context().Value / middleware requireAuth)
+      PRIMA della scrittura.
+    patterns:
+      # 1) IL NODO: una scrittura DB mutante (sink) con SQL INSERT/UPDATE/DELETE.
+      - pattern-either:
+          # --- database/sql: db.Exec / db.ExecContext con SQL mutante.
+          - patterns:
+              - pattern: $DB.Exec($SQL, ...)
+              - metavariable-regex:
+                  metavariable: $SQL
+                  regex: '(?i)^"?\s*(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b'
+          - patterns:
+              - pattern: $DB.ExecContext($CTX, $SQL, ...)
+              - metavariable-regex:
+                  metavariable: $SQL
+                  regex: '(?i)^"?\s*(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b'
+          # --- pgx: pool.Exec con SQL mutante.
+          - patterns:
+              - pattern: $POOL.Exec($CTX, $SQL, ...)
+              - metavariable-regex:
+                  metavariable: $SQL
+                  regex: '(?i)^"?\s*(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b'
+      # 2) Il sink deve stare DENTRO un handler HTTP Go (firma standard net/http).
+      - pattern-either:
+          - pattern-inside: |
+              func $HANDLER($W http.ResponseWriter, $R *http.Request) {
+                ...
+              }
+      # 3) ESCLUSIONE (auth check): se nel corpo c'è una verifica dell'identità
+      #    (Authorization header, context user, middleware), il sink NON è un finding.
+      - pattern-not-inside: |
+          func $HANDLER($W http.ResponseWriter, $R *http.Request) {
+            ...
+            $R.Header.Get(...)
+            ...
+          }
+      - pattern-not-inside: |
+          func $HANDLER($W http.ResponseWriter, $R *http.Request) {
+            ...
+            $R.Context().Value(...)
+            ...
+          }
+      - pattern-not-inside: |
+          func $HANDLER($W http.ResponseWriter, $R *http.Request) {
+            ...
+            requireAuth(...)
+            ...
+          }
+      - pattern-not-inside: |
+          func $HANDLER($W http.ResponseWriter, $R *http.Request) {
+            ...
+            AuthMiddleware(...)
+            ...
+          }

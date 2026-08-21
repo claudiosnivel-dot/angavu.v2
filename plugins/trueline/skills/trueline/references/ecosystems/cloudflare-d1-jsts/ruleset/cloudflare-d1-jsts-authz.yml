@@ -1,0 +1,59 @@
+# =============================================================================
+# cloudflare-d1-jsts-authz.yml — Ruleset Semgrep route-authz del pack `cloudflare-d1-jsts`
+# (eco-F6, tier DETECTION, best-effort).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` Cloudflare Workers + D1 (route-authz nella Worker, non RLS-al-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# per stack JS/TS su Cloudflare Workers: un handler fetch(request, env) che chiama
+# env.DB.prepare() con SQL costruito per CONCATENAZIONE di stringhe da input utente
+# senza auth-guard sul contesto della richiesta, rendendo il dato del database D1
+# accessibile a qualsiasi richiedente senza verifica d'identita/ruolo (CWE-862).
+#
+# SEED D1-S3. Workers fetch che chiama env.DB.prepare("SELECT..." + userId) senza
+# controllare l'Authorization header o il contesto di autenticazione prima della
+# query: chiunque raggiunga il Worker puo' accedere o modificare i dati D1.
+#
+# ESCLUSIONE ESPLICITA: env.DB.prepare("SELECT ... WHERE id = ?") — query
+# parametrizzata senza concatenazione — NON combacia (nessun `+` nell'argomento
+# di prepare) -> 0 FP sul contrasto guarded pulito.
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti con
+#   il registry eco-F6 e con la normalize di 04 — A01:2025 e' gia' 2025-canonico).
+#
+# BEST-EFFORT (eco-F6): semgrep assente nel sandbox -> degrada onesto (exit non 0).
+#   Quando disponibile, la regola DEVE colpire SOLO SEED:D1-S3 (src/index.js con
+#   env.DB.prepare("..." + userId)) e NON il contrasto (src/guarded.js con
+#   env.DB.prepare("... ?") parametrizzato + auth check). Precisione
+#   1 finding / 0 FP sul contrasto.
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs col 2° arg
+#   ruleset path = questa dir, T2.0); `semgrep scan --config <dir>`. Immagine
+#   semgrep pinnata (L-COL-002).
+# =============================================================================
+
+rules:
+  # SEED D1-S3. Workers fetch handler che costruisce la query SQL di D1 per
+  # concatenazione di stringhe: qualsiasi richiedente puo' accedere ai dati
+  # senza verifica d'identita/ruolo (CWE-862, Broken Access Control, A01:2025).
+  - id: d1-authz-unguarded-prepare-sql-concat
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Worker D1 che accede ai dati senza check identita/ruolo (route-authz)"
+        - "eco-F6 D1-S3 — authz-surface cloudflare-d1-jsts (env.DB.prepare SQL concat)"
+    message: >-
+      env.DB.prepare() invocato con SQL costruito per concatenazione di stringhe:
+      la rotta Workers non verifica l'identita del richiedente prima di accedere
+      al database D1, consentendo a qualsiasi client di leggere o modificare dati
+      senza verifica di identita o ruolo (CWE-862 Missing Authorization,
+      A01:2025 Broken Access Control). Usare query parametrizzate (.bind()) e
+      aggiungere un auth-guard esplicito (controllo Authorization header) prima
+      di qualsiasi accesso al database.
+    patterns:
+      - pattern: $ENV.DB.prepare($A + $B)

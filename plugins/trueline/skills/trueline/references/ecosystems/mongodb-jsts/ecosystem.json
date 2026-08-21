@@ -1,0 +1,32 @@
+{
+  "$comment": "Pack detection mongodb-jsts (eco-F6, Fase 0). Tier DETECTION: deps_any match mongodb/mongoose come segnale forte via classify() content-detection (Fase 0 engine additivo, L-COL-029). authz-surface = route-authz semgrep (insertOne/updateOne/deleteOne/findOneAndUpdate/save/create senza auth-guard, CWE-862). verified_set vuoto (tutti detection-only, L-COL-030).",
+  "id": "mongodb-jsts",
+  "version": "1.1.0",
+  "languages": ["js", "ts"],
+  "backend": "mongodb",
+  "detect": {
+    "deps_any": ["mongodb", "mongoose"],
+    "lang_any": ["package.json"]
+  },
+  "triggers": [
+    "mongodb", "mongoose", "nosql", "document", "atlas", "mongo",
+    "insertOne", "updateOne", "deleteOne", "findOneAndUpdate",
+    "collection", "schema", "model", "mern", "aggregation", "replica",
+    "js", "ts", "javascript", "typescript",
+    "secret", "segret", "authz", "authorization", "autorizzazione",
+    "route", "rotta", "endpoint", "blueprint", "audit",
+    "remediat", "bonific", "macrotask", "oracol", "sicur", "security"
+  ],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true, "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"] },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "knip" },
+    "duplication":     { "tool": "jscpd", "min_tokens": 50 },
+    "architecture":    { "tool": "madge" }
+  },
+  "floor":           ["secret", "dependency-vuln", "authz"],
+  "verified_set":    ["secret", "dead-code"],
+  "coverage_policy": "declared"
+}

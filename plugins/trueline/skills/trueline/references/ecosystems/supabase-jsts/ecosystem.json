@@ -1,0 +1,23 @@
+{
+  "id": "supabase-jsts",
+  "version": "1.0.0",
+  "languages": ["js", "ts"],
+  "backend": "supabase-postgres",
+  "detect": { "files_any": ["supabase/config.toml"], "lang_any": ["package.json"] },
+  "triggers": ["supabase", "rls", "secret", "segret", "blueprint", "audit", "remediat", "bonific", "macrotask", "oracol", "js", "ts", "javascript", "typescript", "sicur", "security"],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true, "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"] },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+    "injection":       { "tool": "semgrep", "ruleset": "../oracles/semgrep-ai-ruleset/" },
+    "authz":           { "tool": "semgrep", "ruleset": "../oracles/semgrep-ai-ruleset/" },
+    "crypto":          { "tool": "semgrep", "ruleset": "../oracles/semgrep-ai-ruleset/" },
+    "dead-code":       { "tool": "knip" },
+    "duplication":     { "tool": "jscpd", "min_tokens": 50 },
+    "architecture":    { "tool": "madge" },
+    "rls":             { "tool": "rls_check", "kind": "postgres-rls", "role": "authz-surface" }
+  },
+  "test_runner": { "detect": ["vitest", "jest", "node:test"], "run_file": "node --test {file}" },
+  "floor":        ["secret", "dependency-vuln", "rls"],
+  "verified_set": ["secret", "rls", "dead-code"],
+  "coverage_policy": "declared"
+}

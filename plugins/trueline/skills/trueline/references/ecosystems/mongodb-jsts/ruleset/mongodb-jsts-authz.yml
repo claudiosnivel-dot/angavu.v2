@@ -1,0 +1,143 @@
+# =============================================================================
+# mongodb-jsts-authz.yml — Ruleset Semgrep route-authz del pack `mongodb-jsts`
+# (eco-F6, tier DETECTION, best-effort).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` MongoDB/Mongoose (route-authz nell'app, non authz-at-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# per stack JS/TS su MongoDB (driver nativo) o Mongoose (ODM): un handler di
+# rotta MUTANTE (.post/.put/.delete/.patch) che esegue un'operazione di scrittura
+# MongoDB SENZA un controllo d'identità/ruolo nel corpo.
+#
+# SINK (scrittura DB) coperti:
+#   - MongoDB driver nativo: collection.insertOne / updateOne / deleteOne /
+#     findOneAndUpdate (le 4 operazioni mutanti più comuni);
+#   - Mongoose ODM: document.save() / Model.create(...).
+#
+# CONTESTO: il sink deve stare DENTRO un route handler MUTANTE Express
+#   ($ROUTER.post|put|delete|patch($PATH, ..., async ($REQ,$RES) => { ... })).
+#
+# ESCLUSIONE (auth check) — `pattern-not-inside`: se il corpo dell'handler
+#   verifica l'identità/ruolo PRIMA del sink (verifyToken / req.user / req.session),
+#   NON è un finding. Il contrasto PULITO nella fixture usa verifyToken(req).
+#
+# MODELLO: ruleset F4 che passano (rails-rb-authz.yml, dotnet-cs-authz.yml,
+#   postgres-jsts-authz.yml) per evitare PatternParseError:
+#   - usa (...) per parametri variabili (non elenchi fissi);
+#   - usa { ... } per corpi di funzione (ellipsis semgrep);
+#   - pattern-either per sink multipli; pattern-inside per contesto route;
+#   - pattern-not-inside per esclusione auth-check.
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti col
+#   registry eco-F6 e con la normalize di 04 — A01:2025 è già 2025-canonico).
+#
+# BEST-EFFORT (eco-F6): semgrep via docker (immagine pinnata, L-COL-002).
+#   Quando disponibile, la regola DEVE colpire SOLO SEED:MG-S3 (route POST /items
+#   con insertOne senza auth) e NON il contrasto (POST /items/secure con verifyToken
+#   prima dell'insertOne). Precisione 1 finding / 0 FP sul contrasto.
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs col 2° arg
+#   ruleset path = questa dir, T2.0); `semgrep scan --config <dir>`. Immagine
+#   semgrep pinnata (L-COL-002).
+# =============================================================================
+
+rules:
+  # SEED MG-S3. Route handler MUTANTE (POST/PUT/DELETE/PATCH) che esegue
+  # un'operazione MongoDB mutante (insertOne/updateOne/deleteOne/findOneAndUpdate)
+  # o Mongoose (save/create) SENZA verifica d'identità/ruolo nel corpo:
+  # chiunque raggiunga l'endpoint può mutare i dati (CWE-862, Broken Access Control).
+  - id: mongodb-authz-mutating-route-no-identity-check
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Handler che scrive senza check identità/ruolo (route-authz)"
+        - "eco-F6 MG-S3 — authz-surface mongodb-jsts (insertOne/updateOne/deleteOne/findOneAndUpdate/save/create)"
+    message: >-
+      Route handler MUTANTE (POST/PUT/DELETE/PATCH) che esegue un'operazione
+      MongoDB (insertOne/updateOne/deleteOne/findOneAndUpdate) o Mongoose
+      (save/create) SENZA verifica di identità/ruolo: chiunque raggiunga
+      l'endpoint può mutare i dati (CWE-862 Missing Authorization, A01:2025
+      Broken Access Control). Verificare l'identità del chiamante
+      (req.user / req.session / verifyToken / requireAuth) PRIMA della scrittura.
+    patterns:
+      # 1) IL NODO: un'operazione MongoDB/Mongoose mutante (sink).
+      - pattern-either:
+          - pattern: $COLL.insertOne(...)
+          - pattern: $COLL.updateOne(...)
+          - pattern: $COLL.deleteOne(...)
+          - pattern: $COLL.findOneAndUpdate(...)
+          - pattern: $DOC.save()
+          - pattern: $MODEL.create(...)
+      # 2) deve stare DENTRO un route handler MUTANTE (POST/PUT/DELETE/PATCH).
+      - pattern-either:
+          - pattern-inside: $ROUTER.post(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.post(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.put(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.put(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.delete(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.delete(..., async function ($REQ, $RES) { ... })
+          - pattern-inside: $ROUTER.patch(..., async ($REQ, $RES) => { ... })
+          - pattern-inside: $ROUTER.patch(..., async function ($REQ, $RES) { ... })
+      # 3) ESCLUSIONE (auth check): se nel corpo dell'handler c'è una verifica
+      #    d'identità/ruolo, il sink NON è un finding. Coperti:
+      #    req.user, req.session, verifyToken, requireAuth, ensureAuth.
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $REQ.user
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $REQ.session
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            $X = await verifyToken(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            requireAuth(...);
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async ($REQ, $RES) => {
+            ...
+            ensureAuth(...);
+            ...
+          })
+      # varianti con `async function (...)` invece dell'arrow.
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async function ($REQ, $RES) {
+            ...
+            $REQ.user
+            ...
+          })
+      - pattern-not-inside: |
+          $ROUTER.$M(..., async function ($REQ, $RES) {
+            ...
+            $X = verifyToken(...);
+            ...
+          })

@@ -1,0 +1,26 @@
+{
+  "id": "spring-java",
+  "version": "1.1.0",
+  "languages": ["java"],
+  "backend": "spring-app",
+  "detect": { "lang_any": ["pom.xml"] },
+  "triggers": [
+    "spring", "java", "maven", "gradle", "springboot", "spring-boot",
+    "spring-security", "springsecurity", "restcontroller", "controller",
+    "endpoint", "microservice", "preauthorize", "secured", "requestmapping",
+    "postmapping", "putmapping", "deletemapping", "patchmapping",
+    "secret", "segret", "authz", "authorization", "autorizzazione",
+    "route", "rotta", "blueprint", "audit", "remediat", "bonific",
+    "macrotask", "oracol", "sicur", "security"
+  ],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["pom.xml"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "pmd" }
+  },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret"],
+  "coverage_policy": "declared"
+}

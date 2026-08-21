@@ -1,0 +1,69 @@
+# =============================================================================
+# rails-rb-authz.yml — Ruleset Semgrep route-authz del pack `rails-rb`
+# (eco-F4, tier DETECTION, best-effort).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` Rails (route-authz nell'app, non RLS-al-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# per stack Ruby su Rails/Sinatra: un controller che chiama `skip_before_action`
+# su un CALLBACK DI AUTENTICAZIONE (authenticate_user!, require_login, ecc.)
+# senza aggiungere un controllo alternativo, rendendo le azioni mutanti
+# (create/update/destroy) accessibili senza verifica d'identità/ruolo (CWE-862).
+#
+# CALLBACK DI AUTENTICAZIONE coperti (metavariable-regex su $AUTH_CB):
+#   - authenticate_user!    (Devise)
+#   - authenticate!         (variante Devise o custom)
+#   - require_login         (Sorcery, Authlogic)
+#   - logged_in?            (pattern custom)
+#   - current_user          (pattern custom — usato come guard)
+#   - verify_user           (pattern custom)
+#   - login_required        (pattern custom)
+#
+# CONTESTO: il sink deve essere una chiamata `skip_before_action :<callback>, ...`
+# a livello di classe in un controller Rails. Il pattern-not-inside è omesso
+# (best-effort detection-only): semgrep Ruby non ha un segnale semantico affidabile
+# per distinguere il "sostituto di autenticazione" nei guard alternativi.
+#
+# ESCLUSIONE ESPLICITA: `before_action :authenticate_user!` (guard applicato, NON
+# skippato) NON combacia: la regex cerca solo `skip_before_action`, MAI
+# `before_action`. Il contrasto sicuro usa `before_action` e NON viene flaggato.
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti col
+#   registry eco-F4 e con la normalize di 04 — A01:2025 è già 2025-canonico).
+#
+# BEST-EFFORT (eco-F4): semgrep assente nel sandbox → degrada onesto (exit non 0).
+#   Quando disponibile, la regola DEVE colpire SOLO SEED:RB-S3 (articles_controller
+#   con skip_before_action :authenticate_user!) e NON il contrasto (admin_controller
+#   con before_action :authenticate_user!). Precisione 1 finding / 0 FP sul contrasto.
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs col 2° arg
+#   ruleset path = questa dir, T2.0); `semgrep scan --config <dir>`. Immagine
+#   semgrep pinnata (L-COL-002).
+# =============================================================================
+
+rules:
+  # SEED RB-S3. Controller Rails che chiama skip_before_action su un callback di
+  # autenticazione: le azioni mutanti (create/update/destroy) sono accessibili
+  # senza verifica d'identità/ruolo (CWE-862, Broken Access Control).
+  - id: rails-authz-skip-before-action-auth
+    languages: [ruby]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Controller Rails senza check identità/ruolo (route-authz)"
+        - "eco-F4 — authz-surface rails-rb (skip_before_action auth callback)"
+    message: >-
+      Controller Rails che chiama skip_before_action con un callback di
+      autenticazione: le azioni mutanti (create/update/destroy) sono accessibili
+      senza verifica d'identità/ruolo (CWE-862, Broken Access Control). Rimuovere
+      il skip_before_action per il callback di autenticazione o aggiungere un
+      before_action equivalente sulle azioni mutanti.
+    patterns:
+      - pattern: skip_before_action :$AUTH_CB, ...
+      - metavariable-regex:
+          metavariable: $AUTH_CB
+          regex: '(?i)(authenticate|require_login|logged_in|current_user|verify_user|login_required)'

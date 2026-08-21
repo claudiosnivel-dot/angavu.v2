@@ -1,0 +1,123 @@
+# =============================================================================
+# pocketbase-jsts-injection.yml — Ruleset Semgrep injection del pack `pocketbase-jsts`
+# (eco-F2).
+#
+# version: 1.0.0
+#
+# RUOLO `injection` (non-floor, extra) per stack JS/TS su PocketBase: rileva
+# classi di injection critiche nei sorgenti Node.js/TS che espongono endpoint
+# REST o processano input utente server-side.
+#
+# CLASSI COPERTE:
+#
+#   PB-INJ-A: Command Injection (CWE-77) — child_process exec/execSync/spawn
+#   con input concatenato o interpolato. Un attaccante che controlla l'input
+#   puo' iniettare comandi shell arbitrari.
+#   Sink: exec / execSync / spawnSync / execFile con argomento costruito tramite
+#         template literal `${x}`, +-concat, o variabile non-literal.
+#   Contrasto: passare array di argomenti a spawn()/execFile() senza shell=true.
+#
+#   PB-INJ-B: Code Injection via eval (CWE-95) — eval() / new Function()
+#   con input utente. Consente esecuzione di codice JS arbitrario lato server.
+#
+# PRECISIONE (L-COL-028): le regole non catturano exec() con literal statici.
+# L'obiettivo e' zero falsi positivi su invocazioni sicure tipiche di backend
+# PocketBase (es. `exec('ls -la')` con literal fisso).
+#
+# metadata: category=injection, owasp="A05:2025", cwe="CWE-77"/"CWE-95"
+# INVOCAZIONE: montato dal wrapper run_semgrep.mjs; `semgrep scan --config <dir>`.
+# =============================================================================
+
+rules:
+  # ---------------------------------------------------------------------------
+  # PB-INJ-A: Command Injection — child_process con input concatenato/interpolato.
+  # ---------------------------------------------------------------------------
+  - id: pb-injection-child-process-template-literal
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-77"
+      references:
+        - "eco-F2 — pocketbase-jsts injection: command injection"
+        - "PB-INJ-A: child_process exec con template literal / input concatenato"
+    message: >-
+      Command injection (CWE-77): primo argomento di exec/execSync/execFile/spawnSync
+      costruito con template literal o concatenazione di stringhe con input variabile.
+      Un attaccante che controlla l'input puo' iniettare comandi shell arbitrari.
+      Usare spawn() / execFile() con array di argomenti e senza { shell: true },
+      oppure validare l'input con una allowlist rigorosa prima di passarlo al processo.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              require('child_process').exec(`...`, ...)
+          - pattern: |
+              require('child_process').execSync(`...`, ...)
+          - pattern: |
+              require('child_process').execFile(`...`, ...)
+          - pattern: |
+              require('child_process').spawnSync(`...`, ...)
+          - pattern: |
+              require('child_process').exec($STR + $VAR, ...)
+          - pattern: |
+              require('child_process').execSync($STR + $VAR, ...)
+          - pattern: |
+              require('child_process').exec($CMD, ...)
+          - pattern: |
+              require('child_process').execSync($CMD, ...)
+
+  - id: pb-injection-child-process-import-template-literal
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-77"
+      references:
+        - "eco-F2 — pocketbase-jsts injection: command injection (ESM import)"
+        - "PB-INJ-A: child_process import + exec con template literal"
+    message: >-
+      Command injection (CWE-77): exec/execSync chiamato su binding importato con
+      template literal o concatenazione. Usare execFile() con array argomenti senza shell.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $EXEC(`...`, ...)
+          - pattern: |
+              $EXEC($STR + $VAR, ...)
+      - metavariable-pattern:
+          metavariable: $EXEC
+          patterns:
+            - pattern-either:
+                - pattern: exec
+                - pattern: execSync
+                - pattern: execFile
+                - pattern: spawnSync
+
+  # ---------------------------------------------------------------------------
+  # PB-INJ-B: Code Injection via eval / new Function.
+  # ---------------------------------------------------------------------------
+  - id: pb-injection-eval-user-input
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-95"
+      references:
+        - "eco-F2 — pocketbase-jsts injection: eval di input utente (CWE-95)"
+        - "PB-INJ-B: eval / new Function con variabile non-literal"
+    message: >-
+      Code injection (CWE-95): eval() o new Function() chiamato con un argomento
+      variabile (non un literal statico). Un attaccante che controlla l'input puo'
+      eseguire codice JS arbitrario lato server.
+      Eliminare eval(); sostituire con strutture dati (JSON.parse, Map) o dispatch
+      esplicito su valori consentiti.
+    patterns:
+      - pattern-either:
+          - pattern: eval($INPUT)
+          - pattern: new Function($INPUT)
+          - pattern: new Function(..., $INPUT)
+      - pattern-not:
+          - pattern: eval("...")

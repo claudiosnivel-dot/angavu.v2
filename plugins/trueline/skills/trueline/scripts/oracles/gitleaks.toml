@@ -1,0 +1,153 @@
+# Configurazione gitleaks di Trueline (03-ORACLES §5.2).
+#
+# Perche una config dedicata invece del default puro:
+#  - estende il ruleset di default (`useDefault = true`), quindi tutti i pattern
+#    nativi di gitleaks (chiavi AWS/GCP, token reali, ecc.) restano attivi;
+#  - aggiunge alcune regole "ad alta entropia su identificatore sensibile" che
+#    coprono segreti hardcoded scritti come `const NOME_KEY = "<literal>"` anche
+#    quando il literal non rispetta esattamente il formato di un provider noto
+#    (il caso piu comune nei sorgenti applicativi e nelle nostre fixture);
+#  - centralizza l'allowlist dei segreti di test/finti (vedi sotto), esplicita e
+#    versionata, per non gonfiare i falsi positivi (03 §5.2).
+#
+# NB: il valore del segreto NON appare mai qui ne nell'output: il wrapper invoca
+# sempre gitleaks con `--redact`.
+
+title = "trueline-gitleaks"
+
+[extend]
+# Mantieni tutte le regole native di gitleaks e aggiungi le nostre.
+useDefault = true
+
+# --- Regole aggiuntive Trueline ----------------------------------------------
+
+[[rules]]
+id = "trueline-generic-assigned-secret"
+description = "Stringa ad alta entropia assegnata a un identificatore dal nome sensibile (key/token/secret/cred/password)"
+# Cattura `xxxKey = "..."`, `apiToken: "..."`, ecc., anche se l'assegnazione e
+# spezzata su piu righe. Il gruppo 1 e il solo valore (per redazione/entropia).
+regex = '''(?i)["']?[a-z0-9_]*(?:key|token|secret|cred|passwd|password)[a-z0-9_]*["']?\s*[=:]\s*["']([a-z0-9][a-z0-9_\-]{24,})["']'''
+secretGroup = 1
+entropy = 3.0
+keywords = ["key", "token", "secret", "cred", "passwd", "password"]
+
+[[rules]]
+id = "trueline-connection-string-credentials"
+description = "Credenziali hardcoded dentro una connection string (DSN/URI di database o broker)"
+# Perche serve: `trueline-generic-assigned-secret` pretende un identificatore dal
+# nome sensibile (key/token/secret/cred/passwd/password). Una DSN e quasi sempre
+# assegnata a un identificatore innocuo (`url`, `dsn`, `DATABASE_URL`), quindi la
+# password del DB scivolava via non rilevata: buco grave per un prodotto verticale
+# su Supabase/Postgres.
+#
+# Cosa cattura: la sola PASSWORD della userinfo `schema://utente:password@host`
+# (gruppo 1 => secretGroup), mai l'host ne il nome del database.
+#
+# Discriminante anti-falsi-positivi (parte del disegno, non un dettaglio):
+#  - lunghezza minima 8 ED entropia >= 3.0 sulla sola password. Questo esclude per
+#    costruzione i placeholder di documentazione (`user:pass@`, `u:p@`) e — caso
+#    che conta per gli utenti reali — la DSN dello stack Supabase locale
+#    `postgres://postgres:postgres@127.0.0.1:54322/postgres` (entropia di
+#    "postgres" ~ 2.75 < 3.0): chi sviluppa in locale NON deve ricevere un finding;
+#  - la classe di caratteri della password esclude spazi, virgolette, `$`, `{}`,
+#    `[]` e `<>`, cosi le DSN parametriche (`postgres://u:${DB_PASSWORD}@h`,
+#    `postgres://u:<password>@h`) non producono finding.
+regex = '''(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mssql|mongodb(?:\+srv)?|rediss?|amqps?)://[a-z0-9._%+\-]*:([^\s:@/\\"'`<>{}\[\]$]{8,})@[a-z0-9._\-]+'''
+secretGroup = 1
+entropy = 3.0
+# gitleaks valuta la regola solo se il frammento contiene una di queste keyword:
+# vanno elencati tutti gli schemi, nessuno e sottostringa di un altro.
+keywords = [
+  "postgres://",
+  "postgresql://",
+  "mysql://",
+  "mariadb://",
+  "mssql://",
+  "mongodb://",
+  "mongodb+srv://",
+  "redis://",
+  "rediss://",
+  "amqp://",
+  "amqps://",
+]
+
+[[rules]]
+id = "trueline-stripe-like-key"
+description = "Chiave segreta in stile Stripe (sk_live_/sk_test_), tollerante a underscore interni"
+regex = '''sk_(?:live|test)_[A-Za-z0-9_]{16,}'''
+keywords = ["sk_live", "sk_test"]
+
+[[rules]]
+id = "trueline-gitlab-like-pat"
+description = "Personal Access Token in stile GitLab (glpat), tollerante a underscore interni"
+regex = '''glpat[_-][A-Za-z0-9_]{16,}'''
+keywords = ["glpat"]
+
+# --- Allowlist -----------------------------------------------------------------
+# Posto dove inserire, in modo esplicito e versionato, i segreti di test/finti
+# che NON devono produrre finding (03 §5.2). Volutamente vuota sul banco di
+# prova M-1: i segreti seminati S1/S2 DEVONO essere rilevati dal gate M0.
+# Esempio (commentato) di come si allowlista un valore di fixture noto:
+#
+# [[allowlists]]
+# description = "Segreti di esempio nella documentazione"
+# regexTarget = "match"
+# regexes = ['''AKIAIOSFODNN7EXAMPLE''']
+
+[[allowlists]]
+description = "Token demo dello stack Supabase LOCALE (claim iss=\"supabase-demo\"): costanti pubbliche, non segreti"
+# AMBITO RISTRETTO ALLA SOLA REGOLA `jwt` — e' la differenza fra un'allowlist e un
+# interruttore. Senza `targetRules`, l'allowlist e' GLOBALE e filtra il MATCH di
+# QUALUNQUE regola: un segreto VERO basta che finisca nello stesso span di match
+# dell'ago demo per sparire. MISURATO (2026-07-29), allowlist globale:
+#   a.env: STRIPE_SECRET_KEY=sk_live_2Wd7Hq3Nx8Cm5Bt1Vy6Zr                       -> 2 finding
+#   b.env: la STESSA riga con `c3MiOiJzdXBhYmFzZS1kZW1v` appeso al valore        -> 0 finding
+# perche' la regex di `sk_live_...` assorbe i caratteri alfanumerici contigui e si
+# porta l'ago dentro il match. Con `targetRules = ["jwt"]` b.env torna a 2 finding e
+# il token demo resta soppresso: l'allowlist parla SOLO dei JWT, che e' l'unica cosa
+# di cui la misura di §2 le da' titolo di parlare.
+targetRules = ["jwt"]
+regexTarget = "match"
+# PERCHE E SICURO (misurato, non assunto)
+#  I due JWT (role=anon e role=service_role) che `supabase start` genera sono
+#  COSTANTI PUBBLICHE: lo stesso identico token compare, byte per byte, in
+#  progetti indipendenti fra loro (verificato per hash su 3 progetti reali).
+#  Un valore identico in progetti che non si conoscono non e un segreto di
+#  progetto: e una costante d'ecosistema. Stesso precedente gia tarato per la
+#  DSN `postgres://postgres:postgres@127.0.0.1:54322/postgres`, che la regola
+#  `trueline-connection-string-credentials` non accende per soglia d'entropia.
+#
+# PERCHE PER FORMA E NON PER VALORE ESATTO
+#  Allowlistare i due literal richiederebbe di incollare qui il token di un
+#  progetto dell'utente. La forma e piu stretta e piu onesta: quel che rende
+#  demo un token e il claim `iss`, non la sua stringa.
+#
+# COME FUNZIONA
+#  gitleaks non decodifica base64. Ma il payload di un JWT e base64url del JSON,
+#  e la sottostringa `"iss":"supabase-demo"` produce una codifica COSTANTE una
+#  volta fissato l'allineamento del byte iniziale (3 casi, uno per residuo
+#  mod 3). Le tre alternative qui sotto sono esattamente quei 3 casi, ricavate
+#  e verificate empiricamente su prefissi casuali:
+#    residuo 0 -> ImlzcyI6InN1cGFiYXNlLWRlbW8i
+#    residuo 1 -> c3MiOiJzdXBhYmFzZS1kZW1v      (caso reale: payload `{"iss":...`)
+#    residuo 2 -> aXNzIjoic3VwYWJhc2UtZGVt
+#
+# COSA NON COPRE (deliberato, L-COL-006)
+#  - Un JWT con `iss` DIVERSO resta ROSSO. In particolare la anon key di un
+#    progetto Supabase CLOUD reale (`iss=supabase`) NON e allowlistata: decidere
+#    che una chiave di produzione non vada segnalata non e una decisione da
+#    prendere dentro un'allowlist.
+#  - Non si allowlista per `role=anon`: spegnerebbe anche le anon key cloud.
+#  - Un vero segreto scritto accanto a un token demo resta rilevato: l'allowlist
+#    filtra il match, non il file, e per di piu' solo i match della regola `jwt`
+#    (targetRules). Un `sk_live_...` non e un JWT: nessun allineamento base64 di
+#    questo ago puo spegnerlo. Verificato sopra col caso b.env.
+#  - COPERTURA MANCANTE NOTA: un JWT VERO che contenesse, nel proprio payload
+#    base64, una di queste tre sottostringhe verrebbe soppresso. Richiede un claim
+#    che codifichi `"iss":"supabase-demo"`, cioe' esattamente il caso demo: la
+#    coincidenza non e costruibile per caso, ma va detta invece che taciuta.
+regexes = [
+  '''ImlzcyI6InN1cGFiYXNlLWRlbW8i''',
+  '''c3MiOiJzdXBhYmFzZS1kZW1v''',
+  '''aXNzIjoic3VwYWJhc2UtZGVt''',
+]

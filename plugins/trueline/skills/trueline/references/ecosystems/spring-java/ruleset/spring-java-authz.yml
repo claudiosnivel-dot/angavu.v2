@@ -1,0 +1,76 @@
+# =============================================================================
+# spring-java-authz.yml — Ruleset Semgrep route-authz del pack `spring-java`
+# (F4, tier DETECTION).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` Spring MVC (route-authz nel controller, non RLS-al-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# per stack Java/Spring Boot: un metodo di controller MUTANTE (@PostMapping /
+# @PutMapping / @DeleteMapping / @PatchMapping) che NON ha @PreAuthorize o
+# @Secured: chiunque raggiunga l'endpoint può mutare i dati (CWE-862).
+#
+# SINK (metodo mutante): annotato con una delle HTTP mutant annotations Spring MVC:
+#   @PostMapping, @PutMapping, @DeleteMapping, @PatchMapping.
+#   (I metodi @GetMapping / @RequestMapping(method=GET) sono LETTURA: non bersaglio.)
+#
+# ESCLUSIONE (auth check Spring Security): se il metodo ha ANCHE @PreAuthorize(...)
+#   o @Secured(...), NON è un finding. Sono riconosciuti:
+#     @PreAuthorize("isAuthenticated()") / @PreAuthorize("hasRole(...)") / etc.
+#     @Secured("ROLE_USER") / @Secured({"ROLE_ADMIN", ...}) / etc.
+#
+# PRECISIONE (08 §5): la regola NON colpisce i metodi @GetMapping né quelli già
+#   protetti da @PreAuthorize/@Secured (contrasto pulito). Sulla fixture F4 deve
+#   colpire SOLO SEED:SJ-S3 (BookingController.createBooking senza @PreAuthorize)
+#   e NON il contrasto createBookingSecure (con @PreAuthorize("isAuthenticated()")).
+#
+# INVOCAZIONE: montato dalla directory del pack (ruleset/) dal wrapper docker
+#   (run_semgrep.mjs col 2° arg ruleset path = questa dir, T2.0).
+#   `semgrep scan --config <dir>`. Immagine semgrep pinnata (L-COL-002).
+# =============================================================================
+
+rules:
+  # SEED SJ-S3. Metodo controller MUTANTE (@PostMapping/@PutMapping/@DeleteMapping/
+  # @PatchMapping) che NON ha @PreAuthorize o @Secured: chiunque raggiunga
+  # l'endpoint può mutare lo stato dell'applicazione (CWE-862, A01:2025).
+  - id: spring-authz-mutating-endpoint-no-preauthorize
+    languages: [java]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Endpoint Spring che scrive senza check identità/ruolo (route-authz)"
+        - "F4 — authz-surface Spring MVC (POST/PUT/DELETE/PATCH senza @PreAuthorize)"
+    message: >-
+      Endpoint Spring MVC mutante (POST/PUT/DELETE/PATCH) senza @PreAuthorize o
+      @Secured: chiunque raggiunga il controller può mutare i dati (CWE-862,
+      Broken Access Control). Aggiungere @PreAuthorize("isAuthenticated()") o
+      una verifica del principal PRIMA della scrittura.
+    patterns:
+      # 1) IL NODO: un metodo con annotazione HTTP mutante (Spring MVC).
+      #    Lista parametri = ellissi semgrep `(...)`: una metavariabile singola
+      #    `$ARGS` in posizione-parametri NON è Java valido (Parse_error → la
+      #    regola veniva scartata e non colpiva NULLA). `(...)` matcha 0..N
+      #    parametri (incluso `@RequestBody Map<...> body`), idioma Java corretto.
+      - pattern-either:
+          - pattern: |
+              @PostMapping(...)
+              $RET $M(...) { ... }
+          - pattern: |
+              @PutMapping(...)
+              $RET $M(...) { ... }
+          - pattern: |
+              @DeleteMapping(...)
+              $RET $M(...) { ... }
+          - pattern: |
+              @PatchMapping(...)
+              $RET $M(...) { ... }
+      # 2) ESCLUSIONE: se il metodo ha @PreAuthorize o @Secured, NON è un finding.
+      - pattern-not: |
+          @PreAuthorize(...)
+          $RET $M(...) { ... }
+      - pattern-not: |
+          @Secured(...)
+          $RET $M(...) { ... }

@@ -1,0 +1,18 @@
+{
+  "id": "flutter-dart",
+  "version": "1.1.0",
+  "languages": ["dart"],
+  "backend": "supabase",
+  "detect": { "lang_any": ["pubspec.yaml"] },
+  "triggers": ["flutter", "dart", "supabase", "pubspec", "pub", "supabase_flutter", "flutter_supabase", "authz", "authorization", "autorizzazione", "route", "rotta", "endpoint", "blueprint", "audit", "remediat", "bonific", "macrotask", "oracol", "dart", "sicur", "security", "secret", "segret"],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["pubspec.lock"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "dart" }
+  },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret","dead-code"],
+  "coverage_policy": "declared"
+}

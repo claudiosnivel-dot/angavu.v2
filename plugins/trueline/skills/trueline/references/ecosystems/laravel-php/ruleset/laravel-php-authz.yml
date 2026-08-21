@@ -1,0 +1,153 @@
+# =============================================================================
+# laravel-php-authz.yml — Ruleset Semgrep route-authz del pack `laravel-php`
+# (eco-F4, tier detection).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` — route-authz applicativa Laravel (PHP).
+# Modella il principio di `col-authz-mutating-route-no-identity-check`:
+# una closure di rotta MUTANTE (Route::post/put/delete/patch) che esegue
+# una SCRITTURA su DB SENZA un controllo di autenticazione/identità nel body.
+#
+# SINK (scrittura DB) coperti:
+#   - Query Builder: DB::table(...)->insert/update/delete(...)
+#   - Eloquent ORM:  Model::create(...), $model->save(), $model->update(...),
+#                    $model->delete()
+#
+# ESCLUSIONE (auth check inline) — `pattern-not-inside` col deep-expression
+# operator `<... EXPR ...>` (il guard tipicamente vive nella CONDIZIONE di
+# `if (!auth()->check()) {...}`, NON come statement nudo):
+#   - auth()->check()         — guard inline
+#   - auth()->user()          — guard inline alternativo
+#   - $request->user()        — helper Laravel (qualunque nome di variabile)
+#   - Auth::check()           — facade statica
+#
+# PARAMETRO CLOSURE: `function (...)` (ellissi sui parametri) combacia sia col
+# parametro TIPATO `function (Request $request)` sia con l'untyped
+# `function ($request)`. Una metavariabile nuda `$REQUEST` NON coglierebbe il
+# type-hint `Request $request` (il seed LP-S3 della fixture è tipato).
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862"
+#
+# BEST-EFFORT: semgrep PHP GA. Il ruleset è funzionalmente corretto per le
+# closure di rotta standard Laravel. I controller-class (metodi istanza su
+# classi separate) non sono coperti in questo tier — deferred F5.
+#
+# PRECISIONE (L-COL-028): sulla fixture deve colpire SOLO SEED:LP-S3
+# (Route::post('/api/bookings', ...) senza auth()->check()) e NON la rotta
+# di contrasto (Route::post('/api/bookings/secure', ...) con auth()->check()).
+#
+# INVOCAZIONE: montato via run_semgrep.mjs col ruleset path = questa dir;
+#   `semgrep scan --config <dir> --lang php`.
+# =============================================================================
+
+rules:
+  # SEED LP-S3. Closure di rotta MUTANTE (POST/PUT/DELETE/PATCH) che SCRIVE
+  # sul DB (Query Builder insert/update/delete; Eloquent create/save/update/
+  # delete) SENZA verifica di autenticazione nel body. Chiunque raggiunga
+  # l'endpoint può mutare i dati (CWE-862, Broken Access Control).
+  - id: laravel-php-authz-mutating-route-no-auth-check
+    languages: [php]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "eco-F4 — route-authz Laravel PHP (closure mutante senza auth check)"
+        - "CWE-862 Missing Authorization"
+    message: >-
+      Closure di rotta MUTANTE (POST/PUT/DELETE/PATCH) che scrive sul DB
+      (Query Builder / Eloquent) SENZA verifica di autenticazione nel body:
+      chiunque raggiunga l'endpoint può mutare i dati (CWE-862, Broken Access
+      Control). Aggiungere auth()->check(), $request->user(), Auth::check() o
+      il middleware auth:sanctum/auth PRIMA della scrittura.
+    patterns:
+      # 1) Pattern sink DB MUTANTE in una closure Route::post/put/delete/patch.
+      - pattern-either:
+          # Query Builder — insert
+          - pattern: |
+              Route::post($PATH, function (...) {
+                ...
+                DB::table(...)->insert(...);
+                ...
+              })
+          # Query Builder — update
+          - pattern: |
+              Route::post($PATH, function (...) {
+                ...
+                DB::table(...)->update(...);
+                ...
+              })
+          # Query Builder — delete
+          - pattern: |
+              Route::post($PATH, function (...) {
+                ...
+                DB::table(...)->delete(...);
+                ...
+              })
+          # PUT — insert
+          - pattern: |
+              Route::put($PATH, function (...) {
+                ...
+                DB::table(...)->insert(...);
+                ...
+              })
+          # PUT — update
+          - pattern: |
+              Route::put($PATH, function (...) {
+                ...
+                DB::table(...)->update(...);
+                ...
+              })
+          # DELETE — delete
+          - pattern: |
+              Route::delete($PATH, function (...) {
+                ...
+                DB::table(...)->delete(...);
+                ...
+              })
+          # PATCH — update
+          - pattern: |
+              Route::patch($PATH, function (...) {
+                ...
+                DB::table(...)->update(...);
+                ...
+              })
+
+      # 2) ESCLUSIONE: se nel body c'è un auth check, NON è un finding.
+      #    Il guard può comparire in QUALSIASI posizione di statement —
+      #    tipicamente nella CONDIZIONE di un `if (!auth()->check()) {...}` e NON
+      #    come statement nudo. Per coglierlo ovunque (condizione, assegnazione,
+      #    return) si usa il deep-expression operator `<... EXPR ...>` di semgrep,
+      #    annidato in uno statement (`<... EXPR ...>;`). NB: il parametro della
+      #    closure è `function (...)` (ellissi sui parametri) così da combaciare
+      #    sia col tipato `Request $request` sia con l'untyped `$request`.
+      #    auth()->check() — guard inline standard
+      - pattern-not-inside: |
+          Route::$M($P, function (...) {
+            ...
+            <... auth()->check() ...>;
+            ...
+          })
+      #    auth()->user() — guard inline alternativo
+      - pattern-not-inside: |
+          Route::$M($P, function (...) {
+            ...
+            <... auth()->user() ...>;
+            ...
+          })
+      #    $request->user() — helper Laravel (qualunque nome di variabile)
+      - pattern-not-inside: |
+          Route::$M($P, function (...) {
+            ...
+            <... $R->user() ...>;
+            ...
+          })
+      #    Auth::check() — facade statica
+      - pattern-not-inside: |
+          Route::$M($P, function (...) {
+            ...
+            <... Auth::check() ...>;
+            ...
+          })

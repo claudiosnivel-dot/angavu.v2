@@ -1,0 +1,18 @@
+{
+  "id": "rails-rb",
+  "version": "1.1.0",
+  "languages": ["ruby"],
+  "backend": "rails-app",
+  "detect": { "lang_any": ["Gemfile"] },
+  "triggers": ["rails", "ruby", "rb", "activerecord", "devise", "bundler", "gemfile", "gem", "controller", "before_action", "skip_before_action", "sinatra", "rack", "nokogiri", "secret", "segret", "authz", "authorization", "autorizzazione", "route", "rotta", "endpoint", "blueprint", "audit", "remediat", "bonific", "macrotask", "oracol", "sicur", "security"],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["Gemfile.lock"] },
+    "authz":           { "tool": "semgrep", "ruleset": "ruleset/", "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "debride" }
+  },
+  "floor":            ["secret", "dependency-vuln", "authz"],
+  "verified_set":     ["secret"],
+  "coverage_policy":  "declared"
+}

@@ -1,0 +1,22 @@
+{
+  "$comment": "authz verified = firestore_rules_check statico ri-eseguito pulito (regola non-`if true` owner-scoped); NON invarianza runtime (emulatore Firestore non disponibile) — L-COL-006.",
+  "id": "firebase-jsts",
+  "version": "1.1.0",
+  "languages": ["js", "ts"],
+  "backend": "firebase",
+  "detect": { "files_any": ["firebase.json", "firestore.rules"], "lang_any": ["package.json"] },
+  "triggers": ["firebase", "firestore", "firestore.rules", "firebase-admin", "security rules", "authz", "firebase-functions", "cloud functions", "realtime database", "rtdb", "storage.rules", "functions", "js", "ts", "javascript", "typescript", "blueprint", "audit", "remediat", "bonific", "macrotask", "oracol", "sicur", "security", "secret", "segret"],
+  "oracles": {
+    "secret":          { "tool": "gitleaks", "shared": true, "exclude": [".next/**", "dist/**", "build/**", "out/**", "coverage/**", ".turbo/**", ".svelte-kit/**", ".nuxt/**", ".output/**", "**/*.map", "**/database.types.ts"] },
+    "dependency-vuln": { "tool": "osv", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+    "authz":           { "tool": "firestore_rules_check", "kind": "firestore-rules", "scan": ["."], "role": "authz-surface" },
+    "injection":       { "tool": "semgrep", "ruleset": "ruleset/" },
+    "dead-code":       { "tool": "knip" },
+    "duplication":     { "tool": "jscpd", "min_tokens": 50 },
+    "architecture":    { "tool": "madge" }
+  },
+  "test_runner": { "detect": ["vitest", "jest", "mocha"] },
+  "floor":        ["secret", "dependency-vuln", "authz"],
+  "verified_set": ["secret", "dead-code", "authz"],
+  "coverage_policy": "declared"
+}

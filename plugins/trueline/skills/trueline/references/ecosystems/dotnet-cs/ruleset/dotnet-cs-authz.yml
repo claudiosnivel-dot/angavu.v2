@@ -1,0 +1,93 @@
+# =============================================================================
+# dotnet-cs-authz.yml — Ruleset Semgrep route-authz del pack `dotnet-cs`
+# (eco-F4, tier detection).
+#
+# version: 1.0.0
+#
+# RUOLO `authz-surface` ASP.NET Core (route-authz nel controller, non RLS-al-DB).
+# Modella il principio di `col-authz-mutating-route-no-identity-check` (07 §4.3)
+# per stack C# su ASP.NET Core: un action method MUTANTE ([HttpPost]/[HttpPut]/
+# [HttpDelete]/[HttpPatch]) su un controller senza attributo [Authorize] sul
+# metodo NE' sulla classe.
+#
+# SEED CS-S3. Action method HTTP mutante ([HttpPost]) su un ControllerBase
+# senza `[Authorize]` sul metodo: chiunque raggiunga il route può scrivere
+# dati senza verifica di identità/ruolo (CWE-862, A01:2025).
+#
+# ESCLUSIONE (auth check ASP.NET): `pattern-not` su `[Authorize]` sopra il
+# metodo oppure `pattern-not-inside` su `[Authorize]` sulla classe controller.
+#
+# metadata: category=authz, owasp="A01:2025", cwe="CWE-862" (coerenti con
+# il registry T1.2 e con la normalize di 04 — A01:2025 è già 2025-canonico).
+#
+# INVOCAZIONE: montato in /src dal wrapper docker (run_semgrep.mjs col 2° arg
+# ruleset path = questa dir, T2.0); `semgrep scan --config <dir>`. Immagine
+# semgrep pinnata (L-COL-002).
+#
+# PRECISIONE (08 §5, best-effort): sulla fixture CS-S3 deve colpire SOLO
+# l'action POST senza [Authorize] e NON la rotta di contrasto POST /secure
+# (con [Authorize]). Best-effort: semgrep C# è GA ma le esclusioni di attributi
+# multi-livello (classe vs metodo) possono produrre FP/FN su pattern complessi.
+# =============================================================================
+
+rules:
+  # SEED CS-S3. Action method MUTANTE ([HttpPost/Put/Delete/Patch]) su controller
+  # ASP.NET Core senza attributo [Authorize]: chiunque raggiunga il route può
+  # eseguire l'operazione senza verifica di identità/ruolo (CWE-862).
+  - id: cs-authz-mutating-action-no-authorize
+    languages: [csharp]
+    severity: ERROR
+    metadata:
+      category: authz
+      owasp: "A01:2025"
+      cwe: "CWE-862"
+      references:
+        - "07 §4.3 — Action che scrive senza check identità/ruolo (route-authz)"
+        - "eco-F4 CS-S3 — authz-surface ASP.NET Core (controller, [Authorize])"
+    message: >-
+      Action method MUTANTE ([HttpPost]/[HttpPut]/[HttpDelete]/[HttpPatch]) su
+      controller ASP.NET Core senza attributo [Authorize] sul metodo: chiunque
+      raggiunge il route può eseguire l'operazione senza verifica di identità o
+      ruolo (CWE-862 Missing Authorization, A01:2025 Broken Access Control).
+      Aggiungere [Authorize] (o una policy equivalente) sul metodo o sulla classe.
+    patterns:
+      # 1) IL NODO: un action method con verbo HTTP mutante.
+      - pattern-either:
+          - pattern: |
+              [HttpPost]
+              public $RET $METHOD(...) { ... }
+          - pattern: |
+              [HttpPut]
+              public $RET $METHOD(...) { ... }
+          - pattern: |
+              [HttpDelete]
+              public $RET $METHOD(...) { ... }
+          - pattern: |
+              [HttpPatch]
+              public $RET $METHOD(...) { ... }
+          - pattern: |
+              [HttpPost(...)]
+              public $RET $METHOD(...) { ... }
+          - pattern: |
+              [HttpPut(...)]
+              public $RET $METHOD(...) { ... }
+          - pattern: |
+              [HttpDelete(...)]
+              public $RET $METHOD(...) { ... }
+          - pattern: |
+              [HttpPatch(...)]
+              public $RET $METHOD(...) { ... }
+      # 2) ESCLUSIONE: [Authorize] direttamente sopra il metodo.
+      - pattern-not: |
+          [Authorize]
+          public $RET $METHOD(...) { ... }
+      - pattern-not: |
+          [Authorize(...)]
+          public $RET $METHOD(...) { ... }
+      # 3) ESCLUSIONE: [Authorize] sulla classe controller (eredita tutti i metodi).
+      - pattern-not-inside: |
+          [Authorize]
+          class $CLASS : $BASE { ... }
+      - pattern-not-inside: |
+          [Authorize(...)]
+          class $CLASS : $BASE { ... }

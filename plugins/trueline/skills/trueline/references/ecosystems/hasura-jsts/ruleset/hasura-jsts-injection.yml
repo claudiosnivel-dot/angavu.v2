@@ -1,0 +1,131 @@
+# =============================================================================
+# hasura-jsts-injection.yml — Ruleset Semgrep injection del pack `hasura-jsts`
+# (eco-F3).
+#
+# version: 1.0.0
+#
+# RUOLO `injection` (non-floor, bonus) per stack JS/TS con Hasura GraphQL Engine:
+# rileva injection critiche nei sorgenti Node.js/TS lato applicativo (server
+# functions, middleware, API gateway che wrappano Hasura).
+#
+# CLASSI COPERTE:
+#
+#   HS-INJ-A: GraphQL Injection / NoSQL Injection (CWE-943) — costruzione
+#   dinamica di query GraphQL o variabili con input utente non sanificato.
+#   Un attaccante che controlla l'input puo' iniettare fragment/field arbitrari
+#   nella query GraphQL o alterare le variables passate a Hasura.
+#   Sink: template literal con interpolazione di variabili utente usato come
+#         body della richiesta GraphQL (fetch/axios verso /v1/graphql).
+#   Contrasto: usare variabili GraphQL (operazione con $var tipizzata) invece
+#              di costruire la query in stringa.
+#
+#   HS-INJ-B: Command Injection (CWE-77) — child_process exec/execSync
+#   con input concatenato nei server-side function (Cloud Functions, Express
+#   middleware, Next.js API routes) integrati con Hasura Actions/Events.
+#   Sink: require('child_process').exec / execSync con argomento costruito
+#         dinamicamente (template literal, +-concat).
+#
+# PRECISIONE: le regole non catturano exec() con literal statici ne query
+# GraphQL con soli field literal (nessuna interpolazione utente). L'obiettivo
+# e' zero falsi positivi su invocazioni sicure.
+#
+# NOTA: l'authz-surface di Hasura (permission rules nella metadata YAML) e'
+# gestita dall'oracolo CUSTOM `hasura_metadata_check`, NON da semgrep.
+# Questo ruleset copre il lato applicativo JS/TS (server functions, middleware).
+#
+# metadata: category=injection, owasp="A05:2025", cwe="CWE-77"/"CWE-943"
+#
+# INVOCAZIONE: montato dal wrapper run_semgrep.mjs;
+#   `semgrep scan --config <dir>`. Immagine semgrep pinnata (L-COL-002).
+# =============================================================================
+
+rules:
+  # ---------------------------------------------------------------------------
+  # HS-INJ-A: GraphQL Injection — costruzione dinamica di query con template
+  # literal e input utente non sanificato passato a Hasura /v1/graphql.
+  # Un attaccante che controlla l'input puo' iniettare fragment arbitrari.
+  # Contrasto: usare variabili GraphQL tipizzate ($var: String!) invece di
+  # interpolazione stringa. Categoria injection (CWE-943).
+  # ---------------------------------------------------------------------------
+  - id: hs-injection-graphql-template-literal
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-943"
+      references:
+        - "eco-F3 hasura-jsts injection: GraphQL injection via template literal"
+        - "HS-INJ-A: costruzione dinamica di query GraphQL con input utente"
+    message: >-
+      GraphQL injection (CWE-943): query GraphQL costruita con template literal
+      che interpola input utente non validato. Un attaccante che controlla
+      l'input puo' iniettare fragment o field arbitrari nella query inviata a
+      Hasura. Usare variabili GraphQL tipizzate ($var: Type!) e passare i valori
+      come JSON nel campo "variables", mai come parte della stringa di query.
+    patterns:
+      - pattern-either:
+          # fetch('...graphql', { body: JSON.stringify({ query: `...${userInput}...` }) })
+          - pattern: |
+              fetch($URL, { body: JSON.stringify({ query: `...` }) })
+          # axios.post('...graphql', { query: `...${x}...` })
+          - pattern: |
+              $CLIENT.post($URL, { query: `...` })
+          # variabile query = `query { ... ${x} ... }` poi usata
+          - pattern: |
+              $QUERY = `... ${ $INPUT } ...`
+
+  # ---------------------------------------------------------------------------
+  # HS-INJ-B: Command Injection — child_process nei server-side function
+  # integrati con Hasura Actions o Event Triggers (CWE-77).
+  # Stessa classe di FB-S4-A: sink exec/execSync con input interpolato.
+  # ---------------------------------------------------------------------------
+  - id: hs-injection-child-process-template-literal
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-77"
+      references:
+        - "eco-F3 hasura-jsts injection: command injection in server functions Hasura"
+        - "HS-INJ-B: child_process exec con template literal / input concatenato"
+    message: >-
+      Command injection (CWE-77): primo argomento di exec/execSync costruito
+      con template literal o concatenazione di stringhe con input variabile.
+      Tipico nei server-side function registrati come Hasura Actions o Event
+      Triggers. Usare spawn()/execFile() con array di argomenti senza shell.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              require('child_process').exec(`...`, ...)
+          - pattern: |
+              require('child_process').execSync(`...`, ...)
+          - pattern: |
+              require('child_process').exec($STR + $VAR, ...)
+          - pattern: |
+              require('child_process').execSync($STR + $VAR, ...)
+
+  # ---------------------------------------------------------------------------
+  # HS-INJ-C: Code Injection via eval — CWE-95. Come FB-S4-B.
+  # ---------------------------------------------------------------------------
+  - id: hs-injection-eval-user-input
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: injection
+      owasp: "A05:2025"
+      cwe: "CWE-95"
+      references:
+        - "eco-F3 hasura-jsts injection: eval di input utente (CWE-95)"
+    message: >-
+      Code injection (CWE-95): eval() o new Function() chiamato con argomento
+      variabile. Eliminare eval(); usare strutture dati (JSON.parse, Map) o
+      dispatch esplicito su valori consentiti.
+    patterns:
+      - pattern-either:
+          - pattern: eval($INPUT)
+          - pattern: new Function($INPUT)
+          - pattern: new Function(..., $INPUT)
+      - pattern-not:
+          - pattern: eval("...")
