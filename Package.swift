@@ -50,6 +50,12 @@ let package = Package(
         .testTarget(
             name: "AngavuFoundationTests",
             dependencies: ["AngavuDomain", "AngavuData", "AngavuFeatures"]
+        ),
+        // Test del Data layer. I test SwiftData (T-012) sono guardati da
+        // canImport(SwiftData): girano al confine Apple, degradano a skip altrove.
+        .testTarget(
+            name: "AngavuDataTests",
+            dependencies: ["AngavuDomain", "AngavuData"]
         )
     ]
 )
