@@ -9,7 +9,7 @@
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
 | **Ultimo aggiornamento** | 2026-08-21 (**CI Apple VERDE**: build+test+lint+app iOS) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #3 `success`, commit `4e6b4bd`): `foundation`, `library_index`, `safety_net` verificati. Prossima sessione → prossimo macrotask |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #3 `success`): `foundation`, `library_index`, `safety_net` verificati. **Prossima sessione → BUILD `dashboard`** |
 
 ---
 
@@ -164,9 +164,10 @@
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
   Mac**. Il verdetto è di un **comando** (L-COL-002), verificabile nella tab Actions.
-- **Prossimo macrotask** (prossima sessione): candidati per il DAG (00-INDEX §2)
-  che dipendono da `library_index`: `dashboard` (numeri veri + caveat iCloud T-021,
-  che T-052 anticipa — preferibile per chiudere quel debito), `exact_duplicates`.
+- **Prossimo macrotask: `dashboard`** (scelto dall'utente). Numeri veri per
+  categoria dalle size reali + caveat iCloud (T-021); riusare/condividere
+  `DeletedAssetSize` che T-052 ha anticipato, **non** duplicarlo. Dipende da
+  `library_index` (verde).
 - **Merge su `main`**: il gate è soddisfatto (CI verde). Il merge resta una
   decisione dell'utente; il branch è mergeabile quando vuoi.
 - **Caveat minuti**: repo privato → minuti macOS ×10 (~200/mese piano Free). Il
