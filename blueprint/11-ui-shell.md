@@ -3,6 +3,18 @@
 > Onboarding-manifesto, schermata "cosa NON facciamo", report onesto. Trasversale.
 > Identificatori in inglese, prosa in italiano.
 
+> **📌 PROMEMORIA DESIGN (da fare all'avvio di questo macrotask).** Il design
+> visivo (palette, tema, bottoni, effetti) **non** è ancora stato fatto e **non**
+> va portato 1:1 dall'Android (Material 3): iOS segue Apple **HIG**. Passi:
+> 1. **Inventario brand token** dal repo Android
+>    (`app/src/main/kotlin/app/angavu/ui/theme/Color.kt` e `Theme.kt`): estrarre
+>    SOLO i colori d'**identità di brand** (accent, eventuale logo/icona), lasciando
+>    lo scaffolding Material.
+> 2. **Ricostruire nativo** con la skill **`apple-skills:design`** (SF Symbols,
+>    tipografia SF Pro, Dynamic Type, dark mode, Liquid Glass, animazioni/feedback).
+>    Il *carattere/brand* si porta; il *linguaggio visivo* è nativo iOS.
+> Il repo Android è clonabile via `add_repo claudiosnivel-dot/angavu`.
+
 ## Obiettivo del macrotask
 
 Dare all'app la sua voce: un **onboarding-manifesto** che spiega la promessa, una

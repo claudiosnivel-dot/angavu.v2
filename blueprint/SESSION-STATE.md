@@ -31,7 +31,7 @@
 | `blurry_photos` | todo | — | Dipende da library_index; elimina via safety_net |
 | `video_compression` | todo | — | `DI-006`: primo candidato al de-scope |
 | `extra_photo_domains` | todo | — | `DI-007`: indipendente dal cuore-foto |
-| `ui_shell` | todo | — | Onboarding-manifesto + report onesto, trasversale |
+| `ui_shell` | todo | — | Onboarding-manifesto + report onesto, trasversale. **📌 Design: estrarre brand token dall'Android (`ui/theme/Color.kt`) e ricostruire nativo per HIG con `apple-skills:design` — vedi promemoria in `11-ui-shell.md`** |
 
 ## 2. Macrotask corrente
 
