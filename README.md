@@ -49,7 +49,20 @@ sessione era già aperta:
 > (`.claude/settings.json`): appena una macchina si fida della cartella, i plugin
 > si attivano da soli, senza installazione manuale.
 
+## CI — l'oracolo Apple in cloud (senza un Mac)
+
+Gli oracoli Apple (`swift build`/`test`, SwiftLint, build dell'app iOS) girano su
+un **runner macOS di GitHub Actions** (`.github/workflows/ci.yml`, `macos-15`), a
+ogni push. È il "confine Apple" **senza possedere un Mac**: il verde/rosso è
+l'esito reale della CI, non una dichiarazione dell'LLM (L-COL-002). Il merge su
+`main` è gated da quel verde. La stessa pipeline potrà poi archiviare e caricare su
+TestFlight/App Store via App Store Connect API key (secrets), sempre headless.
+
+> **Minuti**: su repo privato i minuti macOS contano ×10 (~200/mese nel piano
+> Free). Il job `ios-app` è separato e disattivabile per risparmiare.
+
 ## Stato
 
-Bootstrap toolchain completato. Prossimo passo: revisione del documento di
-fattibilità, poi generazione del blueprint tecnico via Trueline **BOOTSTRAP**.
+Fonte di verità: [`blueprint/SESSION-STATE.md`](blueprint/SESSION-STATE.md).
+`foundation` chiuso (build-1); `library_index` (build-2) e `safety_net` (build-3)
+implementati e `in_progress` fino al verde della CI.

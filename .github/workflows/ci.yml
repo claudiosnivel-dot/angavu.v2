@@ -1,0 +1,72 @@
+# CI — l'oracolo Apple in cloud (apple-skills possiede il verdetto).
+#
+# Gira su un runner macOS ospitato da GitHub (Xcode + Swift + SwiftLint + simulatori
+# preinstallati): è il "confine Apple" senza possedere un Mac. "Verde" = esito di
+# questi comandi, mai una frase dell'LLM (L-COL-002/006).
+#
+# Nota minuti: su repo PRIVATO i minuti macOS contano ×10 (Free ~200 min-macOS/mese).
+# Per risparmiare: il job app-iOS è separato e puoi disattivarlo, oppure rendi il
+# repo pubblico (minuti macOS gratis).
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Oracolo principale: build + test + lint del package SwiftPM. Veloce (~pochi min).
+  swiftpm:
+    name: swift build/test/lint (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version || true
+
+      # Oracolo dead-code (knip→) e regressione/conformità (target_tests).
+      - name: Build (warnings-as-errors)
+        run: make build
+
+      - name: Test (target_tests + regressione)
+        run: make test
+
+      # Oracolo di stile/dead-code/no-force-unwrap (T-003).
+      - name: SwiftLint
+        run: |
+          if ! command -v swiftlint >/dev/null 2>&1; then brew install swiftlint; fi
+          make lint
+
+  # Verifica che l'APP iOS compili per simulatore (senza firma). Più pesante:
+  # genera il progetto con XcodeGen e builda con xcodebuild.
+  ios-app:
+    name: build app (iOS Simulator)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Genera progetto Xcode (XcodeGen)
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          make app
+
+      - name: Build per simulatore (no signing)
+        run: |
+          xcodebuild \
+            -project App/Angavu.xcodeproj \
+            -scheme Angavu \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build

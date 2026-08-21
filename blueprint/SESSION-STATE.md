@@ -164,7 +164,11 @@
   che dipendono da `library_index`: `dashboard` (numeri veri + caveat iCloud T-021,
   che T-052 anticipa), `exact_duplicates`. Scelta all'apertura. `dashboard` è ora
   preferibile per chiudere il debito su T-021/T-052.
-- **Confine Apple (obbligatorio prima del merge su `main`)**: girare
-  `swift build -warnings-as-errors` + `swift test` (chiude `library_index` e
-  `safety_net`) e `make lint` (chiude l'oracolo T-003 di `foundation`, oggi non
-  coperto). Solo allora il verde è reale e il merge valutabile.
+- **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
+  `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
+  simulatore. È qui che l'oracolo Swift diventa verde/rosso — **senza possedere un
+  Mac**. Chiude `library_index`, `safety_net` e l'oracolo T-003 di `foundation`.
+  Il verde arriva dal **primo run CI verde** (verificabile nella tab Actions),
+  non da una frase (L-COL-002); il merge su `main` resta gated da quel verde.
+- **Caveat minuti**: repo privato → minuti macOS ×10 (~200/mese piano Free). Il
+  job `ios-app` è separato e disattivabile per risparmiare.
