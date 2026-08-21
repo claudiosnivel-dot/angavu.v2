@@ -20,6 +20,16 @@ deterministico** della toolchain Apple (`swift build` / `swift test`, SwiftLint,
 grafo dei moduli come oracolo di altitudine, e i tool degli `apple-skills`),
 **mai** una dichiarazione dell'LLM e **mai** un checkpoint Trueline.
 
+## Attivazione e trust
+
+I plugin `angavu-local` (trueline + apple-skills) si attivano da
+`.claude/settings.json` **appena la cartella è fidata**. Il trust vive nella
+config utente locale (`~/.claude.json`), non nel repo: sulla macchina locale è
+permanente dopo che accetti una volta il dialog di trust; in un ambiente
+remoto/web il container è effimero, quindi il trust può richiedere di essere
+riconcesso a ogni nuova sessione. Il lato repo è già versionato e permanente:
+nessuna installazione manuale dei plugin.
+
 ## Stato
 
 - Toolchain vendorizzata e documento di fattibilità completi (scope confermato:

@@ -39,6 +39,16 @@ sessione era già aperta:
 /plugin list
 ```
 
+> **Nota sul trust.** Il trust della cartella è una decisione di sicurezza
+> **lato client**, salvata nella config utente locale (`~/.claude.json`), **non**
+> nel repo: per design un repo non può auto-dichiararsi fidato. Sulla tua macchina
+> è **permanente** appena accetti una volta il dialog *"Do you trust the files in
+> this folder?"*. In un ambiente **remoto/web** il container è effimero: il trust
+> concesso può non sopravvivere a una nuova sessione (nuovo container) e va
+> riconcesso. Ciò che è già versionato e permanente è il lato repo
+> (`.claude/settings.json`): appena una macchina si fida della cartella, i plugin
+> si attivano da soli, senza installazione manuale.
+
 ## Stato
 
 Bootstrap toolchain completato. Prossimo passo: revisione del documento di
