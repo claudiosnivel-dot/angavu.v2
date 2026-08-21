@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-21 (BUILD safety_net — implementazione, oracolo Swift pending) |
-| **Sessione corrente** | build-3 (`safety_net`): T-050/T-051/T-052 implementati; `swift build`/`test` pending al confine Apple (no toolchain qui). `library_index` (build-2) resta `in_progress` |
+| **Ultimo aggiornamento** | 2026-08-21 (**CI Apple VERDE**: build+test+lint+app iOS) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #3 `success`, commit `4e6b4bd`): `foundation`, `library_index`, `safety_net` verificati. Prossima sessione → prossimo macrotask |
 
 ---
 
@@ -21,10 +21,10 @@
 
 | Macrotask | Stato | Checkpoint | Note |
 |---|---|---|---|
-| `foundation` | done | swift build/test verdi (build-1) | T-001…T-004 chiusi; lint SwiftLint dichiarato non coperto qui (§7) |
-| `library_index` | in_progress | oracolo Swift **pending** (confine Apple) | T-010…T-014 implementati; blueprint validator exit 0; `swift build`/`test` non eseguibili qui (no toolchain + PhotoKit/SwiftData Apple-only) |
+| `foundation` | done | **CI verde** (build+test+lint, run #3) | T-001…T-004 chiusi; lint SwiftLint ora **coperto** in CI (non più solo sandbox) |
+| `library_index` | done | **CI verde** (build+test+lint, run #3) | T-010…T-014; AC-010/011/012/013/014 verdi (SwiftData test incluso su runner macOS 14) |
 | `dashboard` | todo | — | Dipende da library_index; fornisce il caveat iCloud (T-021) consumato da safety_net T-052 |
-| `safety_net` | in_progress | oracolo Swift **pending** (confine Apple) | T-050/T-051/T-052 implementati (Domain puro + coordinator Data). T-052 anticipa il caveat iCloud (T-021, dashboard) con modello minimo. `swift build`/`test` non eseguibili qui |
+| `safety_net` | done | **CI verde** (build+test+lint, run #3) | T-050/T-051/T-052; gate anteprima + eliminazione batch verificati. T-052 anticipa il caveat iCloud (T-021, dashboard) con modello minimo |
 | `exact_duplicates` | todo | — | Dipende da library_index; elimina via safety_net |
 | `similar_photos` | todo | — | Dipende da library_index; elimina via safety_net |
 | `large_old_media` | todo | — | Dipende da library_index; elimina via safety_net |
@@ -95,8 +95,8 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | BUILD safety_net (T-050/T-051/T-052, gate anteprima + coordinator, test) |
-| Stato merge su `main` | non ancora (gated dal verde apple-skills; `swift build`/`test` + lint da girare su toolchain Apple per library_index + safety_net) |
+| Ultimo commit | `4e6b4bd` fix(lint) — CI verde (run #3) |
+| Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
 ## 4. Baseline & budget
@@ -158,17 +158,16 @@
 ## 6. Prossimi passi
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
-- **`library_index` + `safety_net` implementati**, entrambi `in_progress` finché
-  l'oracolo Swift non gira al confine Apple.
-- **Prossimo macrotask** (prossima sessione): candidati per il DAG (00-INDEX §2)
-  che dipendono da `library_index`: `dashboard` (numeri veri + caveat iCloud T-021,
-  che T-052 anticipa), `exact_duplicates`. Scelta all'apertura. `dashboard` è ora
-  preferibile per chiudere il debito su T-021/T-052.
+- **`foundation` + `library_index` + `safety_net` VERIFICATI**: oracolo Apple verde
+  in CI (run #3, `success`). Nessun pending residuo.
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
-  simulatore. È qui che l'oracolo Swift diventa verde/rosso — **senza possedere un
-  Mac**. Chiude `library_index`, `safety_net` e l'oracolo T-003 di `foundation`.
-  Il verde arriva dal **primo run CI verde** (verificabile nella tab Actions),
-  non da una frase (L-COL-002); il merge su `main` resta gated da quel verde.
+  simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
+  Mac**. Il verdetto è di un **comando** (L-COL-002), verificabile nella tab Actions.
+- **Prossimo macrotask** (prossima sessione): candidati per il DAG (00-INDEX §2)
+  che dipendono da `library_index`: `dashboard` (numeri veri + caveat iCloud T-021,
+  che T-052 anticipa — preferibile per chiudere quel debito), `exact_duplicates`.
+- **Merge su `main`**: il gate è soddisfatto (CI verde). Il merge resta una
+  decisione dell'utente; il branch è mergeabile quando vuoi.
 - **Caveat minuti**: repo privato → minuti macOS ×10 (~200/mese piano Free). Il
   job `ios-app` è separato e disattivabile per risparmiare.

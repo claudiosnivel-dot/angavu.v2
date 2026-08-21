@@ -64,5 +64,6 @@ TestFlight/App Store via App Store Connect API key (secrets), sempre headless.
 ## Stato
 
 Fonte di verità: [`blueprint/SESSION-STATE.md`](blueprint/SESSION-STATE.md).
-`foundation` chiuso (build-1); `library_index` (build-2) e `safety_net` (build-3)
-implementati e `in_progress` fino al verde della CI.
+`foundation`, `library_index` e `safety_net` **verificati** dall'oracolo Apple in
+CI (build + test + lint + build dell'app iOS, tutto verde). Prossimo macrotask:
+`dashboard` o `exact_duplicates`.
