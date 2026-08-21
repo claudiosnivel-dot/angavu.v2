@@ -1,0 +1,10 @@
+// Fonte canonica del deployment target dell'app Xcode (AC-001-2).
+// Deve restare allineata a `platforms: [.iOS(.v17)]` in Package.swift.
+IPHONEOS_DEPLOYMENT_TARGET = 17.0
+
+SWIFT_VERSION = 5.9
+TARGETED_DEVICE_FAMILY = 1,2
+
+// Gate di build: i warning sono errori (T-003). Sostituzione dell'oracolo knip.
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+GCC_TREAT_WARNINGS_AS_ERRORS = YES

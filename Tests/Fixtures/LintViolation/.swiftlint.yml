@@ -1,0 +1,9 @@
+# Config della fixture negativa di lint (AC-003-2). Attiva le regole dead-code e
+# no-force-unwrap che lo scaffold rispetta ma questa fixture viola di proposito.
+opt_in_rules:
+  - unused_declaration
+  - force_unwrapping
+analyzer_rules:
+  - unused_declaration
+force_unwrapping:
+  severity: error

@@ -1,0 +1,12 @@
+# SwiftPM
+.build/
+Package.resolved
+
+# Xcode / generati
+*.xcodeproj
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# macOS
+.DS_Store

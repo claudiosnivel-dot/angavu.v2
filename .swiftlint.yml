@@ -1,0 +1,47 @@
+# SwiftLint — oracolo di stile e dead-code (T-003, sostituzione di semgrep/knip).
+# Verdetto deterministico: `swiftlint lint --strict` exit 0 sullo scaffold.
+
+included:
+  - Sources
+  - App
+  - Tests
+
+excluded:
+  - .build
+  - Tests/Fixtures        # fixtures che violano di proposito (oracoli negativi)
+  - plugins               # toolchain vendorizzata, fuori dal nostro sorgente
+
+# Regole opt-in: dead-code (analyze) e sicurezza (no force-unwrap/force-try).
+opt_in_rules:
+  - unused_declaration
+  - unused_import
+  - force_unwrapping
+  - empty_count
+  - first_where
+  - contains_over_first_not_nil
+  - redundant_nil_coalescing
+
+# `unused_declaration` è una regola analyzer: gira con
+#   swiftlint analyze --strict --compiler-log-path <log>
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
+# Il force-unwrapping è vietato ovunque; i path critici Domain/Data non devono
+# forzare mai. La regola vale sull'intero `included`.
+force_unwrapping:
+  severity: error
+
+force_cast:
+  severity: error
+force_try:
+  severity: error
+
+line_length:
+  warning: 120
+  error: 160
+  ignores_comments: true
+
+identifier_name:
+  min_length: 2
+  excluded: [id, x, y, to]

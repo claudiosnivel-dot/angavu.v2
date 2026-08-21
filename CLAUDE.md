@@ -32,5 +32,11 @@ grafo dei moduli come oracolo di altitudine, e i tool degli `apple-skills`),
   verde (`validate_blueprint.mjs blueprint` → exit 0) e semantico applicato.
 - Decision ledger **interamente confermato** (`DI-001…008` tutti `✅`; i default
   `DI-002/003/004/008` confermati dall'utente): nessuna decisione pendente.
-- Prossimo passo: **BUILD** con la suite **apple-skills** sul macrotask
-  `foundation` (scaffold multi-modulo), rispettando il DAG.
+- **BUILD `foundation` completato**: `Package.swift` a 3 moduli (AngavuDomain puro
+  / AngavuData / AngavuFeatures) + app SwiftUI `App/` iOS 17.0, oracolo di
+  altitudine (import `domain→data` rompe la build), gate `-warnings-as-errors`,
+  motore d'analisi cancellabile nel Domain. `swift build`/`swift test` verdi
+  (11 pass, 2 skip). `swiftlint` dichiarato non coperto nel sandbox (L-COL-006),
+  da girare al confine Apple con `make lint`.
+- Prossimo passo: **BUILD** del macrotask `library_index` (PhotoKit + indice
+  SwiftData), rispettando il DAG.

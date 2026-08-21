@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Baseline privacy di Angavu iOS (00-INDEX §3): nessun tracking, nessun dato
+  raccolto, nessuna telemetria. In `foundation` non si accede ancora a foto/
+  contatti/calendario: le required-reason API e le NS…UsageDescription verranno
+  aggiunte, per nome, nei macrotask che le usano (library_index, safety_net,
+  extra_photo_domains). Dichiarazione onesta (L-COL-006), non un placeholder muto.
+-->
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

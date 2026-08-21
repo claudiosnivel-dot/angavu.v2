@@ -1,0 +1,35 @@
+# Spec XcodeGen dell'app Angavu iOS (progetto Xcode text-based, verificabile).
+# Genera Angavu.xcodeproj che referenzia il package SwiftPM locale.
+#   xcodegen generate --spec App/project.yml
+name: Angavu
+options:
+  bundleIdPrefix: com.angavu
+  deploymentTarget:
+    iOS: "17.0"
+configFiles:
+  Debug: ../Config/Shared.xcconfig
+  Release: ../Config/Shared.xcconfig
+packages:
+  Angavu:
+    path: ..
+targets:
+  Angavu:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: .
+        excludes:
+          - project.yml
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.angavu.app
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - package: Angavu
+        product: AngavuFeatures
+      - package: Angavu
+        product: AngavuDomain
+      - package: Angavu
+        product: AngavuData
