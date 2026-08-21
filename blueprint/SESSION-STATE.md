@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-21 (**CI Apple VERDE**: build+test+lint+app iOS) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #3 `success`): `foundation`, `library_index`, `safety_net` verificati. **Prossima sessione → BUILD `dashboard`** |
+| **Ultimo aggiornamento** | 2026-08-21 (**BUILD `dashboard`**: implementazione + target-test committati; oracolo Swift PENDING al verde CI) |
+| **Sessione corrente** | BUILD `dashboard` completato (T-020/T-021/T-022, Domain puro + 3 target-test). Oracolo strutturale VERDE (`validate_blueprint` exit 0); `swift build`/`test`/`lint` **PENDING**: girano in CI al push. `foundation`/`library_index`/`safety_net` restano verdi (run #3). **Prossimo → verifica CI di `dashboard`, poi `exact_duplicates`** |
 
 ---
 
@@ -23,7 +23,7 @@
 |---|---|---|---|
 | `foundation` | done | **CI verde** (build+test+lint, run #3) | T-001…T-004 chiusi; lint SwiftLint ora **coperto** in CI (non più solo sandbox) |
 | `library_index` | done | **CI verde** (build+test+lint, run #3) | T-010…T-014; AC-010/011/012/013/014 verdi (SwiftData test incluso su runner macOS 14) |
-| `dashboard` | todo | — | Dipende da library_index; fornisce il caveat iCloud (T-021) consumato da safety_net T-052 |
+| `dashboard` | in_progress | **PENDING CI** (build+test+lint) | T-020/T-021/T-022 implementati (Domain puro) + 3 target-test (AC-020-1/2, AC-021-1/2, AC-022-1/2). T-021 riusa `DeletedAssetSize` (no duplicazione). Verde Swift al confine CI |
 | `safety_net` | done | **CI verde** (build+test+lint, run #3) | T-050/T-051/T-052; gate anteprima + eliminazione batch verificati. T-052 anticipa il caveat iCloud (T-021, dashboard) con modello minimo |
 | `exact_duplicates` | todo | — | Dipende da library_index; elimina via safety_net |
 | `similar_photos` | todo | — | Dipende da library_index; elimina via safety_net |
@@ -35,7 +35,32 @@
 
 ## 2. Macrotask corrente
 
-- **In corso (build-3)**: `safety_net` — implementazione **completa** dei 3 task
+- **In corso (build-4)**: `dashboard` — implementazione **completa** dei 3 task
+  atomici (T-020/T-021/T-022), tutto nel **Domain puro** (`Sources/AngavuDomain/Dashboard.swift`):
+  - **T-020 — aggregazione numeri veri**: `DashboardCategory` (photo/video/screenshot,
+    **disgiunte**: uno screenshot non è anche foto), `SizedAsset` (accoppia
+    `LibraryAsset` + `ByteSize` senza toccare l'indice Data → altitudine
+    preservata), `CategoryBytes` con **quota exact separata da estimated** (mai
+    fuse in un "esatto"), `DashboardAggregator.aggregate`.
+  - **T-021 — caveat iCloud**: `ReclaimableSpace` (`reclaimableLibrarySpace` vs
+    `reclaimableDeviceSpaceNow`, caveat derivato quando device < libreria) +
+    `ReclaimableSpaceCalculator` guidato da `ICloudOptimizeStorage`. **Riusa
+    `DeletedAssetSize`** anticipato da T-052 (debito noto saldato, no duplicazione).
+  - **T-022 — banner limited**: `DashboardBanner` + `DashboardBannerPolicy` che
+    riusa `PhotoAccessPolicy` (unica fonte di `isPartialCount`).
+  - **Test**: `DashboardAggregateTests` (AC-020-1/2), `ICloudCaveatTests`
+    (AC-021-1/2), `LimitedAccessBannerTests` (AC-022-1/2) — tutti Domain puro,
+    girano su Linux con toolchain.
+  - **Nota debito saldato**: T-052 aveva anticipato il caveat iCloud con
+    `DeletedAssetSize`; `dashboard` lo **condivide** invece di duplicarlo.
+- **Verifica — framing onesto (L-COL-006)**:
+  - **VERDE (comando reale)**: `validate_blueprint.mjs blueprint` → exit 0.
+  - **PENDING al confine Apple = CI**: `swift build -warnings-as-errors`,
+    `swift test`, `swiftlint`. Toolchain Swift **assente** in questa sessione
+    (`swift: command not found`); il codice è Domain puro (girerebbe su Linux).
+    Nessun verde dichiarato a memoria: l'oracolo emette il verdetto in CI al push.
+
+- **Storico build-3**: `safety_net` — implementazione **completa** dei 3 task
   atomici (T-050/T-051/T-052):
   - **Domain (puro)**: `DeletionFlow` — macchina a stati `idle → previewing →
     confirmed → deleting` con **gate anteprima obbligatoria** (nessuna transizione
@@ -106,6 +131,19 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
+- **BUILD `dashboard` — implementazione completa** (build-4): T-020 (aggregazione
+  per categoria, exact/estimated separati), T-021 (caveat iCloud, riusa
+  `DeletedAssetSize`), T-022 (banner limited, riusa `PhotoAccessPolicy`). 3
+  target-test nuovi (AC-020-1/2, AC-021-1/2, AC-022-1/2), tutti Domain puro.
+- **VERDE (comando)**: `validate_blueprint.mjs blueprint` → exit 0.
+- **Oracolo Swift PENDING (confine CI)**: `swift build`/`test`/`lint` girano in
+  GitHub Actions al push; toolchain assente in sessione. `dashboard` resta
+  `in_progress` finché il run CI non è `success`. Nessun verde a memoria (L-COL-006).
+- **Debito saldato**: T-052 anticipava il caveat iCloud → `dashboard` **condivide**
+  `DeletedAssetSize`, non lo duplica.
+
+### Storico build-3 (safety_net)
+
 - **BUILD `safety_net` — implementazione completa** (build-3): T-050 (gate
   anteprima `DeletionFlow`), T-051 (`AssetDeleting` + `BatchDeletionCoordinator` +
   `SystemAssetDeleter` guardato), T-052 (`DeletionSummary` onesto con caveat iCloud
@@ -164,10 +202,9 @@
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
   Mac**. Il verdetto è di un **comando** (L-COL-002), verificabile nella tab Actions.
-- **Prossimo macrotask: `dashboard`** (scelto dall'utente). Numeri veri per
-  categoria dalle size reali + caveat iCloud (T-021); riusare/condividere
-  `DeletedAssetSize` che T-052 ha anticipato, **non** duplicarlo. Dipende da
-  `library_index` (verde).
+- **`dashboard` implementato** (build-4): in attesa del verde CI. Alla conferma
+  `success` marcarlo `done`. Prossimo macrotask disponibile: `exact_duplicates`
+  (dipende da `library_index` verde; elimina via `safety_net`).
 - **Merge su `main`**: il gate è soddisfatto (CI verde). Il merge resta una
   decisione dell'utente; il branch è mergeabile quando vuoi.
 - **Caveat minuti**: repo privato → minuti macOS ×10 (~200/mese piano Free). Il
