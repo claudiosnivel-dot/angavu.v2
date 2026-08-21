@@ -15,6 +15,14 @@ on:
     branches:
       - main
       - "claude/**"
+    # I commit di sola documentazione NON innescano la CI (risparmio minuti macOS).
+    # Se un push tocca anche codice/config, gira comunque (paths-ignore salta solo
+    # quando TUTTI i file cambiati combaciano).
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "blueprint/**"
+      - "LICENSE"
   pull_request:
   workflow_dispatch:
 
