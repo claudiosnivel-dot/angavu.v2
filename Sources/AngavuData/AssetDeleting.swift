@@ -58,7 +58,7 @@ public struct SystemAssetDeleter: AssetDeleting {
 
     public func delete(ids: [String]) async -> BatchDeletionResult {
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
-        guard fetch.count > 0 else { return .success } // niente da eliminare: no-op onesto
+        guard fetch.firstObject != nil else { return .success } // niente da eliminare: no-op onesto
 
         do {
             try await PHPhotoLibrary.shared().performChanges {

@@ -11,10 +11,10 @@ excluded:
   - Tests/Fixtures        # fixtures che violano di proposito (oracoli negativi)
   - plugins               # toolchain vendorizzata, fuori dal nostro sorgente
 
-# Regole opt-in: dead-code (analyze) e sicurezza (no force-unwrap/force-try).
+# Regole opt-in: sicurezza (no force-unwrap/force-try) e pulizia.
+# NB: unused_declaration/unused_import sono regole ANALYZER: stanno solo in
+# analyzer_rules (sotto), non qui, altrimenti swiftlint avvisa di doppia lista.
 opt_in_rules:
-  - unused_declaration
-  - unused_import
   - force_unwrapping
   - empty_count
   - first_where

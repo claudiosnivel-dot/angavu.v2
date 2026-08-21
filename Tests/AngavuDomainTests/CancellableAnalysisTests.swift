@@ -50,8 +50,8 @@ final class CancellableAnalysisTests: XCTestCase {
 
         // Monotòno non decrescente.
         XCTAssertEqual(seen, seen.sorted())
-        for (a, b) in zip(seen, seen.dropFirst()) {
-            XCTAssertLessThanOrEqual(a, b)
+        for (prev, next) in zip(seen, seen.dropFirst()) {
+            XCTAssertLessThanOrEqual(prev, next)
         }
 
         // Completed con accumulatore pieno e progresso finale == totale.
