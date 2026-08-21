@@ -201,5 +201,7 @@ App (SwiftUI)               UI, navigazione, onboarding-manifesto
    `target_tests`, e la mappa delle degradazioni degli oracoli (Kotlin/Android
    non era coperto; **Swift/iOS nemmeno** — si dichiareranno le sostituzioni
    deterministiche della toolchain Apple: `swift build`/`test`, SwiftLint,
-   grafo dei moduli come oracolo di altitudine).
+   grafo dei moduli come oracolo di altitudine). **Policy di repo** (`CLAUDE.md`):
+   Trueline è usato **solo per BOOTSTRAP**; **tutta la parte di check e verifica**
+   (review, testing, security, release gate) è affidata alla suite **apple-skills**.
 3. Scaffold del progetto Xcode/SwiftUI e primo macrotask (foundation).
