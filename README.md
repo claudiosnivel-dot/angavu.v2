@@ -23,9 +23,9 @@ registrato e abilitato per chiunque apra il repo via `.claude/settings.json`.
 | Percorso | Ruolo |
 |---|---|
 | `plugins/trueline/` | Plugin Trueline (MIT). In **questo** repo usato **solo ed esclusivamente in modalità BOOTSTRAP** per generare il blueprint tecnico dell'app iOS — niente BUILD/REMEDIATE, niente checkpoint/oracoli di Trueline come gate di verifica. |
-| `plugins/apple-skills/` | 164 skill Apple su 23 categorie (iOS, SwiftUI, SwiftData, **Core ML/Vision**, testing, security, performance, App Store), vendorizzato da [rshankras/claude-code-apple-skills](https://github.com/rshankras/claude-code-apple-skills) (MIT). In questo repo possiede **tutta la parte di check e verifica** (review, testing, security, release gate). |
+| `plugins/apple-skills/` | 164 skill Apple su 23 categorie (iOS, SwiftUI, SwiftData, **Core ML/Vision**, testing, security, performance, App Store), vendorizzato da [rshankras/claude-code-apple-skills](https://github.com/rshankras/claude-code-apple-skills) (MIT). In questo repo possiede **tutta la build e tutta la verifica** (implementazione, review, testing, security, release gate). |
 
-> **Policy toolchain** (vincolante, vedi [`CLAUDE.md`](CLAUDE.md)): Trueline disegna il piano (**solo BOOTSTRAP**); la suite **apple-skills** possiede ogni controllo/review/verifica. Il verdetto resta di un oracolo deterministico della toolchain Apple, mai dell'LLM.
+> **Policy toolchain** (vincolante, vedi [`CLAUDE.md`](CLAUDE.md)): Trueline disegna **solo il piano** (BOOTSTRAP); la suite **apple-skills** possiede **tutto il resto** — build e ogni controllo/review/verifica. Il verdetto resta di un oracolo deterministico della toolchain Apple, mai dell'LLM.
 | `.claude/skills/caveman/` | Skill di stile output ultra-compresso per risparmio token (MIT). Attivabile con `/caveman lite\|full\|ultra\|off`. Comprime lo stile, mai la sostanza. |
 
 ### Attivazione

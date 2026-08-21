@@ -10,15 +10,15 @@ numeri veri, rete di sicurezza, Pro a pagamento unico. Vedi
 | Strumento | Uso consentito | Uso **vietato** |
 |---|---|---|
 | **Trueline** (`plugins/trueline/`) | **Solo BOOTSTRAP** — generare/mantenere il blueprint tecnico (`blueprint/`) | Niente BUILD, niente REMEDIATE, niente checkpoint/oracoli di Trueline come gate di verifica |
-| **apple-skills** (`plugins/apple-skills/`) | **Tutta la parte di check e verifica**: code review iOS/Swift, UI/HIG review, testing/TDD, security (privacy manifest / required-reason API), performance, release-review e gate di rilascio | — |
+| **apple-skills** (`plugins/apple-skills/`) | **Tutta la build e tutta la verifica**: implementazione (generatori, pattern iOS/SwiftUI/SwiftData/Core ML-Vision/AVFoundation), code review iOS/Swift, UI/HIG review, testing/TDD, security (privacy manifest / required-reason API), performance, release-review e gate di rilascio | — |
 | **caveman** (`.claude/skills/caveman/`) | Stile output compresso per risparmio token (`/caveman lite\|full\|ultra\|off`) | Comprime lo stile, mai la sostanza |
 
-**In sintesi:** Trueline disegna il piano (BOOTSTRAP); la suite **apple-skills**
-possiede ogni controllo, review e verifica. Il verdetto di un check resta di un
-**oracolo deterministico** della toolchain Apple (`swift build` / `swift test`,
-SwiftLint, grafo dei moduli come oracolo di altitudine, e i tool degli
-`apple-skills`), **mai** una dichiarazione dell'LLM e **mai** un checkpoint
-Trueline.
+**In sintesi:** Trueline disegna **solo il piano** (BOOTSTRAP); la suite
+**apple-skills** possiede **tutto il resto** — la build (implementazione) e ogni
+controllo/review/verifica. Il verdetto di un check resta di un **oracolo
+deterministico** della toolchain Apple (`swift build` / `swift test`, SwiftLint,
+grafo dei moduli come oracolo di altitudine, e i tool degli `apple-skills`),
+**mai** una dichiarazione dell'LLM e **mai** un checkpoint Trueline.
 
 ## Stato
 
