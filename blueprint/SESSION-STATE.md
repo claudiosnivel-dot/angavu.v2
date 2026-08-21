@@ -9,7 +9,7 @@
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
 | **Ultimo aggiornamento** | 2026-08-21 (BUILD library_index — implementazione, oracolo Swift pending) |
-| **Sessione corrente** | build-2 (`library_index`): codice completo, `swift build`/`test` da girare al confine Apple |
+| **Sessione corrente** | build-2 (`library_index`) **chiusa**: codice completo, `swift build`/`test` pending al confine Apple; prossima sessione → prossimo macrotask |
 
 ---
 
@@ -115,8 +115,13 @@
 ## 6. Prossimi passi
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
-- **Prossimo macrotask**: `library_index` (PhotoKit: permessi, enumerazione
-  `PHAsset`, indice SwiftData incrementale, byte reali). Richiede toolchain Apple
-  per gli oracoli (framework di device).
-- Al primo confine su macOS/CI: girare `make lint` (SwiftLint + analyze) per
-  chiudere l'oracolo T-003 oggi dichiarato non coperto, poi valutare il merge.
+- **`library_index` implementato** (build-2), `in_progress` finché l'oracolo Swift
+  non gira al confine Apple.
+- **Prossimo macrotask** (prossima sessione): un nodo che dipende da
+  `library_index` — candidati per il DAG (00-INDEX §2): `safety_net` (rete di
+  sicurezza, intoccabile e propedeutica a ogni eliminazione), `exact_duplicates`,
+  `dashboard`. Scelta all'apertura.
+- **Confine Apple (obbligatorio prima del merge su `main`)**: girare
+  `swift build -warnings-as-errors` + `swift test` (chiude `library_index`) e
+  `make lint` (chiude l'oracolo T-003 di `foundation`, oggi non coperto). Solo
+  allora il verde è reale e il merge valutabile.
