@@ -113,8 +113,8 @@ nell'Android).
 4. **Rete di sicurezza**: anteprima obbligatoria + eliminazione verso "Eliminati di recente"
 5. **Video grandi / vecchi** + **screenshot / screen recording** in blocco
 6. **Foto sfocate** (nitidezza / aesthetics score)
-7. **Compressione video** HEVC on-device *(primo taglio se slitta — è la feature più a rischio tecnico)*
-8. **Contatti duplicati** e **calendari-spam** *(dominio extra-foto, secondo taglio)*
+7. **Compressione video** HEVC on-device — **in v1** (`DI-006`); la feature più a rischio tecnico, quindi primo candidato al de-scope solo sotto slittamento estremo
+8. **Contatti duplicati** e **calendari-spam** — **in v1** (`DI-007`, dominio extra-foto)
 9. **Onboarding-manifesto** + schermata "cosa NON facciamo" + report onesto
 
 **Fuori dalla v1 (non-goal, §7):** Pro/IAP, iCloud sync, vault cifrato, widget,
@@ -128,7 +128,7 @@ Shortcuts/App Intents, macOS/iPadOS dedicati.
 | **Byte reali per asset** | Il size esatto non è esposto in modo pulito da PhotoKit | Validare la strada `PHAssetResource` in BOOTSTRAP; se degradata, dichiarare stima e marcarla, mai spacciare stima per esatto |
 | **Accesso limitato alla libreria** (iOS 14+) | L'utente può concedere solo alcune foto | Gestire `limited` con grazia: banner "abilita accesso completo per un conteggio reale"; mai un numero parziale spacciato per totale |
 | **Librerie enormi** (20k+ asset) | Hashing + Vision sono costosi | Riuso delle lezioni Android: analisi a blocchi, fuori dal main, progress onesto, **stop cooperativo**, dieta low-RAM, esito `Failed` visibile mai eterno "0%" |
-| **Compressione video** | Ricodifica lunga, qualità/spazio da bilanciare, rischio perdita metadati | Feature isolata e opt-in; `AVAssetExportSession` con preset HEVC; conservare data/luogo; **primo taglio** se il piano slitta |
+| **Compressione video** | Ricodifica lunga, qualità/spazio da bilanciare, rischio perdita metadati | In v1 (`DI-006`), ma isolata e opt-in; `AVAssetExportSession` con preset HEVC; conservare data/luogo; **primo candidato al de-scope** solo sotto slittamento estremo |
 | **Review App Store (categoria sorvegliata)** | Guideline 2.3.x: niente claim ingannevoli, niente scare tactics | L'onestà è nativa: nessun claim falso, permessi minimi, `NSPhotoLibraryUsageDescription` sincera. Rischio basso proprio grazie al manifesto |
 | **Eliminazione** | Ogni delete apre un alert di sistema (non silenziabile) | È coerente con la rete di sicurezza: un solo alert copre un batch; l'anteprima nostra precede l'alert |
 
@@ -152,7 +152,7 @@ Shortcuts/App Intents, macOS/iPadOS dedicati.
 | Privacy | Nessun dato lascia il device; **PrivacyInfo.xcprivacy** con required-reason API dichiarate; nessun tracking |
 | Dimensione app | Snella: Vision è di sistema, **nessun modello Core ML bundolato** → app piccola, coerente con l'ethos "<15 MB" dell'Android |
 | Sicurezza | Nessun segreto nel sorgente; keystore/credenziali fuori dal repo |
-| Tempo | ~3 h/settimana. Scope rigido: rete di sicurezza e cuore foto intoccabili; compressione video primo taglio |
+| Tempo | ~3 h/settimana. Scope rigido: rete di sicurezza e cuore foto intoccabili; se il piano slitta, il de-scope parte dalle leve più a rischio (compressione video) |
 | Budget | 99 $/anno Apple Developer Program (ricorrente, **unico costo nuovo** vs Android). Nessun costo di runtime |
 | App Store policy | Categoria sorvegliata: niente claim su boost/velocità/virus, permessi minimi, scheda onesta |
 
@@ -167,9 +167,9 @@ Shortcuts/App Intents, macOS/iPadOS dedicati.
 | `DI-002` | v1 **tutto-free**, Pro (pagamento unico) rimandato — come `D-002` Android | 🟡 proposto |
 | `DI-003` | iOS minimo **17.0** | 🟡 proposto |
 | `DI-004` | Persistenza indice: **SwiftData** (vs Core Data) | 🟡 proposto |
-| `DI-005` | Nome/brand su App Store: riuso "Angavu" o variante ("Angavu Photos") | 🔴 aperto |
-| `DI-006` | Scope v1: includere compressione video, o rimandarla a v1.1? | 🔴 aperto |
-| `DI-007` | Includere il dominio extra-foto (contatti/calendario) in v1 o v2? | 🔴 aperto |
+| `DI-005` | Nome/brand su App Store: **Angavu** | ✅ confermato dall'utente |
+| `DI-006` | **Compressione video in v1** (feature più a rischio tecnico: primo candidato al de-scope solo sotto slittamento estremo) | ✅ confermato dall'utente |
+| `DI-007` | **Dominio extra-foto (contatti + calendario) in v1** | ✅ confermato dall'utente |
 | `DI-008` | Mercati di lancio: Italia soft-launch → EN → ES/PT/DE (come Android)? | 🟡 proposto |
 
 ## 10. Architettura proposta (bozza)
@@ -193,9 +193,10 @@ App (SwiftUI)               UI, navigazione, onboarding-manifesto
 
 ## 11. Prossimi passi
 
-1. **Revisione** di questo documento e conferma delle decisioni aperte (§9), in
-   particolare `DI-005`, `DI-006`, `DI-007`.
-2. **Trueline BOOTSTRAP** su questo documento → blueprint tecnico (`blueprint/`):
+1. Decisioni di scope chiuse (`DI-005` Angavu, `DI-006` compressione video in v1,
+   `DI-007` extra-foto in v1). Restano da confermare solo le proposte `DI-002/003/004/008`,
+   che il BOOTSTRAP può assumere come default e registrare.
+2. **Trueline BOOTSTRAP** (prossima sessione) su questo documento → blueprint tecnico (`blueprint/`):
    macrotask, task atomici con `definition_of_done` / `acceptance_criteria` /
    `target_tests`, e la mappa delle degradazioni degli oracoli (Kotlin/Android
    non era coperto; **Swift/iOS nemmeno** — si dichiareranno le sostituzioni
