@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-21 (BUILD foundation) |
-| **Sessione corrente** | build-1 |
+| **Ultimo aggiornamento** | 2026-08-21 (chiusura sessione — consolidamento post-foundation) |
+| **Sessione corrente** | build-1 **chiusa**; prossima sessione → BUILD `library_index` |
 
 ---
 
@@ -73,6 +73,12 @@
 - **Non coperto qui**: `swiftlint` non installabile nel sandbox (proxy GitHub
   scoped). Dichiarato apertamente (L-COL-006); config + test pronti per il confine
   Apple. Nessun verde finto.
+- **Copertura della sessione di chiusura**: nessun nuovo lavoro; solo
+  consolidamento. La toolchain Swift **non è disponibile in questo ambiente di
+  chiusura**, quindi gli oracoli `swift build`/`swift test` **non sono stati
+  ri-eseguiti ora**: vale l'esito registrato a **build-1** (verde, legato ai
+  comandi reali sopra). Ri-verifica al prossimo BUILD / al confine Apple
+  (`swift build`/`test` + `make lint`). Nessun verde ridichiarato a memoria (L-COL-006).
 - Nota toolchain: build/test girano su Swift Linux perché i moduli di
   `foundation` sono piattaforma-puri; PhotoKit/Vision/AVFoundation entrano dai
   macrotask successivi e richiederanno la toolchain Apple.
