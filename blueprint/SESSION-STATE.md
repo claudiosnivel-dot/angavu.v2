@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-21 (**BUILD `dashboard`**: implementazione + target-test committati; oracolo Swift PENDING al verde CI) |
-| **Sessione corrente** | BUILD `dashboard` completato (T-020/T-021/T-022, Domain puro + 3 target-test). Oracolo strutturale VERDE (`validate_blueprint` exit 0); `swift build`/`test`/`lint` **PENDING**: girano in CI al push. `foundation`/`library_index`/`safety_net` restano verdi (run #3). **Prossimo → verifica CI di `dashboard`, poi `exact_duplicates`** |
+| **Ultimo aggiornamento** | 2026-08-21 (**CI Apple VERDE** run #6 `success`: `dashboard` verificato) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #6 `success`, commit `7969aaf`): `dashboard` verificato (build+test+lint+app iOS). `foundation`/`library_index`/`safety_net` restano verdi. **Prossimo → BUILD `exact_duplicates`** |
 
 ---
 
@@ -23,7 +23,7 @@
 |---|---|---|---|
 | `foundation` | done | **CI verde** (build+test+lint, run #3) | T-001…T-004 chiusi; lint SwiftLint ora **coperto** in CI (non più solo sandbox) |
 | `library_index` | done | **CI verde** (build+test+lint, run #3) | T-010…T-014; AC-010/011/012/013/014 verdi (SwiftData test incluso su runner macOS 14) |
-| `dashboard` | in_progress | **PENDING CI** (build+test+lint) | T-020/T-021/T-022 implementati (Domain puro) + 3 target-test (AC-020-1/2, AC-021-1/2, AC-022-1/2). T-021 riusa `DeletedAssetSize` (no duplicazione). Verde Swift al confine CI |
+| `dashboard` | done | **CI verde** (build+test+lint, run #6) | T-020/T-021/T-022 (Domain puro) + 3 target-test (AC-020-1/2, AC-021-1/2, AC-022-1/2). T-021 riusa `DeletedAssetSize` (no duplicazione) |
 | `safety_net` | done | **CI verde** (build+test+lint, run #3) | T-050/T-051/T-052; gate anteprima + eliminazione batch verificati. T-052 anticipa il caveat iCloud (T-021, dashboard) con modello minimo |
 | `exact_duplicates` | todo | — | Dipende da library_index; elimina via safety_net |
 | `similar_photos` | todo | — | Dipende da library_index; elimina via safety_net |
@@ -53,12 +53,12 @@
     girano su Linux con toolchain.
   - **Nota debito saldato**: T-052 aveva anticipato il caveat iCloud con
     `DeletedAssetSize`; `dashboard` lo **condivide** invece di duplicarlo.
-- **Verifica — framing onesto (L-COL-006)**:
-  - **VERDE (comando reale)**: `validate_blueprint.mjs blueprint` → exit 0.
-  - **PENDING al confine Apple = CI**: `swift build -warnings-as-errors`,
-    `swift test`, `swiftlint`. Toolchain Swift **assente** in questa sessione
-    (`swift: command not found`); il codice è Domain puro (girerebbe su Linux).
-    Nessun verde dichiarato a memoria: l'oracolo emette il verdetto in CI al push.
+- **Verifica — VERDE (comando reale, L-COL-006)**:
+  - `validate_blueprint.mjs blueprint` → exit 0 (oracolo strutturale).
+  - **CI Apple run #6 `success`** (commit `7969aaf`, runner `macos-15`): job
+    `swift build/test/lint` verde (Build warnings-as-errors, Test target_tests +
+    regressione, SwiftLint) + job `build app (iOS Simulator)` verde. Il verdetto
+    è di un **comando** (L-COL-002), verificabile nella tab Actions.
 
 - **Storico build-3**: `safety_net` — implementazione **completa** dei 3 task
   atomici (T-050/T-051/T-052):
@@ -120,7 +120,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `4e6b4bd` fix(lint) — CI verde (run #3) |
+| Ultimo commit | `7969aaf` feat(dashboard) — CI verde (run #6) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -135,10 +135,8 @@
   per categoria, exact/estimated separati), T-021 (caveat iCloud, riusa
   `DeletedAssetSize`), T-022 (banner limited, riusa `PhotoAccessPolicy`). 3
   target-test nuovi (AC-020-1/2, AC-021-1/2, AC-022-1/2), tutti Domain puro.
-- **VERDE (comando)**: `validate_blueprint.mjs blueprint` → exit 0.
-- **Oracolo Swift PENDING (confine CI)**: `swift build`/`test`/`lint` girano in
-  GitHub Actions al push; toolchain assente in sessione. `dashboard` resta
-  `in_progress` finché il run CI non è `success`. Nessun verde a memoria (L-COL-006).
+- **VERDE (comando)**: `validate_blueprint.mjs blueprint` → exit 0; **CI Apple
+  run #6 `success`** (build+test+lint+app iOS). `dashboard` → `done`.
 - **Debito saldato**: T-052 anticipava il caveat iCloud → `dashboard` **condivide**
   `DeletedAssetSize`, non lo duplica.
 
@@ -196,8 +194,8 @@
 ## 6. Prossimi passi
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
-- **`foundation` + `library_index` + `safety_net` VERIFICATI**: oracolo Apple verde
-  in CI (run #3, `success`). Nessun pending residuo.
+- **`foundation` + `library_index` + `safety_net` + `dashboard` VERIFICATI**:
+  oracolo Apple verde in CI (`dashboard` run #6, `success`). Nessun pending residuo.
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
