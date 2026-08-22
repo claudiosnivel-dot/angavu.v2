@@ -3,10 +3,14 @@
 <plist version="1.0">
 <!--
   Baseline privacy di Angavu iOS (00-INDEX §3): nessun tracking, nessun dato
-  raccolto, nessuna telemetria. In `foundation` non si accede ancora a foto/
-  contatti/calendario: le required-reason API e le NS…UsageDescription verranno
-  aggiunte, per nome, nei macrotask che le usano (library_index, safety_net,
-  extra_photo_domains). Dichiarazione onesta (L-COL-006), non un placeholder muto.
+  raccolto, nessuna telemetria. Accesso a foto (library_index), contatti e
+  calendario (extra_photo_domains) coperto dalle NS…UsageDescription in Info.plist
+  (NSPhotoLibraryUsageDescription, NSContactsUsageDescription,
+  NSCalendarsFullAccessUsageDescription). Framing onesto (L-COL-006): l'accesso a
+  Contacts/EventKit è permission-gated (NSUsageDescription), NON una required-reason
+  API — le categorie NSPrivacyAccessedAPITypes (timestamp file, boot time, spazio
+  disco, tastiera attiva, user defaults) non sono attivate da questi framework, quindi
+  l'array resta vuoto per verità, non per dimenticanza.
 -->
 <dict>
 	<key>NSPrivacyTracking</key>

@@ -18,6 +18,10 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Angavu analizza la tua libreria foto e video sul dispositivo per trovare duplicati, foto simili e file grandi. Nessun dato lascia il telefono.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Angavu cerca contatti duplicati sul dispositivo e ti propone di unirli. Nessun contatto viene unito senza la tua conferma e nessun dato lascia il telefono.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Angavu individua calendari sottoscritti indesiderati (spam) e ti propone di rimuoverli. Nessuna rimozione avviene senza la tua conferma e nessun dato lascia il telefono.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
