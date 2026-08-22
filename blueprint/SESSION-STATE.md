@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #10 `success`: `blurry_photos` verificato) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #10 `success`, commit `38df675`): `blurry_photos` verificato (build+test+lint+app iOS, entrambi i job). `foundation`/`library_index`/`safety_net`/`dashboard`/`exact_duplicates`/`similar_photos`/`large_old_media` restano verdi. **Prossimo → BUILD `video_compression`** (`DI-006`, primo candidato al de-scope) o `extra_photo_domains` (`DI-007`, indipendente dal cuore-foto) o `ui_shell` (trasversale) |
+| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #11 `success`: `video_compression` verificato) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #11 `success`, commit `7a6cd48`): `video_compression` verificato (build+test+lint+app iOS, entrambi i job, primo colpo). 9 macrotask su 11 chiusi. **Prossimo → BUILD `extra_photo_domains`** (`DI-007`), poi `ui_shell` per ultimo (design su feature stabili) |
 
 ---
 
@@ -29,7 +29,7 @@
 | `similar_photos` | done | **CI verde** (build+test+lint+app iOS, run #8) | T-040/T-041/T-042/T-043; feature print Vision dietro port, clustering greedy per soglia con fallback dHash/Hamming (cancellabile T-004), best-of-cluster e `DeletionProposal`. Adapter reali (`VisionFeaturePrinter`/`PerceptualDHasher`/`VisionQualityScorer`) compilati in CI; AC-040/041/042/043 verdi via target_tests Domain puro |
 | `large_old_media` | done | **CI verde** (build+test+lint+app iOS, run #9) | T-060/T-061/T-062; interamente Domain puro. Video grandi+vecchi (soglie congiunte, ordine size desc→età), categorie screenshot (subtype indicizzato) + screen recording (euristica dichiarata sulle risoluzioni schermo iniettate), proposta in blocco (keep vuoto) nel gate anteprima (T-050). AC-060/061/062 verdi via target_tests Domain puro; nessun adapter Apple-only |
 | `blurry_photos` | done | **CI verde** (build+test+lint+app iOS, run #10) | T-070/T-071; nitidezza dietro `SharpnessScoring` + soglia (regola di confine: strettamente sotto = blurry; alla soglia/non calcolabile = non blurry), aesthetics iOS 18 come progressive enhancement (`BlurScore`). Riusa `VisionQualityScorer` (esteso ad `AestheticsScoring`) + kernel nitidezza/pixel condiviso. AC-070/071 verdi via target_tests Domain puro |
-| `video_compression` | todo | — | `DI-006`: primo candidato al de-scope |
+| `video_compression` | done | **CI verde** (build+test+lint+app iOS, run #11) | T-080/T-081/T-082; stima `estimated` + gate opt-in, export HEVC cancellabile (adapter AVFoundation guardato, API async iOS18/macOS15), sostituzione solo dopo export verificato + anteprima via DeletionFlow. AC-080/081/082 verdi via target_tests (HEVCExportTests via fake) |
 | `extra_photo_domains` | todo | — | `DI-007`: indipendente dal cuore-foto |
 | `ui_shell` | todo | — | Onboarding-manifesto + report onesto, trasversale. **📌 Design: estrarre brand token dall'Android (`ui/theme/Color.kt`) e ricostruire nativo per HIG con `apple-skills:design` — vedi promemoria in `11-ui-shell.md`** |
 
@@ -256,7 +256,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `38df675` feat(blurry_photos) — CI verde (run #10) |
+| Ultimo commit | `7a6cd48` feat(video_compression) — CI verde (run #11) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -397,17 +397,16 @@
 ## 6. Prossimi passi
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
-- **`foundation` + `library_index` + `safety_net` + `dashboard` + `exact_duplicates`
-  + `similar_photos` + `large_old_media` + `blurry_photos` VERIFICATI**: oracolo Apple
-  verde in CI (`blurry_photos` run #10, `success`). Nessun pending residuo. Restano
-  aperti solo `video_compression`, `extra_photo_domains`, `ui_shell`.
-- **Prossimo macrotask**: `video_compression` (`DI-006`: compressione HEVC on-device,
-  opt-in, metadati preservati — primo candidato al de-scope) **oppure**
-  `extra_photo_domains` (`DI-007`: contatti duplicati + calendari-spam, indipendente
-  dal cuore-foto) **oppure** `ui_shell` (onboarding-manifesto + report onesto,
-  trasversale; design dei brand token dall'Android per HIG). Tutti sbloccati
-  (dipendenze verdi). I pattern consolidati (port+adapter guardato, filtri Domain puri
-  + proposta→gate anteprima, motore cancellabile) restano riusabili.
+- **9 macrotask VERIFICATI** (oracolo Apple verde in CI): foundation, library_index,
+  safety_net, dashboard, exact_duplicates, similar_photos, large_old_media,
+  blurry_photos, **video_compression** (run #11, `success`). Nessun pending residuo.
+  Restano aperti solo `extra_photo_domains` e `ui_shell`.
+- **Prossimo macrotask**: `extra_photo_domains` (`DI-007`: contatti duplicati +
+  calendari-spam, indipendente dal cuore-foto), poi `ui_shell` per ultimo
+  (onboarding-manifesto + report onesto; a quel punto scatta il promemoria design —
+  brand token dall'Android → nativo HIG con `apple-skills:design`). I pattern
+  consolidati (port+adapter guardato, filtri Domain puri + proposta→gate anteprima,
+  motore cancellabile) restano riusabili.
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
