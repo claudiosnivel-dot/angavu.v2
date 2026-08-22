@@ -9,7 +9,7 @@
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
 | **Ultimo aggiornamento** | 2026-08-22 (BOOTSTRAP: pianificato il macrotask `wiring`, `DI-009`; `validate_blueprint` exit 0, 44 task) |
-| **Sessione corrente** | Piano di build 11/11 chiuso e verde. **Pianificato `wiring`** (`DI-009`, `12-wiring.md`): 8 task atomici T-110…T-117 per il cablaggio dati (composition root → scansione → dashboard/report/categorie/extra-foto/compressione via view-model, eliminazioni via `safety_net`). Blueprint validator exit 0 (44 task). **Prossima sessione → BUILD `wiring`** con apple-skills, a partire da T-110 (composition root) |
+| **Sessione corrente** | **Chiusa** (sessione di pianificazione BOOTSTRAP). Piano di build 11/11 verde; **pianificato `wiring`** (`DI-009`, `12-wiring.md`): 8 task atomici T-110…T-117 (cablaggio dati). Blueprint validator exit 0 (44 task). **Prossima sessione → BUILD `wiring`** con apple-skills, a partire da T-110 (composition root) |
 
 ---
 
