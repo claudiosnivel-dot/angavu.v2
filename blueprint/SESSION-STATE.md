@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #13 `success`: `ui_shell` verificato — **piano di build completo, 11/11**) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #13 `success`, commit `82b431b`): `ui_shell` verificato (build+test+lint+app iOS, entrambi i job, primo colpo). **Tutti gli 11 macrotask chiusi: il piano di build di 00-INDEX §2 è completo.** Nessun macrotask residuo. Merge su `main` mergeabile (gate verde), lasciato alla decisione dell'utente |
+| **Ultimo aggiornamento** | 2026-08-22 (chiusura sessione: aggiunta pipeline `.ipa` dev per iPhone; piano di build resta completo 11/11) |
+| **Sessione corrente** | **Piano di build completo (11/11 macrotask verdi, ultimo `ui_shell` run #13).** Questa sessione ha aggiunto la **distribuzione dev senza Mac/Developer Program**: `.github/workflows/ipa.yml` (manuale) genera un `.ipa` non firmato — verificato (run #1 `success`, artefatto `Angavu-unsigned-ipa` ~306 KB) — da firmare/installare con Sideloadly/AltStore + Apple ID gratuito (guida `docs/INSTALL-DEV-IPHONE.md`). **Prossima sessione → pianificare il macrotask `wiring`** (cablaggio dati: schermate cuore-foto + `HonestReportView` sui dati veri PhotoKit) |
 
 ---
 
@@ -346,7 +346,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `82b431b` feat(ui_shell) — CI verde (run #13); segue commit doc di chiusura sessione |
+| Ultimo commit | `ce315f9` docs (guida install iPhone); ultimo commit di codice `82b431b` feat(ui_shell) — CI verde (run #13) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -530,13 +530,17 @@
   large_old_media, blurry_photos, video_compression, extra_photo_domains,
   **ui_shell** (run #13, `success`). **Piano di build di 00-INDEX §2 completo.**
   Nessun macrotask residuo.
-- **Nessun prossimo macrotask di BUILD.** Lavoro possibile nelle sessioni future
-  (fuori dal piano di build originale): (a) **cablaggio dati** — alimentare
-  `HonestReportView` e le sezioni con i dati veri della libreria (dashboard/
-  library_index) e iniettare le risoluzioni schermo reali per l'euristica
-  screen-recording (`large_old_media`); (b) rifinitura design/animazioni HIG
-  (`apple-skills:design`) sulle schermate `ui_shell`; (c) merge su `main`
-  (decisione utente); (d) release-review pre-App-Store (`apple-skills:release-review`).
+- **Prossima sessione → PIANIFICARE il macrotask `wiring`** (deciso con l'utente).
+  Il piano di build originale (11/11) è chiuso; `wiring` è lavoro di integrazione
+  aggiuntivo: (a) **cablaggio dati** — schermate del cuore-foto navigabili +
+  `HonestReportView` alimentato dai dati veri della libreria (dashboard/
+  library_index), e iniezione delle risoluzioni schermo reali per l'euristica
+  screen-recording (`large_old_media`). Da aggiungere al blueprint come macrotask
+  con task atomici + acceptance_criteria + target_tests (come l'`08bis-wiring`
+  dell'Android). Poi rigenerare l'`.ipa` per un'app davvero usabile su iPhone.
+- Lavoro ulteriore possibile: rifinitura design/animazioni HIG
+  (`apple-skills:design`) su `ui_shell`; merge su `main` (decisione utente);
+  release-review pre-App-Store (`apple-skills:release-review`).
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
