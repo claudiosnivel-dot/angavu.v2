@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #11 `success`: `video_compression` verificato) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #11 `success`, commit `7a6cd48`): `video_compression` verificato (build+test+lint+app iOS, entrambi i job, primo colpo). 9 macrotask su 11 chiusi. **Prossimo → BUILD `extra_photo_domains`** (`DI-007`), poi `ui_shell` per ultimo (design su feature stabili) |
+| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #12 `success`: `extra_photo_domains` verificato) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #12 `success`, commit `f742aad`): `extra_photo_domains` verificato (build+test+lint+app iOS, entrambi i job, primo colpo). 10 macrotask su 11 chiusi. **Resta solo → BUILD `ui_shell`** (onboarding-manifesto + report onesto; scatta il promemoria design: brand token Android → nativo HIG con `apple-skills:design`) |
 
 ---
 
@@ -30,12 +30,55 @@
 | `large_old_media` | done | **CI verde** (build+test+lint+app iOS, run #9) | T-060/T-061/T-062; interamente Domain puro. Video grandi+vecchi (soglie congiunte, ordine size desc→età), categorie screenshot (subtype indicizzato) + screen recording (euristica dichiarata sulle risoluzioni schermo iniettate), proposta in blocco (keep vuoto) nel gate anteprima (T-050). AC-060/061/062 verdi via target_tests Domain puro; nessun adapter Apple-only |
 | `blurry_photos` | done | **CI verde** (build+test+lint+app iOS, run #10) | T-070/T-071; nitidezza dietro `SharpnessScoring` + soglia (regola di confine: strettamente sotto = blurry; alla soglia/non calcolabile = non blurry), aesthetics iOS 18 come progressive enhancement (`BlurScore`). Riusa `VisionQualityScorer` (esteso ad `AestheticsScoring`) + kernel nitidezza/pixel condiviso. AC-070/071 verdi via target_tests Domain puro |
 | `video_compression` | done | **CI verde** (build+test+lint+app iOS, run #11) | T-080/T-081/T-082; stima `estimated` + gate opt-in, export HEVC cancellabile (adapter AVFoundation guardato, API async iOS18/macOS15), sostituzione solo dopo export verificato + anteprima via DeletionFlow. AC-080/081/082 verdi via target_tests (HEVCExportTests via fake) |
-| `extra_photo_domains` | todo | — | `DI-007`: indipendente dal cuore-foto |
+| `extra_photo_domains` | done | **CI verde** (build+test+lint+app iOS, run #12) | T-090/T-091/T-092; `DI-007`. Contatti duplicati (cluster per nome normalizzato + numero/email condiviso), calendari-spam (solo sottoscrizioni sospette, mai i locali), applicazione confermata (gate `proposed→confirmed`, esito applied/cancelled/failed). Domain puro; adapter Contacts/EventKit guardati (compilati in CI, runtime device non coperto). NS…UsageDescription contatti/calendario sincere |
 | `ui_shell` | todo | — | Onboarding-manifesto + report onesto, trasversale. **📌 Design: estrarre brand token dall'Android (`ui/theme/Color.kt`) e ricostruire nativo per HIG con `apple-skills:design` — vedi promemoria in `11-ui-shell.md`** |
 
 ## 2. Macrotask corrente
 
-- **Chiuso (build-8)**: `blurry_photos` — implementazione **completa** dei 2 task
+- **Chiuso (build-10)**: `extra_photo_domains` (`DI-007`) — implementazione
+  **completa** dei 3 task atomici (T-090/T-091/T-092), Domain puro
+  (`Sources/AngavuDomain/DuplicateContacts.swift`, `SpamCalendars.swift`,
+  `ExtraDomainApply.swift`) + adapter Data guardati
+  (`Sources/AngavuData/ContactsProvider.swift`, `CalendarsProvider.swift`):
+  - **T-090 — contatti duplicati dietro adapter Contacts**: port `ContactsProviding`
+    (Data) + `DuplicateContactDetection` (Domain). Regola dichiarata: duplicati sse
+    **stesso nome normalizzato E** almeno un punto di contatto (numero/email
+    normalizzato) condiviso — omonimi senza contatto condiviso **mai** fusi (nessun
+    falso positivo, AC-090-1). `ContactMergeProposal {primary=id minore, duplicates}`
+    è **solo dati** (AC-090-2). Adapter reale `SystemContactMerger` (CNSaveRequest:
+    fonde punti di contatto ed elimina i duplicati).
+  - **T-091 — calendari-spam dietro adapter EventKit**: port `CalendarsProviding`
+    (Data) + `SpamCalendarDetection` (Domain) con `SpamCalendarHeuristic` **dichiarata**
+    (sospetto sse `kind == .subscription` e — se forniti — titolo con marcatori; i
+    calendari locali **mai** toccati, AC-091-1). `SpamCalendarRemovalProposal` solo
+    dati (AC-091-2). Adapter reale `SystemCalendarsProvider` (map `EKCalendarType`) +
+    `SystemCalendarSubscriptionRemover` (`EKEventStore.removeCalendar`).
+  - **T-092 — applicazione confermata**: `ExtraActionConfirmation` (gate
+    `proposed→confirmed`) + `ExtraActionApplicator`. Senza conferma l'adapter non è
+    **mai** invocato → esito `.cancelled` (AC-092-1); con conferma delega e propaga
+    l'esito reale `applied|cancelled|failed` (AC-092-2). Port dei side-effect
+    (`ContactMerging`, `CalendarSubscriptionRemoving`) nel Domain, fake-abili.
+  - **Altitudine/privacy**: il Domain non importa Contacts/EventKit (00-INDEX §1bis);
+    `NSContactsUsageDescription` + `NSCalendarsFullAccessUsageDescription` sincere in
+    Info.plist; `PrivacyInfo.xcprivacy` con framing onesto (Contacts/EventKit sono
+    permission-gated, **non** required-reason API → array vuoto per verità, non per
+    dimenticanza). Azioni distruttive human-gated (L-COL-005), zero rete.
+  - **Test**: `DuplicateContactsTests` (AC-090-1/2 + omonimi non fusi + email
+    condivisa), `SpamCalendarsTests` (AC-091-1/2 + locale con marcatore mai spam +
+    default conservativo), `ExtraDomainApplyTests` (AC-092-1/2 + failure propagata +
+    gate idempotente) — tutti Domain puro via fake dei port, girano su Linux.
+  - **Copertura dichiarata**: i 4 adapter (`SystemContactsProvider`,
+    `SystemContactMerger`, `SystemCalendarsProvider`,
+    `SystemCalendarSubscriptionRemover`) sono **compilati** in CI ma **senza test
+    unitario dedicato** (Apple-only, richiedono rubrica/calendario reali): runtime sul
+    device NON coperto, solo compilazione. Dichiarato apertamente.
+- **Verifica — VERDE (comando reale, L-COL-002/006)**: **CI Apple run #12 `success`**
+  (commit `f742aad`, runner `macos-15`), entrambi i job verdi step per step —
+  `swift build` (warnings-as-errors), `swift test` (target_tests + regressione),
+  `swiftlint lint --strict` + `build app (iOS Simulator)`. `validate_blueprint.mjs
+  blueprint` → exit 0.
+
+- **Storico (build-8)**: `blurry_photos` — implementazione **completa** dei 2 task
   atomici (T-070/T-071), Domain puro (`Sources/AngavuDomain/BlurryPhotos.swift`) +
   adapter Data guardati:
   - **T-070 — nitidezza dietro adapter + soglia**: port `SharpnessScoring` (`Double?`;
@@ -256,7 +299,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `7a6cd48` feat(video_compression) — CI verde (run #11) |
+| Ultimo commit | `f742aad` feat(extra_photo_domains) — CI verde (run #12) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -266,6 +309,26 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **BUILD `extra_photo_domains` — implementazione completa** (build-10): T-090
+  (contatti duplicati dietro `ContactsProviding`, cluster per nome normalizzato +
+  numero/email condiviso, `ContactMergeProposal` solo dati), T-091 (calendari-spam
+  dietro `CalendarsProviding`, solo sottoscrizioni sospette con euristica dichiarata,
+  mai i locali, `SpamCalendarRemovalProposal` solo dati), T-092 (`ExtraActionConfirmation`
+  gate + `ExtraActionApplicator`: senza conferma nessun effetto → `.cancelled`; con
+  conferma propaga `applied|cancelled|failed`). Domain puro; adapter Contacts/EventKit
+  guardati. Altitudine preservata: il Domain non importa Contacts/EventKit.
+- **VERDE (comando)**: **CI Apple run #12 `success`** (commit `f742aad`), entrambi
+  i job — `swift build/test/lint` + `build app (iOS Simulator)`; `validate_blueprint.mjs
+  blueprint` → exit 0. `extra_photo_domains` → `done`.
+- **Copertura**: AC-090/091/092 coperti dai target_tests Domain puri (`swift test`).
+  I 4 adapter (`SystemContactsProvider`, `SystemContactMerger`, `SystemCalendarsProvider`,
+  `SystemCalendarSubscriptionRemover`) compilati in CI ma senza test unitario dedicato
+  (Apple-only, richiedono rubrica/calendario reali): runtime sul device non coperto,
+  solo compilazione. Privacy: NS…UsageDescription contatti/calendario sincere;
+  `PrivacyInfo` con framing onesto (permission-gated, non required-reason API).
+
+### Storico build-8 (blurry_photos)
 
 - **BUILD `blurry_photos` — implementazione completa** (build-8): T-070 (nitidezza
   dietro `SharpnessScoring` + soglia di sfocatura con regola di confine dichiarata —
@@ -397,16 +460,15 @@
 ## 6. Prossimi passi
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
-- **9 macrotask VERIFICATI** (oracolo Apple verde in CI): foundation, library_index,
+- **10 macrotask VERIFICATI** (oracolo Apple verde in CI): foundation, library_index,
   safety_net, dashboard, exact_duplicates, similar_photos, large_old_media,
-  blurry_photos, **video_compression** (run #11, `success`). Nessun pending residuo.
-  Restano aperti solo `extra_photo_domains` e `ui_shell`.
-- **Prossimo macrotask**: `extra_photo_domains` (`DI-007`: contatti duplicati +
-  calendari-spam, indipendente dal cuore-foto), poi `ui_shell` per ultimo
-  (onboarding-manifesto + report onesto; a quel punto scatta il promemoria design —
-  brand token dall'Android → nativo HIG con `apple-skills:design`). I pattern
-  consolidati (port+adapter guardato, filtri Domain puri + proposta→gate anteprima,
-  motore cancellabile) restano riusabili.
+  blurry_photos, video_compression, **extra_photo_domains** (run #12, `success`).
+  Nessun pending residuo. Resta aperto **solo `ui_shell`**.
+- **Prossimo e ultimo macrotask**: `ui_shell` (onboarding-manifesto + report onesto,
+  trasversale). A questo punto scatta il **promemoria design** (11-ui-shell.md):
+  estrarre i brand token dall'Android (`ui/theme/Color.kt`) e ricostruire nativo per
+  HIG con `apple-skills:design`. I pattern consolidati (port+adapter guardato, filtri
+  Domain puri + proposta→gate conferma/anteprima, motore cancellabile) restano riusabili.
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
