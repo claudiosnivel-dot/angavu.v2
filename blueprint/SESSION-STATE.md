@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #7 `success`: `exact_duplicates` verificato) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #7 `success`, commit `497f463`): `exact_duplicates` verificato (build+test+lint+app iOS, entrambi i job). `foundation`/`library_index`/`safety_net`/`dashboard` restano verdi. **Prossimo → BUILD `similar_photos`** (o `large_old_media`/`blurry_photos`: tutti sbloccati da `library_index`) |
+| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #8 `success`: `similar_photos` verificato) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #8 `success`, commit `7aee6d1`): `similar_photos` verificato (build+test+lint+app iOS, entrambi i job). `foundation`/`library_index`/`safety_net`/`dashboard`/`exact_duplicates` restano verdi. **Prossimo → BUILD `large_old_media`** (o `blurry_photos`/`video_compression`: tutti sbloccati da `library_index`, eliminano via `safety_net`) |
 
 ---
 
@@ -26,7 +26,7 @@
 | `dashboard` | done | **CI verde** (build+test+lint, run #6) | T-020/T-021/T-022 (Domain puro) + 3 target-test (AC-020-1/2, AC-021-1/2, AC-022-1/2). T-021 riusa `DeletedAssetSize` (no duplicazione) |
 | `safety_net` | done | **CI verde** (build+test+lint, run #3) | T-050/T-051/T-052; gate anteprima + eliminazione batch verificati. T-052 anticipa il caveat iCloud (T-021, dashboard) con modello minimo |
 | `exact_duplicates` | done | **CI verde** (build+test+lint+app iOS, run #7) | T-030/T-031/T-032; candidati per byte-size, cluster SHA-256 (hashing cancellabile T-004), keep-one deterministico. Adapter reale `PHAssetContentHasher` compilato in CI (streaming SHA256, zero rete); AC-030/031/032 verdi via target_tests Domain puro |
-| `similar_photos` | todo | — | Dipende da library_index; elimina via safety_net |
+| `similar_photos` | done | **CI verde** (build+test+lint+app iOS, run #8) | T-040/T-041/T-042/T-043; feature print Vision dietro port, clustering greedy per soglia con fallback dHash/Hamming (cancellabile T-004), best-of-cluster e `DeletionProposal`. Adapter reali (`VisionFeaturePrinter`/`PerceptualDHasher`/`VisionQualityScorer`) compilati in CI; AC-040/041/042/043 verdi via target_tests Domain puro |
 | `large_old_media` | todo | — | Dipende da library_index; elimina via safety_net |
 | `blurry_photos` | todo | — | Dipende da library_index; elimina via safety_net |
 | `video_compression` | todo | — | `DI-006`: primo candidato al de-scope |
@@ -35,7 +35,47 @@
 
 ## 2. Macrotask corrente
 
-- **Chiuso (build-5)**: `exact_duplicates` — implementazione **completa** dei 3
+- **Chiuso (build-6)**: `similar_photos` — implementazione **completa** dei 4 task
+  atomici (T-040/T-041/T-042/T-043), Domain puro (`Sources/AngavuDomain/SimilarPhotos.swift`)
+  + 3 adapter Data guardati:
+  - **T-040 — feature print + distanza semantica**: port `FeaturePrinting` nel
+    Domain (esagonale, come `AssetContentHashing`); il Domain riceve SOLO un `Float`
+    di distanza (`SemanticDistance.between`), non importa Vision (AC-040-2 provato da
+    una scansione dei sorgenti Domain). Adapter reale `VisionFeaturePrinter`
+    (`VNGenerateImageFeaturePrintRequest` + `computeDistance`), pixel on-device con
+    `isNetworkAccessAllowed=false` (zero rete), cache per-id.
+  - **T-041 — clustering per soglia con fallback dHash**: `SimilarClustering.clusters`
+    — passaggio incrementale greedy deterministico (ogni candidato entra nel primo
+    cluster il cui rappresentante è simile), a blocchi **cancellabili** (motore
+    T-004). Priorità alla distanza semantica; **fallback** dHash/Hamming quando il
+    feature print manca; un asset senza feature print né dHash non è mai raggruppato
+    (nessun falso "via libera"). dHash a 64 bit prodotto da `PerceptualDHasher`
+    (ImageIO/CoreGraphics, 9×8 grigi, cross-Apple); la distanza di Hamming è
+    aritmetica pura nel Domain.
+  - **T-042 — best-of-cluster ("tieni la migliore")**: port `QualityScoring` +
+    `QualityScore {sharpness, faceQuality?, aesthetics?}` (aesthetics **solo iOS 18**,
+    progressive enhancement: assente su iOS 17, `overall` omette il termine senza
+    fallire) + `ClusterQualityRanking.ranked` (migliore per punteggio, tie-break per
+    id). Adapter reale `VisionQualityScorer` (varianza del Laplaciano in CoreGraphics
+    + `VNDetectFaceCaptureQuality` + `VNCalculateImageAestheticsScores` guardato `#available`).
+  - **T-043 — proposta di eliminazione**: `DeletionProposal {keep, removable}` per
+    cluster, **solo dati** per `safety_net`; cluster singolo → removable vuoto;
+    nessuna eliminazione in autonomia (anteprima obbligatoria a valle, T-050).
+  - **Test**: `FeatureDistanceTests` (AC-040-1/2, incl. scansione no-import-Vision),
+    `SimilarClusterTests` (AC-041-1/2/3, con recorder che prova i residui non
+    processati su cancel), `KeepBestScoringTests` (AC-042-1/2), `SimilarDeletionProposalTests`
+    (AC-043-1/2) — tutti Domain puro, girano su Linux.
+  - **Copertura dichiarata**: i 3 adapter (`VisionFeaturePrinter`, `PerceptualDHasher`,
+    `VisionQualityScorer`) sono **compilati** in CI (runner `macos-15`) ma **senza
+    test unitario dedicato** (Apple-only, richiedono foto reali/device): correttezza
+    a runtime NON coperta, solo compilazione. Dichiarato apertamente.
+- **Verifica — VERDE (comando reale, L-COL-002/006)**: **CI Apple run #8 `success`**
+  (commit `7aee6d1`, runner `macos-15`), entrambi i job verdi step per step —
+  `swift build` (warnings-as-errors), `swift test` (target_tests + regressione),
+  `swiftlint lint --strict` + `build app (iOS Simulator)`. `validate_blueprint.mjs
+  blueprint` → exit 0.
+
+- **Storico (build-5)**: `exact_duplicates` — implementazione **completa** dei 3
   task atomici (T-030/T-031/T-032), Domain puro (`Sources/AngavuDomain/ExactDuplicates.swift`)
   + adapter Data guardato (`Sources/AngavuData/AssetContentHashingAdapter.swift`):
   - **T-030 — candidati per dimensione**: `SizeCandidateGroup` +
@@ -149,7 +189,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `497f463` feat(exact_duplicates) — CI verde (run #7) |
+| Ultimo commit | `7aee6d1` feat(similar_photos) — CI verde (run #8) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -159,6 +199,23 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **BUILD `similar_photos` — implementazione completa** (build-6): T-040 (feature
+  print Vision dietro port, distanza semantica pura), T-041 (clustering greedy per
+  soglia con fallback dHash/Hamming, a blocchi cancellabile via T-004), T-042
+  (best-of-cluster per punteggio qualità; aesthetics iOS 18 come progressive
+  enhancement), T-043 (`DeletionProposal` per cluster, solo dati). Altitudine
+  preservata: il Domain non importa Vision (feature print/scoring dietro port del
+  Data layer; distanza di Hamming del dHash aritmetica pura nel Domain).
+- **VERDE (comando)**: **CI Apple run #8 `success`** (commit `7aee6d1`), entrambi
+  i job — `swift build/test/lint` + `build app (iOS Simulator)`; `validate_blueprint.mjs
+  blueprint` → exit 0. `similar_photos` → `done`.
+- **Copertura**: AC-040/041/042/043 coperti dai target_tests Domain puro (`swift test`).
+  I 3 adapter (`VisionFeaturePrinter`, `PerceptualDHasher`, `VisionQualityScorer`)
+  compilati in CI ma senza test unitario dedicato (Apple-only): runtime sul device
+  non coperto, solo compilazione. Dichiarato apertamente.
+
+### Storico build-5 (exact_duplicates)
 
 - **BUILD `exact_duplicates` — implementazione completa** (build-5): T-030
   (candidati per byte-size, solo gruppi con cardinalità > 1), T-031 (cluster per
@@ -239,13 +296,15 @@
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
 - **`foundation` + `library_index` + `safety_net` + `dashboard` + `exact_duplicates`
-  VERIFICATI**: oracolo Apple verde in CI (`exact_duplicates` run #7, `success`).
-  Nessun pending residuo.
-- **Prossimo macrotask**: `similar_photos` (feature-print Vision + cluster, "tieni la
-  migliore") — dipende da `library_index` (verde), elimina via `safety_net` (verde).
-  In alternativa `large_old_media` o `blurry_photos`, tutti sbloccati e senza
-  dipendenze aperte fra loro. `exact_duplicates` fornisce ora il pattern
-  candidati→cluster→keep-one riusabile dai rilevatori successivi.
+  + `similar_photos` VERIFICATI**: oracolo Apple verde in CI (`similar_photos` run #8,
+  `success`). Nessun pending residuo.
+- **Prossimo macrotask**: `large_old_media` (video grandi/vecchi per dimensione/età,
+  screenshot e screen recording in blocco) — dipende da `library_index` (verde),
+  elimina via `safety_net` (verde). In alternativa `blurry_photos` (nitidezza +
+  aesthetics: può riusare `VisionQualityScorer`/`QualityScore` di `similar_photos`) o
+  `video_compression` (`DI-006`), tutti sbloccati e senza dipendenze aperte fra loro.
+  I pattern candidati→cluster→keep-one/best e port+adapter guardato sono ormai
+  consolidati e riusabili dai rilevatori successivi.
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
