@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #9 `success`: `large_old_media` verificato) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #9 `success`, commit `9090c7f`): `large_old_media` verificato (build+test+lint+app iOS, entrambi i job). `foundation`/`library_index`/`safety_net`/`dashboard`/`exact_duplicates`/`similar_photos` restano verdi. **Prossimo → BUILD `blurry_photos`** (può riusare `VisionQualityScorer`/`QualityScore` di `similar_photos`) o `video_compression` (`DI-006`): entrambi sbloccati da `library_index`, eliminano via `safety_net` |
+| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #10 `success`: `blurry_photos` verificato) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #10 `success`, commit `38df675`): `blurry_photos` verificato (build+test+lint+app iOS, entrambi i job). `foundation`/`library_index`/`safety_net`/`dashboard`/`exact_duplicates`/`similar_photos`/`large_old_media` restano verdi. **Prossimo → BUILD `video_compression`** (`DI-006`, primo candidato al de-scope) o `extra_photo_domains` (`DI-007`, indipendente dal cuore-foto) o `ui_shell` (trasversale) |
 
 ---
 
@@ -28,14 +28,48 @@
 | `exact_duplicates` | done | **CI verde** (build+test+lint+app iOS, run #7) | T-030/T-031/T-032; candidati per byte-size, cluster SHA-256 (hashing cancellabile T-004), keep-one deterministico. Adapter reale `PHAssetContentHasher` compilato in CI (streaming SHA256, zero rete); AC-030/031/032 verdi via target_tests Domain puro |
 | `similar_photos` | done | **CI verde** (build+test+lint+app iOS, run #8) | T-040/T-041/T-042/T-043; feature print Vision dietro port, clustering greedy per soglia con fallback dHash/Hamming (cancellabile T-004), best-of-cluster e `DeletionProposal`. Adapter reali (`VisionFeaturePrinter`/`PerceptualDHasher`/`VisionQualityScorer`) compilati in CI; AC-040/041/042/043 verdi via target_tests Domain puro |
 | `large_old_media` | done | **CI verde** (build+test+lint+app iOS, run #9) | T-060/T-061/T-062; interamente Domain puro. Video grandi+vecchi (soglie congiunte, ordine size desc→età), categorie screenshot (subtype indicizzato) + screen recording (euristica dichiarata sulle risoluzioni schermo iniettate), proposta in blocco (keep vuoto) nel gate anteprima (T-050). AC-060/061/062 verdi via target_tests Domain puro; nessun adapter Apple-only |
-| `blurry_photos` | todo | — | Dipende da library_index; elimina via safety_net |
+| `blurry_photos` | done | **CI verde** (build+test+lint+app iOS, run #10) | T-070/T-071; nitidezza dietro `SharpnessScoring` + soglia (regola di confine: strettamente sotto = blurry; alla soglia/non calcolabile = non blurry), aesthetics iOS 18 come progressive enhancement (`BlurScore`). Riusa `VisionQualityScorer` (esteso ad `AestheticsScoring`) + kernel nitidezza/pixel condiviso. AC-070/071 verdi via target_tests Domain puro |
 | `video_compression` | todo | — | `DI-006`: primo candidato al de-scope |
 | `extra_photo_domains` | todo | — | `DI-007`: indipendente dal cuore-foto |
 | `ui_shell` | todo | — | Onboarding-manifesto + report onesto, trasversale. **📌 Design: estrarre brand token dall'Android (`ui/theme/Color.kt`) e ricostruire nativo per HIG con `apple-skills:design` — vedi promemoria in `11-ui-shell.md`** |
 
 ## 2. Macrotask corrente
 
-- **Chiuso (build-7)**: `large_old_media` — implementazione **completa** dei 3 task
+- **Chiuso (build-8)**: `blurry_photos` — implementazione **completa** dei 2 task
+  atomici (T-070/T-071), Domain puro (`Sources/AngavuDomain/BlurryPhotos.swift`) +
+  adapter Data guardati:
+  - **T-070 — nitidezza dietro adapter + soglia**: port `SharpnessScoring` (`Double?`;
+    `nil` = non calcolabile on-device) + `BlurThreshold` + `BlurClassification`.
+    **Regola di confine dichiarata** (AC-070-2): `blurry` sse nitidezza
+    **strettamente sotto** soglia; **alla** soglia o **non calcolabile** → NON sfocato
+    (nessun falso positivo su asset non verificabili). Batch `blurry(among:)` a blocchi
+    cancellabili (motore T-004), solo foto (i video esclusi). Adapter reale
+    `CoreImageSharpnessScorer` (varianza del Laplaciano) via kernel condiviso.
+  - **T-071 — aesthetics come progressive enhancement iOS 18**: port `AestheticsScoring`
+    + `BlurScore {sharpness, aesthetics?}` con `usesAesthetics`/`combined` +
+    `BlurAssessment.assess`. Su iOS 18 il termine aesthetics concorre (AC-071-1); su
+    iOS 17 (`aesthetics == nil`) degrada alla sola nitidezza, marcato "senza aesthetics",
+    senza fallire (AC-071-2). `assess` → `nil` solo se la nitidezza non è calcolabile.
+    Reuse: `VisionQualityScorer` (di `similar_photos`) esteso ad `AestheticsScoring`.
+  - **Reuse/altitudine**: estratti `SharpnessKernel` (matematica nitidezza) e
+    `OnDeviceImageBytes` (lettura pixel zero-rete) in
+    `Sources/AngavuData/ImageAnalysisSupport.swift`, condivisi con `VisionQualityScorer`
+    (rifattorizzato a comportamento identico): un solo posto per nitidezza e pixel. Il
+    Domain non importa Core Image/Vision (00-INDEX §1bis).
+  - **Test**: `BlurClassificationTests` (AC-070-1/2 + `nil` mai flaggato + batch
+    foto/cancel), `AestheticsEnhancementTests` (AC-071-1/2 + `assess` nil senza
+    nitidezza) — tutti Domain puro, girano su Linux.
+  - **Copertura dichiarata**: gli adapter (`CoreImageSharpnessScorer`, conformità
+    aesthetics di `VisionQualityScorer`) sono **compilati** in CI ma **senza test
+    unitario dedicato** (Apple-only, richiedono foto reali/device): runtime sul device
+    NON coperto, solo compilazione. Dichiarato apertamente.
+- **Verifica — VERDE (comando reale, L-COL-002/006)**: **CI Apple run #10 `success`**
+  (commit `38df675`, runner `macos-15`), entrambi i job verdi step per step —
+  `swift build` (warnings-as-errors), `swift test` (target_tests + regressione),
+  `swiftlint lint --strict` + `build app (iOS Simulator)`. `validate_blueprint.mjs
+  blueprint` → exit 0.
+
+- **Storico (build-7)**: `large_old_media` — implementazione **completa** dei 3 task
   atomici (T-060/T-061/T-062), **interamente Domain puro**
   (`Sources/AngavuDomain/LargeOldMedia.swift`), nessun adapter Data:
   - **T-060 — video grandi e vecchi**: `LargeOldThresholds {minBytes,
@@ -222,7 +256,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `9090c7f` feat(large_old_media) — CI verde (run #9) |
+| Ultimo commit | `38df675` feat(blurry_photos) — CI verde (run #10) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -232,6 +266,24 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **BUILD `blurry_photos` — implementazione completa** (build-8): T-070 (nitidezza
+  dietro `SharpnessScoring` + soglia di sfocatura con regola di confine dichiarata —
+  strettamente sotto = blurry; alla soglia o non calcolabile = non blurry, nessun
+  falso positivo), T-071 (aesthetics iOS 18 come progressive enhancement, `BlurScore`
+  che degrada alla sola nitidezza su iOS 17 marcandolo). Domain puro; reuse di
+  `VisionQualityScorer` (esteso ad `AestheticsScoring`) e kernel nitidezza/pixel
+  condiviso (`SharpnessKernel`/`OnDeviceImageBytes`). Altitudine preservata: il Domain
+  non importa Core Image/Vision.
+- **VERDE (comando)**: **CI Apple run #10 `success`** (commit `38df675`), entrambi
+  i job — `swift build/test/lint` + `build app (iOS Simulator)`; `validate_blueprint.mjs
+  blueprint` → exit 0. `blurry_photos` → `done`.
+- **Copertura**: AC-070/071 coperti dai target_tests Domain puro (`swift test`). Gli
+  adapter (`CoreImageSharpnessScorer`, conformità aesthetics di `VisionQualityScorer`)
+  compilati in CI ma senza test unitario dedicato (Apple-only): runtime sul device non
+  coperto, solo compilazione. Dichiarato apertamente.
+
+### Storico build-7 (large_old_media)
 
 - **BUILD `large_old_media` — implementazione completa** (build-7): T-060 (video
   grandi *e* vecchi con soglie congiunte, ordine size desc→età, esclusione degli
@@ -346,15 +398,16 @@
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
 - **`foundation` + `library_index` + `safety_net` + `dashboard` + `exact_duplicates`
-  + `similar_photos` + `large_old_media` VERIFICATI**: oracolo Apple verde in CI
-  (`large_old_media` run #9, `success`). Nessun pending residuo.
-- **Prossimo macrotask**: `blurry_photos` (foto sfocate: punteggio nitidezza +
-  aesthetics iOS 18) — dipende da `library_index` (verde), elimina via `safety_net`
-  (verde), e **può riusare** `QualityScore`/`QualityScoring`/`VisionQualityScorer`
-  già introdotti da `similar_photos`. In alternativa `video_compression` (`DI-006`,
-  primo candidato al de-scope) o i domini fuori-foto (`extra_photo_domains`, `DI-007`).
-  I pattern consolidati (candidati→cluster→keep/best, port+adapter guardato, filtri
-  Domain puri + proposta→gate anteprima) sono riusabili dai rilevatori successivi.
+  + `similar_photos` + `large_old_media` + `blurry_photos` VERIFICATI**: oracolo Apple
+  verde in CI (`blurry_photos` run #10, `success`). Nessun pending residuo. Restano
+  aperti solo `video_compression`, `extra_photo_domains`, `ui_shell`.
+- **Prossimo macrotask**: `video_compression` (`DI-006`: compressione HEVC on-device,
+  opt-in, metadati preservati — primo candidato al de-scope) **oppure**
+  `extra_photo_domains` (`DI-007`: contatti duplicati + calendari-spam, indipendente
+  dal cuore-foto) **oppure** `ui_shell` (onboarding-manifesto + report onesto,
+  trasversale; design dei brand token dall'Android per HIG). Tutti sbloccati
+  (dipendenze verdi). I pattern consolidati (port+adapter guardato, filtri Domain puri
+  + proposta→gate anteprima, motore cancellabile) restano riusabili.
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
