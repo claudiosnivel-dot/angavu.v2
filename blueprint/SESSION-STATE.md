@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-21 (**CI Apple VERDE** run #6 `success`: `dashboard` verificato) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #6 `success`, commit `7969aaf`): `dashboard` verificato (build+test+lint+app iOS). `foundation`/`library_index`/`safety_net` restano verdi. **Prossimo → BUILD `exact_duplicates`** |
+| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #7 `success`: `exact_duplicates` verificato) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #7 `success`, commit `497f463`): `exact_duplicates` verificato (build+test+lint+app iOS, entrambi i job). `foundation`/`library_index`/`safety_net`/`dashboard` restano verdi. **Prossimo → BUILD `similar_photos`** (o `large_old_media`/`blurry_photos`: tutti sbloccati da `library_index`) |
 
 ---
 
@@ -25,7 +25,7 @@
 | `library_index` | done | **CI verde** (build+test+lint, run #3) | T-010…T-014; AC-010/011/012/013/014 verdi (SwiftData test incluso su runner macOS 14) |
 | `dashboard` | done | **CI verde** (build+test+lint, run #6) | T-020/T-021/T-022 (Domain puro) + 3 target-test (AC-020-1/2, AC-021-1/2, AC-022-1/2). T-021 riusa `DeletedAssetSize` (no duplicazione) |
 | `safety_net` | done | **CI verde** (build+test+lint, run #3) | T-050/T-051/T-052; gate anteprima + eliminazione batch verificati. T-052 anticipa il caveat iCloud (T-021, dashboard) con modello minimo |
-| `exact_duplicates` | todo | — | Dipende da library_index; elimina via safety_net |
+| `exact_duplicates` | done | **CI verde** (build+test+lint+app iOS, run #7) | T-030/T-031/T-032; candidati per byte-size, cluster SHA-256 (hashing cancellabile T-004), keep-one deterministico. Adapter reale `PHAssetContentHasher` compilato in CI (streaming SHA256, zero rete); AC-030/031/032 verdi via target_tests Domain puro |
 | `similar_photos` | todo | — | Dipende da library_index; elimina via safety_net |
 | `large_old_media` | todo | — | Dipende da library_index; elimina via safety_net |
 | `blurry_photos` | todo | — | Dipende da library_index; elimina via safety_net |
@@ -35,7 +35,36 @@
 
 ## 2. Macrotask corrente
 
-- **In corso (build-4)**: `dashboard` — implementazione **completa** dei 3 task
+- **Chiuso (build-5)**: `exact_duplicates` — implementazione **completa** dei 3
+  task atomici (T-030/T-031/T-032), Domain puro (`Sources/AngavuDomain/ExactDuplicates.swift`)
+  + adapter Data guardato (`Sources/AngavuData/AssetContentHashingAdapter.swift`):
+  - **T-030 — candidati per dimensione**: `SizeCandidateGroup` +
+    `SizeCandidateGrouping.candidateGroups` — raggruppa per byte-size, restituisce
+    solo i gruppi con cardinalità > 1 (un asset di dimensione unica non ha
+    duplicati → niente hashing). Ordine deterministico per dimensione crescente.
+  - **T-031 — cluster SHA-256**: port `AssetContentHashing` + `AssetDigest` nel
+    Domain (esagonale, come `AssetIndexReading/Writing`); `ExactDuplicateClustering.clusters`
+    hasha i candidati **a blocchi cancellabili** riusando il motore T-004
+    (`ChunkedAnalysis`), raggruppa per digest identico, esclude i non hashabili
+    (nessun falso "via libera"). Adapter reale `PHAssetContentHasher` guardato
+    `#if canImport(Photos) && canImport(CryptoKit)`: legge i byte on-device in
+    **streaming** (`SHA256.update`, dieta low-RAM), `isNetworkAccessAllowed=false`
+    (zero rete, nessun fetch iCloud).
+  - **T-032 — keep-one**: `KeepOneProposal` + `KeepOneSelection` — proposta
+    deterministica (keep = id minore, arbitrario ma stabile); **nessuna
+    eliminazione**, solo dati per `safety_net` (anteprima obbligatoria a valle).
+  - **Test**: `SizeCandidateGroupingTests` (AC-030-1/2), `ExactDuplicateClusterTests`
+    (AC-031-1/2, con fake hasher che prova la non-hashatura dei residui su cancel),
+    `KeepOneSelectionTests` (AC-032-1/2) — tutti Domain puro, girano su Linux.
+  - **Copertura dichiarata**: `PHAssetContentHasher` è **compilato** in CI (runner
+    `macos-15`) ma **senza test unitario dedicato** (Apple-only, richiede foto
+    reali/device): correttezza a runtime sul device NON coperta, solo compilazione.
+- **Verifica — VERDE (comando reale, L-COL-002/006)**: **CI Apple run #7 `success`**
+  (commit `497f463`, runner `macos-15`), entrambi i job verdi step per step —
+  `swift build/test/lint` (Build warnings-as-errors, Test target_tests+regressione,
+  SwiftLint) + `build app (iOS Simulator)`. `validate_blueprint.mjs blueprint` → exit 0.
+
+- **Storico (build-4)**: `dashboard` — implementazione **completa** dei 3 task
   atomici (T-020/T-021/T-022), tutto nel **Domain puro** (`Sources/AngavuDomain/Dashboard.swift`):
   - **T-020 — aggregazione numeri veri**: `DashboardCategory` (photo/video/screenshot,
     **disgiunte**: uno screenshot non è anche foto), `SizedAsset` (accoppia
@@ -120,7 +149,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `7969aaf` feat(dashboard) — CI verde (run #6) |
+| Ultimo commit | `497f463` feat(exact_duplicates) — CI verde (run #7) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -130,6 +159,21 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **BUILD `exact_duplicates` — implementazione completa** (build-5): T-030
+  (candidati per byte-size, solo gruppi con cardinalità > 1), T-031 (cluster per
+  SHA-256 identico, hashing a blocchi cancellabile via T-004, adapter reale
+  `PHAssetContentHasher` in streaming e zero rete), T-032 (keep-one deterministico,
+  nessuna eliminazione). Altitudine preservata: lo SHA-256 è calcolato da un port
+  del Data layer, il Domain raggruppa per digest identico (niente CryptoKit nel Domain).
+- **VERDE (comando)**: **CI Apple run #7 `success`** (commit `497f463`), entrambi
+  i job — `swift build/test/lint` + `build app (iOS Simulator)`; `validate_blueprint.mjs
+  blueprint` → exit 0. `exact_duplicates` → `done`.
+- **Copertura**: AC-030/031/032 coperti dai target_tests Domain puro (`swift test`).
+  `PHAssetContentHasher` compilato in CI ma senza test unitario dedicato (Apple-only):
+  runtime sul device non coperto, solo compilazione. Dichiarato apertamente.
+
+### Storico build-4 (dashboard)
 
 - **BUILD `dashboard` — implementazione completa** (build-4): T-020 (aggregazione
   per categoria, exact/estimated separati), T-021 (caveat iCloud, riusa
@@ -194,15 +238,18 @@
 ## 6. Prossimi passi
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
-- **`foundation` + `library_index` + `safety_net` + `dashboard` VERIFICATI**:
-  oracolo Apple verde in CI (`dashboard` run #6, `success`). Nessun pending residuo.
+- **`foundation` + `library_index` + `safety_net` + `dashboard` + `exact_duplicates`
+  VERIFICATI**: oracolo Apple verde in CI (`exact_duplicates` run #7, `success`).
+  Nessun pending residuo.
+- **Prossimo macrotask**: `similar_photos` (feature-print Vision + cluster, "tieni la
+  migliore") — dipende da `library_index` (verde), elimina via `safety_net` (verde).
+  In alternativa `large_old_media` o `blurry_photos`, tutti sbloccati e senza
+  dipendenze aperte fra loro. `exact_duplicates` fornisce ora il pattern
+  candidati→cluster→keep-one riusabile dai rilevatori successivi.
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
   Mac**. Il verdetto è di un **comando** (L-COL-002), verificabile nella tab Actions.
-- **`dashboard` implementato** (build-4): in attesa del verde CI. Alla conferma
-  `success` marcarlo `done`. Prossimo macrotask disponibile: `exact_duplicates`
-  (dipende da `library_index` verde; elimina via `safety_net`).
 - **Merge su `main`**: il gate è soddisfatto (CI verde). Il merge resta una
   decisione dell'utente; il branch è mergeabile quando vuoi.
 - **Caveat minuti**: repo privato → minuti macOS ×10 (~200/mese piano Free). Il
