@@ -61,6 +61,12 @@ let package = Package(
         .testTarget(
             name: "AngavuDataTests",
             dependencies: ["AngavuDomain", "AngavuData"]
+        ),
+        // Test del Features layer: navigazione e gate di anteprima (T-101).
+        // Platform-puri (pilotano il DeletionFlow del Domain), girano ovunque.
+        .testTarget(
+            name: "AngavuFeaturesTests",
+            dependencies: ["AngavuDomain", "AngavuFeatures"]
         )
     ]
 )
