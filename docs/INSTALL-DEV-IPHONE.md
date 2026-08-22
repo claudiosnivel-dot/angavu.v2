@@ -63,6 +63,13 @@ certificato in **Impostazioni → Generali → VPN e gestione dispositivo**.
 
 ## Stato attuale dell'app
 
-Finché il macrotask `ui_shell` non è costruito, l'`.ipa` installa la schermata
-**segnaposto** ("Angavu — Fondamenta pronte"): utile per **validare tutto il
-percorso di installazione** ora, non ancora l'esperienza finale.
+`ui_shell` è costruito: l'`.ipa` installa il **guscio reale** — onboarding col
+**manifesto**, home, e la schermata **"cosa NON facciamo"**, con il tema nativo
+**Aurora** (brand token ripresi dall'Android, ricostruiti per HIG).
+
+Resta il **cablaggio dati**: le schermate del cuore-foto (duplicati, foto simili,
+video, ecc.) e il **report onesto** (`HonestReportView`) devono ancora essere
+collegate ai dati veri della libreria (PhotoKit → dashboard/library_index). La
+logica di tutte queste feature è già completa e verificata in CI; manca la loro
+resa in schermate navigabili. Quindi oggi l'`.ipa` mostra il guscio + manifesto,
+non ancora la pulizia foto interattiva.
