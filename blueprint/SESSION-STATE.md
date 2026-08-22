@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (chiusura sessione: aggiunta pipeline `.ipa` dev per iPhone; piano di build resta completo 11/11) |
-| **Sessione corrente** | **Piano di build completo (11/11 macrotask verdi, ultimo `ui_shell` run #13).** Questa sessione ha aggiunto la **distribuzione dev senza Mac/Developer Program**: `.github/workflows/ipa.yml` (manuale) genera un `.ipa` non firmato — verificato (run #1 `success`, artefatto `Angavu-unsigned-ipa` ~306 KB) — da firmare/installare con Sideloadly/AltStore + Apple ID gratuito (guida `docs/INSTALL-DEV-IPHONE.md`). **Prossima sessione → pianificare il macrotask `wiring`** (cablaggio dati: schermate cuore-foto + `HonestReportView` sui dati veri PhotoKit) |
+| **Ultimo aggiornamento** | 2026-08-22 (BOOTSTRAP: pianificato il macrotask `wiring`, `DI-009`; `validate_blueprint` exit 0, 44 task) |
+| **Sessione corrente** | Piano di build 11/11 chiuso e verde. **Pianificato `wiring`** (`DI-009`, `12-wiring.md`): 8 task atomici T-110…T-117 per il cablaggio dati (composition root → scansione → dashboard/report/categorie/extra-foto/compressione via view-model, eliminazioni via `safety_net`). Blueprint validator exit 0 (44 task). **Prossima sessione → BUILD `wiring`** con apple-skills, a partire da T-110 (composition root) |
 
 ---
 
@@ -32,6 +32,7 @@
 | `video_compression` | done | **CI verde** (build+test+lint+app iOS, run #11) | T-080/T-081/T-082; stima `estimated` + gate opt-in, export HEVC cancellabile (adapter AVFoundation guardato, API async iOS18/macOS15), sostituzione solo dopo export verificato + anteprima via DeletionFlow. AC-080/081/082 verdi via target_tests (HEVCExportTests via fake) |
 | `extra_photo_domains` | done | **CI verde** (build+test+lint+app iOS, run #12) | T-090/T-091/T-092; `DI-007`. Contatti duplicati (cluster per nome normalizzato + numero/email condiviso), calendari-spam (solo sottoscrizioni sospette, mai i locali), applicazione confermata (gate `proposed→confirmed`, esito applied/cancelled/failed). Domain puro; adapter Contacts/EventKit guardati (compilati in CI, runtime device non coperto). NS…UsageDescription contatti/calendario sincere |
 | `ui_shell` | done | **CI verde** (build+test+lint+app iOS, run #13) | T-100/T-101/T-102. Manifesto+non-goals come dati (coerenti VISION §4), navigazione col gate anteprima (unico `DeletionEntryPoint`→`DeletionFlow`), `HonestReport`. Design HIG: brand token "Aurora" dall'Android ricostruiti nativi (`AuroraTheme`) + 3 schermate SwiftUI. AC-100/101/102 verdi via target_tests; nuovo target `AngavuFeaturesTests` |
+| `wiring` | todo (pianificato) | — | **`DI-009`**, `12-wiring.md`: T-110…T-117 (composition root, scansione, dashboard/report/categorie/extra-foto/compressione via view-model, iniezione risoluzioni schermo). Eliminazioni via `safety_net`. Test a livello view-model in `AngavuFeaturesTests`; View verificate dal build app in CI. `validate_blueprint` exit 0 |
 
 ## 2. Macrotask corrente
 
@@ -530,14 +531,13 @@
   large_old_media, blurry_photos, video_compression, extra_photo_domains,
   **ui_shell** (run #13, `success`). **Piano di build di 00-INDEX §2 completo.**
   Nessun macrotask residuo.
-- **Prossima sessione → PIANIFICARE il macrotask `wiring`** (deciso con l'utente).
-  Il piano di build originale (11/11) è chiuso; `wiring` è lavoro di integrazione
-  aggiuntivo: (a) **cablaggio dati** — schermate del cuore-foto navigabili +
-  `HonestReportView` alimentato dai dati veri della libreria (dashboard/
-  library_index), e iniezione delle risoluzioni schermo reali per l'euristica
-  screen-recording (`large_old_media`). Da aggiungere al blueprint come macrotask
-  con task atomici + acceptance_criteria + target_tests (come l'`08bis-wiring`
-  dell'Android). Poi rigenerare l'`.ipa` per un'app davvero usabile su iPhone.
+- **Macrotask `wiring` PIANIFICATO** (`DI-009`, `12-wiring.md`): 8 task atomici
+  T-110…T-117, `validate_blueprint` exit 0. **Prossima sessione → BUILD `wiring`**
+  con apple-skills, dal DAG: **T-110 (composition root)** per primo, poi
+  T-111 (scansione) e a seguire le schermate (T-112…T-116) e T-117 (risoluzioni
+  schermo). Ogni task chiude al confine con la CI verde; le View sono verificate
+  dal build app, i view-model da `swift test`. Poi rigenerare l'`.ipa` per un'app
+  davvero usabile su iPhone.
 - Lavoro ulteriore possibile: rifinitura design/animazioni HIG
   (`apple-skills:design`) su `ui_shell`; merge su `main` (decisione utente);
   release-review pre-App-Store (`apple-skills:release-review`).

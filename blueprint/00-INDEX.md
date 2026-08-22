@@ -31,6 +31,7 @@
 | `09-video-compression.md` | `video_compression` | Compressione video **HEVC** on-device (`AVAssetExportSession`), opt-in, metadati (data/luogo) preservati. `DI-006`: primo candidato al de-scope |
 | `10-extra-photo-domains.md` | `extra_photo_domains` | Contatti duplicati (`Contacts`), calendari-spam (`EventKit`). `DI-007`: dominio extra-foto |
 | `11-ui-shell.md` | `ui_shell` | Onboarding-manifesto, schermata "cosa **NON** facciamo", report onesto |
+| `12-wiring.md` | `wiring` | **Aggiunto con `DI-009`**: cablaggio dati — composition root, flusso di scansione, schermate cuore-foto/dashboard/report/extra-foto guidate dai dati veri, eliminazione via `safety_net` |
 
 ## 1bis. Contratto di altitudine (abilita l'oracolo di altitudine in BUILD)
 
@@ -76,7 +77,12 @@ foundation
        └─ video_compression     (DI-006 — primo de-scope)
   └─ extra_photo_domains        (DI-007 — indipendente dal cuore-foto)
   └─ ui_shell                   (onboarding + report, trasversale)
+       └─ wiring                (DI-009 — cablaggio dati: integra tutto in UEE navigabile)
 ```
+
+> **`wiring` (`DI-009`)** è a valle di tutto il piano di build (dipende da
+> `library_index`, dai rilevatori, da `safety_net` e da `ui_shell`): non aggiunge
+> logica nuova, collega quella esistente a schermate coi dati veri. Vedi `12-wiring.md`.
 
 I macrotask senza dipendenze aperte possono partire per primi; ogni macrotask si
 chiude al suo confine con la verifica **apple-skills** (build/test/lint verdi, §7)
@@ -104,10 +110,12 @@ queste voci per nome.
 | `DI-006` | **Compressione video in v1** (primo candidato al de-scope sotto slittamento estremo) | ✅ confermato dall'utente |
 | `DI-007` | **Dominio extra-foto (contatti + calendario) in v1** | ✅ confermato dall'utente |
 | `DI-008` | Mercati di lancio: Italia soft-launch → EN → ES/PT/DE | ✅ confermato dall'utente |
+| `DI-009` | Aggiunto macrotask **`wiring`** (cablaggio dati) dopo il piano di build 11/11: schermate + report sui dati veri, oltre il piano originale | ✅ confermato dall'utente |
 
 > Tutte le decisioni sono ora **bloccate** (`✅`): `DI-002/003/004/008`, assunte
-> come default in BOOTSTRAP, sono state confermate dall'utente. Una decisione
-> bloccata si modifica **solo** con emendamento esplicito registrato qui.
+> come default in BOOTSTRAP, sono state confermate dall'utente; `DI-009` aggiunge
+> il macrotask `wiring` su richiesta dell'utente. Una decisione bloccata si
+> modifica **solo** con emendamento esplicito registrato qui.
 
 ## 5. Fonti di verità
 
