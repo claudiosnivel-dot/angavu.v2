@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (BOOTSTRAP: pianificato il macrotask `wiring`, `DI-009`; `validate_blueprint` exit 0, 44 task) |
-| **Sessione corrente** | **Chiusa** (sessione di pianificazione BOOTSTRAP). Piano di build 11/11 verde; **pianificato `wiring`** (`DI-009`, `12-wiring.md`): 8 task atomici T-110…T-117 (cablaggio dati). Blueprint validator exit 0 (44 task). **Prossima sessione → BUILD `wiring`** con apple-skills, a partire da T-110 (composition root) |
+| **Ultimo aggiornamento** | 2026-08-22 (BUILD `wiring` in corso: T-110 e T-111 verdi in CI) |
+| **Sessione corrente** | **Chiusa**. Macrotask `wiring` **in_progress, 2/8**: T-110 composition root (run #17) e T-111 `ScanViewModel` (run #19) verdi in CI; fix `AnalysisProgress: Sendable` lungo il percorso. **Prossima sessione → riprendere `wiring` da T-112** (dashboard view-model), poi T-113…T-117 |
 
 ---
 
@@ -531,13 +531,15 @@
   large_old_media, blurry_photos, video_compression, extra_photo_domains,
   **ui_shell** (run #13, `success`). **Piano di build di 00-INDEX §2 completo.**
   Nessun macrotask residuo.
-- **Macrotask `wiring` PIANIFICATO** (`DI-009`, `12-wiring.md`): 8 task atomici
-  T-110…T-117, `validate_blueprint` exit 0. **Prossima sessione → BUILD `wiring`**
-  con apple-skills, dal DAG: **T-110 (composition root)** per primo, poi
-  T-111 (scansione) e a seguire le schermate (T-112…T-116) e T-117 (risoluzioni
-  schermo). Ogni task chiude al confine con la CI verde; le View sono verificate
-  dal build app, i view-model da `swift test`. Poi rigenerare l'`.ipa` per un'app
-  davvero usabile su iPhone.
+- **Macrotask `wiring` IN CORSO** (`DI-009`, `12-wiring.md`): **2/8 verdi** —
+  T-110 composition root (`AppEnvironment`+`live`, run #17), T-111 `ScanViewModel`
+  (run #19). Fix lungo il percorso: `AnalysisProgress: Sendable`.
+  **Prossima sessione → riprendere da T-112** (dashboard view-model), poi T-113
+  (schermate categorie + eliminazione via safety_net), T-114 (report onesto),
+  T-115 (extra-foto), T-116 (compressione video), T-117 (risoluzioni schermo).
+  Pattern consolidato: view-model `@Observable` dietro i port dell'AppEnvironment,
+  test in `AngavuFeaturesTests`; le View verificate dal build app in CI. Ogni task
+  chiude al confine con la CI verde. Poi rigenerare l'`.ipa`.
 - Lavoro ulteriore possibile: rifinitura design/animazioni HIG
   (`apple-skills:design`) su `ui_shell`; merge su `main` (decisione utente);
   release-review pre-App-Store (`apple-skills:release-review`).
