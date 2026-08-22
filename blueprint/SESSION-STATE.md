@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #8 `success`: `similar_photos` verificato) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #8 `success`, commit `7aee6d1`): `similar_photos` verificato (build+test+lint+app iOS, entrambi i job). `foundation`/`library_index`/`safety_net`/`dashboard`/`exact_duplicates` restano verdi. **Prossimo → BUILD `large_old_media`** (o `blurry_photos`/`video_compression`: tutti sbloccati da `library_index`, eliminano via `safety_net`) |
+| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #9 `success`: `large_old_media` verificato) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #9 `success`, commit `9090c7f`): `large_old_media` verificato (build+test+lint+app iOS, entrambi i job). `foundation`/`library_index`/`safety_net`/`dashboard`/`exact_duplicates`/`similar_photos` restano verdi. **Prossimo → BUILD `blurry_photos`** (può riusare `VisionQualityScorer`/`QualityScore` di `similar_photos`) o `video_compression` (`DI-006`): entrambi sbloccati da `library_index`, eliminano via `safety_net` |
 
 ---
 
@@ -27,7 +27,7 @@
 | `safety_net` | done | **CI verde** (build+test+lint, run #3) | T-050/T-051/T-052; gate anteprima + eliminazione batch verificati. T-052 anticipa il caveat iCloud (T-021, dashboard) con modello minimo |
 | `exact_duplicates` | done | **CI verde** (build+test+lint+app iOS, run #7) | T-030/T-031/T-032; candidati per byte-size, cluster SHA-256 (hashing cancellabile T-004), keep-one deterministico. Adapter reale `PHAssetContentHasher` compilato in CI (streaming SHA256, zero rete); AC-030/031/032 verdi via target_tests Domain puro |
 | `similar_photos` | done | **CI verde** (build+test+lint+app iOS, run #8) | T-040/T-041/T-042/T-043; feature print Vision dietro port, clustering greedy per soglia con fallback dHash/Hamming (cancellabile T-004), best-of-cluster e `DeletionProposal`. Adapter reali (`VisionFeaturePrinter`/`PerceptualDHasher`/`VisionQualityScorer`) compilati in CI; AC-040/041/042/043 verdi via target_tests Domain puro |
-| `large_old_media` | todo | — | Dipende da library_index; elimina via safety_net |
+| `large_old_media` | done | **CI verde** (build+test+lint+app iOS, run #9) | T-060/T-061/T-062; interamente Domain puro. Video grandi+vecchi (soglie congiunte, ordine size desc→età), categorie screenshot (subtype indicizzato) + screen recording (euristica dichiarata sulle risoluzioni schermo iniettate), proposta in blocco (keep vuoto) nel gate anteprima (T-050). AC-060/061/062 verdi via target_tests Domain puro; nessun adapter Apple-only |
 | `blurry_photos` | todo | — | Dipende da library_index; elimina via safety_net |
 | `video_compression` | todo | — | `DI-006`: primo candidato al de-scope |
 | `extra_photo_domains` | todo | — | `DI-007`: indipendente dal cuore-foto |
@@ -35,7 +35,40 @@
 
 ## 2. Macrotask corrente
 
-- **Chiuso (build-6)**: `similar_photos` — implementazione **completa** dei 4 task
+- **Chiuso (build-7)**: `large_old_media` — implementazione **completa** dei 3 task
+  atomici (T-060/T-061/T-062), **interamente Domain puro**
+  (`Sources/AngavuDomain/LargeOldMedia.swift`), nessun adapter Data:
+  - **T-060 — video grandi e vecchi**: `LargeOldThresholds {minBytes,
+    olderThanOrEqualTo}` (soglie **congiunte**: grande *e* vecchio) +
+    `LargeOldVideoSelection.select` su `[SizedAsset]` — filtra i soli `.video`
+    oltre entrambe le soglie e ordina deterministicamente (dimensione desc, poi
+    età più-vecchio-prima, poi id). Un video senza `creationDate` non è
+    verificabile come vecchio → **escluso** (nessun falso positivo, AC-060-2).
+  - **T-061 — screenshot e screen recording**: `ScreenshotCategory.screenshots`
+    filtra dal subtype `.screenshot` già indicizzato da `library_index` (T-011);
+    `ScreenRecordingHeuristic` è **euristica dichiarata** — un video le cui
+    dimensioni pixel coincidono (orientamento a parte) con una risoluzione schermo
+    nota **iniettata dal chiamante** (Domain puro, nessun tipo di piattaforma).
+    Una foto non è mai screen recording (AC-061-1/2).
+  - **T-062 — proposta in blocco**: `BulkDeletionProposal {removable, keep vuoto}`
+    (categoria a **eliminazione diretta**: non si "tiene la migliore") +
+    `BulkDeletionProposalComposer.presentInSafetyNet` che porta il `DeletionFlow`
+    (T-050) in `previewing` — la conferma resta impossibile senza anteprima
+    mostrata *e* accettata: nessuna eliminazione in autonomia (AC-062-1/2).
+  - **Test**: `LargeOldVideoTests` (AC-060-1/2, incl. esclusione senza data e
+    tie-break età), `ScreenshotCategoryTests` (AC-061-1/2), `BulkDeletionProposalTests`
+    (AC-062-1/2, incl. gate anteprima) — tutti Domain puro, girano su Linux.
+  - **Copertura dichiarata**: macrotask **interamente Domain puro** → nessun adapter
+    Apple-only, nessun caveat "compilato-ma-non-testato". L'euristica screen-recording
+    dipende dalle risoluzioni schermo reali iniettate a runtime (cablaggio in
+    `ui_shell`/Data, fuori scope qui): dichiarato apertamente.
+- **Verifica — VERDE (comando reale, L-COL-002/006)**: **CI Apple run #9 `success`**
+  (commit `9090c7f`, runner `macos-15`), entrambi i job verdi step per step —
+  `swift build` (warnings-as-errors), `swift test` (target_tests + regressione),
+  `swiftlint lint --strict` + `build app (iOS Simulator)`. `validate_blueprint.mjs
+  blueprint` → exit 0.
+
+- **Storico (build-6)**: `similar_photos` — implementazione **completa** dei 4 task
   atomici (T-040/T-041/T-042/T-043), Domain puro (`Sources/AngavuDomain/SimilarPhotos.swift`)
   + 3 adapter Data guardati:
   - **T-040 — feature print + distanza semantica**: port `FeaturePrinting` nel
@@ -189,7 +222,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `7aee6d1` feat(similar_photos) — CI verde (run #8) |
+| Ultimo commit | `9090c7f` feat(large_old_media) — CI verde (run #9) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -199,6 +232,23 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **BUILD `large_old_media` — implementazione completa** (build-7): T-060 (video
+  grandi *e* vecchi con soglie congiunte, ordine size desc→età, esclusione degli
+  asset senza data), T-061 (categoria screenshot dal subtype indicizzato +
+  categoria screen recording da euristica dichiarata sulle risoluzioni schermo
+  iniettate), T-062 (`BulkDeletionProposal` a keep vuoto → gate anteprima T-050).
+  Macrotask **interamente Domain puro**: nessun import PhotoKit/Vision, riusa
+  `SizedAsset`/`LibraryAsset.subtypes`/`DeletionFlow`.
+- **VERDE (comando)**: **CI Apple run #9 `success`** (commit `9090c7f`), entrambi
+  i job — `swift build/test/lint` + `build app (iOS Simulator)`; `validate_blueprint.mjs
+  blueprint` → exit 0. `large_old_media` → `done`.
+- **Copertura**: AC-060/061/062 coperti dai target_tests Domain puro (`swift test`).
+  Nessun adapter Apple-only in questo macrotask → nessun caveat runtime-non-coperto.
+  L'euristica screen-recording usa risoluzioni schermo reali iniettate a runtime
+  (cablaggio in `ui_shell`/Data, fuori scope qui): dichiarato apertamente.
+
+### Storico build-6 (similar_photos)
 
 - **BUILD `similar_photos` — implementazione completa** (build-6): T-040 (feature
   print Vision dietro port, distanza semantica pura), T-041 (clustering greedy per
@@ -296,15 +346,15 @@
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
 - **`foundation` + `library_index` + `safety_net` + `dashboard` + `exact_duplicates`
-  + `similar_photos` VERIFICATI**: oracolo Apple verde in CI (`similar_photos` run #8,
-  `success`). Nessun pending residuo.
-- **Prossimo macrotask**: `large_old_media` (video grandi/vecchi per dimensione/età,
-  screenshot e screen recording in blocco) — dipende da `library_index` (verde),
-  elimina via `safety_net` (verde). In alternativa `blurry_photos` (nitidezza +
-  aesthetics: può riusare `VisionQualityScorer`/`QualityScore` di `similar_photos`) o
-  `video_compression` (`DI-006`), tutti sbloccati e senza dipendenze aperte fra loro.
-  I pattern candidati→cluster→keep-one/best e port+adapter guardato sono ormai
-  consolidati e riusabili dai rilevatori successivi.
+  + `similar_photos` + `large_old_media` VERIFICATI**: oracolo Apple verde in CI
+  (`large_old_media` run #9, `success`). Nessun pending residuo.
+- **Prossimo macrotask**: `blurry_photos` (foto sfocate: punteggio nitidezza +
+  aesthetics iOS 18) — dipende da `library_index` (verde), elimina via `safety_net`
+  (verde), e **può riusare** `QualityScore`/`QualityScoring`/`VisionQualityScorer`
+  già introdotti da `similar_photos`. In alternativa `video_compression` (`DI-006`,
+  primo candidato al de-scope) o i domini fuori-foto (`extra_photo_domains`, `DI-007`).
+  I pattern consolidati (candidati→cluster→keep/best, port+adapter guardato, filtri
+  Domain puri + proposta→gate anteprima) sono riusabili dai rilevatori successivi.
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
