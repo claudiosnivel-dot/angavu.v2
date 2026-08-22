@@ -10,7 +10,7 @@ import Foundation
 //    off-main. Nessun import di PhotoKit/Vision/AVFoundation (altitudine).
 
 /// Progresso monotòno di un'analisi. `processed` non supera mai `total`.
-public struct AnalysisProgress: Equatable {
+public struct AnalysisProgress: Equatable, Sendable {
     public let processed: Int
     public let total: Int
 
