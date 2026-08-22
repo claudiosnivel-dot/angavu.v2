@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #12 `success`: `extra_photo_domains` verificato) |
-| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #12 `success`, commit `f742aad`): `extra_photo_domains` verificato (build+test+lint+app iOS, entrambi i job, primo colpo). 10 macrotask su 11 chiusi. **Resta solo → BUILD `ui_shell`** (onboarding-manifesto + report onesto; scatta il promemoria design: brand token Android → nativo HIG con `apple-skills:design`) |
+| **Ultimo aggiornamento** | 2026-08-22 (**CI Apple VERDE** run #13 `success`: `ui_shell` verificato — **piano di build completo, 11/11**) |
+| **Sessione corrente** | Oracolo Apple **VERDE** via GitHub Actions (run #13 `success`, commit `82b431b`): `ui_shell` verificato (build+test+lint+app iOS, entrambi i job, primo colpo). **Tutti gli 11 macrotask chiusi: il piano di build di 00-INDEX §2 è completo.** Nessun macrotask residuo. Merge su `main` mergeabile (gate verde), lasciato alla decisione dell'utente |
 
 ---
 
@@ -31,9 +31,56 @@
 | `blurry_photos` | done | **CI verde** (build+test+lint+app iOS, run #10) | T-070/T-071; nitidezza dietro `SharpnessScoring` + soglia (regola di confine: strettamente sotto = blurry; alla soglia/non calcolabile = non blurry), aesthetics iOS 18 come progressive enhancement (`BlurScore`). Riusa `VisionQualityScorer` (esteso ad `AestheticsScoring`) + kernel nitidezza/pixel condiviso. AC-070/071 verdi via target_tests Domain puro |
 | `video_compression` | done | **CI verde** (build+test+lint+app iOS, run #11) | T-080/T-081/T-082; stima `estimated` + gate opt-in, export HEVC cancellabile (adapter AVFoundation guardato, API async iOS18/macOS15), sostituzione solo dopo export verificato + anteprima via DeletionFlow. AC-080/081/082 verdi via target_tests (HEVCExportTests via fake) |
 | `extra_photo_domains` | done | **CI verde** (build+test+lint+app iOS, run #12) | T-090/T-091/T-092; `DI-007`. Contatti duplicati (cluster per nome normalizzato + numero/email condiviso), calendari-spam (solo sottoscrizioni sospette, mai i locali), applicazione confermata (gate `proposed→confirmed`, esito applied/cancelled/failed). Domain puro; adapter Contacts/EventKit guardati (compilati in CI, runtime device non coperto). NS…UsageDescription contatti/calendario sincere |
-| `ui_shell` | todo | — | Onboarding-manifesto + report onesto, trasversale. **📌 Design: estrarre brand token dall'Android (`ui/theme/Color.kt`) e ricostruire nativo per HIG con `apple-skills:design` — vedi promemoria in `11-ui-shell.md`** |
+| `ui_shell` | done | **CI verde** (build+test+lint+app iOS, run #13) | T-100/T-101/T-102. Manifesto+non-goals come dati (coerenti VISION §4), navigazione col gate anteprima (unico `DeletionEntryPoint`→`DeletionFlow`), `HonestReport`. Design HIG: brand token "Aurora" dall'Android ricostruiti nativi (`AuroraTheme`) + 3 schermate SwiftUI. AC-100/101/102 verdi via target_tests; nuovo target `AngavuFeaturesTests` |
 
 ## 2. Macrotask corrente
+
+> **Piano di build completo (11/11).** Nessun macrotask aperto: l'ultimo,
+> `ui_shell`, è verde in CI (run #13). Le prossime sessioni non hanno un
+> "macrotask corrente" da costruire — solo eventuale manutenzione, il cablaggio
+> dei dati veri nelle schermate `ui_shell`, o il merge su `main` (decisione utente).
+
+- **Chiuso (build-11)**: `ui_shell` — implementazione **completa** dei 3 task
+  atomici (T-100/T-101/T-102). Domain puro + Features platform-puro (verificati dai
+  target_tests) + presentazione SwiftUI nativa HIG guardata `#if canImport(SwiftUI)`:
+  - **T-100 — manifesto e "cosa NON facciamo" come dati**: `ManifestContent`
+    (`Sources/AngavuDomain/ManifestContent.swift`) con `ManifestPromise`/`NonGoal`
+    (id stabili), derivati voce per voce dal VISION-AND-CONSTRAINTS §4. Invarianti di
+    onestà: un non-goal è **rinuncia**, mai claim di capacità
+    (`anyNonGoalClaimsCapability` falso, AC-100-2), e ogni promessa è mantenibile
+    on-device (`allPromisesAchievableOnDevice`, AC-100-2); i non-goals includono per
+    id "niente cache di sistema", "no ads", "zero backend" (AC-100-1).
+  - **T-101 — navigazione col gate anteprima**: `Sources/AngavuFeatures/Navigation.swift`.
+    `AppSection` + **unico** `DeletionEntryPoint.route` che pilota il `DeletionFlow`
+    condiviso (T-050); `SectionNavigator` mappa solo le sezioni che eliminano asset
+    (le read-only → nil). Ogni percorso passa da `previewing` prima di `confirmed`
+    (AC-101-1/2), nessun bypass — provato dalla traccia degli stati.
+  - **T-102 — report onesto**: `HonestReport`/`HonestReportComposer`
+    (`Sources/AngavuDomain/HonestReport.swift`) compone `DashboardAggregate` +
+    `ReclaimableSpace` + `PhotoAccessDecision` senza coniare tipi nuovi. Con porzione
+    stimata `singleExactTotalBytes == nil` (mai un unico totale "esatto"), caveat
+    iCloud segnalato, e con accesso limited conteggi parziali + invito all'accesso
+    completo (AC-102-1/2).
+  - **Design HIG (promemoria macrotask)**: brand token d'**identità** "Aurora"
+    estratti dall'Android (`ui/theme/Color.kt`: accenti viola/fucsia/blu/azzurro +
+    gradiente + glow) e **ricostruiti nativi** in `AuroraTheme` — colori semantici di
+    sistema per fondi/testo, SF Symbols, tipografia di sistema/Dynamic Type, dark mode.
+    Lo scaffolding Material 3 **non** è stato portato. Schermate
+    `OnboardingManifestoView`, `NonGoalsView`, `HonestReportView`; `App/ContentView`
+    collega onboarding → home → "cosa NON facciamo".
+  - **Test**: `ManifestContentTests` (AC-100-1/2 + guardie non vacue),
+    `NavigationPreviewGateTests` (AC-101-1/2 + gate non aggirabile + selezione vuota,
+    nel nuovo target `AngavuFeaturesTests`), `HonestReportTests` (AC-102-1/2) —
+    Domain/Features puri, girano ovunque.
+  - **Copertura dichiarata**: le 3 schermate SwiftUI + `AuroraTheme` sono **compilate**
+    dai due job CI (`swift build` su macOS + build app iOS) ma **senza test di
+    rendering** (styling out_of_scope dei target_tests): resa a runtime non coperta,
+    solo compilazione. Baseline privacy invariata (nessun nuovo permesso/rete).
+- **Verifica — VERDE (comando reale, L-COL-002/006)**: **CI Apple run #13 `success`**
+  (commit `82b431b`, runner `macos-15`), entrambi i job verdi step per step —
+  `swift build` (warnings-as-errors), `swift test` (target_tests + regressione),
+  `swiftlint lint --strict` + `build app (iOS Simulator)`. `validate_blueprint.mjs
+  blueprint` → exit 0.
 
 - **Chiuso (build-10)**: `extra_photo_domains` (`DI-007`) — implementazione
   **completa** dei 3 task atomici (T-090/T-091/T-092), Domain puro
@@ -299,8 +346,8 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `f742aad` feat(extra_photo_domains) — CI verde (run #12) |
-| Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS). Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
+| Ultimo commit | `82b431b` feat(ui_shell) — CI verde (run #13); segue commit doc di chiusura sessione |
+| Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
 ## 4. Baseline & budget
@@ -309,6 +356,24 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **BUILD `ui_shell` — implementazione completa** (build-11): T-100 (manifesto +
+  non-goals come dati coerenti col VISION §4, con invarianti di onestà: rinuncia mai
+  claim, promesse on-device), T-101 (navigazione con unico `DeletionEntryPoint` che
+  attraversa il gate `previewing→confirmed`, nessun bypass), T-102 (`HonestReport`:
+  stima marcata, caveat iCloud, conteggio parziale con invito all'accesso completo).
+  Design HIG: brand token "Aurora" dall'Android ricostruiti nativi (`AuroraTheme`) +
+  schermate `OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`.
+- **VERDE (comando)**: **CI Apple run #13 `success`** (commit `82b431b`), entrambi i
+  job — `swift build/test/lint` + `build app (iOS Simulator)`; `validate_blueprint.mjs
+  blueprint` → exit 0. `ui_shell` → `done`. **Piano di build completo (11/11).**
+- **Copertura**: AC-100/101/102 coperti dai target_tests Domain/Features puri
+  (`swift test`), incluso il nuovo target `AngavuFeaturesTests`. Le 3 schermate SwiftUI
+  + `AuroraTheme` compilate dai due job ma senza test di rendering (styling out_of_scope):
+  resa a runtime non coperta, solo compilazione. Baseline privacy invariata (nessun
+  nuovo permesso/rete). Dichiarato apertamente.
+
+### Storico build-10 (extra_photo_domains)
 
 - **BUILD `extra_photo_domains` — implementazione completa** (build-10): T-090
   (contatti duplicati dietro `ContactsProviding`, cluster per nome normalizzato +
@@ -460,15 +525,18 @@
 ## 6. Prossimi passi
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
-- **10 macrotask VERIFICATI** (oracolo Apple verde in CI): foundation, library_index,
-  safety_net, dashboard, exact_duplicates, similar_photos, large_old_media,
-  blurry_photos, video_compression, **extra_photo_domains** (run #12, `success`).
-  Nessun pending residuo. Resta aperto **solo `ui_shell`**.
-- **Prossimo e ultimo macrotask**: `ui_shell` (onboarding-manifesto + report onesto,
-  trasversale). A questo punto scatta il **promemoria design** (11-ui-shell.md):
-  estrarre i brand token dall'Android (`ui/theme/Color.kt`) e ricostruire nativo per
-  HIG con `apple-skills:design`. I pattern consolidati (port+adapter guardato, filtri
-  Domain puri + proposta→gate conferma/anteprima, motore cancellabile) restano riusabili.
+- **11 macrotask su 11 VERIFICATI** (oracolo Apple verde in CI): foundation,
+  library_index, safety_net, dashboard, exact_duplicates, similar_photos,
+  large_old_media, blurry_photos, video_compression, extra_photo_domains,
+  **ui_shell** (run #13, `success`). **Piano di build di 00-INDEX §2 completo.**
+  Nessun macrotask residuo.
+- **Nessun prossimo macrotask di BUILD.** Lavoro possibile nelle sessioni future
+  (fuori dal piano di build originale): (a) **cablaggio dati** — alimentare
+  `HonestReportView` e le sezioni con i dati veri della libreria (dashboard/
+  library_index) e iniettare le risoluzioni schermo reali per l'euristica
+  screen-recording (`large_old_media`); (b) rifinitura design/animazioni HIG
+  (`apple-skills:design`) sulle schermate `ui_shell`; (c) merge su `main`
+  (decisione utente); (d) release-review pre-App-Store (`apple-skills:release-review`).
 - **Confine Apple = CI GitHub Actions** (`.github/workflows/ci.yml`, runner
   `macos-15`): a ogni push gira `make build`/`test`/`lint` + build dell'app iOS per
   simulatore. È qui che l'oracolo Swift emette verde/rosso — **senza possedere un
