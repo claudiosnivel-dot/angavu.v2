@@ -1,0 +1,61 @@
+# Genera un .ipa NON firmato dell'app, scaricabile come artefatto.
+#
+# Perché: installare Angavu sul proprio iPhone SENZA Apple Developer Program
+# (99 $/anno) e SENZA un Mac. La compilazione avviene sul runner macOS di GitHub
+# (il "Mac in cloud"); la FIRMA + installazione le fai poi con un tool gratuito
+# (Sideloadly o AltStore/SideStore) e un Apple ID gratuito, da un PC Windows/Linux.
+# Vedi docs/INSTALL-DEV-IPHONE.md.
+#
+# Manuale (workflow_dispatch): non consuma minuti a ogni push. Lancialo da
+# GitHub → Actions → "Build unsigned IPA" → Run workflow.
+
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    name: unsigned .ipa (device)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Genera progetto Xcode (XcodeGen)
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          make app
+
+      - name: Build per device (senza firma)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project App/Angavu.xcodeproj \
+            -scheme Angavu \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Impacchetta in .ipa non firmato
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/Angavu.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::App non trovata in $APP_PATH"; ls -R build/Build/Products || true; exit 1
+          fi
+          rm -rf Payload Angavu-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r -q Angavu-unsigned.ipa Payload
+          echo "IPA creato:"; ls -lh Angavu-unsigned.ipa
+
+      - name: Carica l'artefatto .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Angavu-unsigned-ipa
+          path: Angavu-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
