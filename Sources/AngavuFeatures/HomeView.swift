@@ -23,8 +23,12 @@ public struct HomeView: View {
     @State private var showThemeSettings = false
     @State private var cancellation = CancellationToken()
     @State private var scanTask: Task<Void, Never>?
+    // Conservato per costruire le schermate a valle (Dashboard) con lo stesso grafo
+    // di dipendenze iniettato: nessun singleton nascosto.
+    private let environment: AppEnvironment
 
     public init(environment: AppEnvironment) {
+        self.environment = environment
         _vm = State(initialValue: ScanViewModel(environment: environment))
     }
 
@@ -37,6 +41,7 @@ public struct HomeView: View {
             VStack(alignment: .leading, spacing: 28) {
                 header
                 statusCard
+                if presentation.kind == .completed { dashboardLink }
                 nonGoalsLink
             }
             .padding(24)
@@ -112,6 +117,18 @@ public struct HomeView: View {
                 .font(.subheadline.weight(.semibold))
         }
         .buttonStyle(.bordered)
+    }
+
+    // MARK: Dashboard (numeri veri) — raggiungibile dal recap di scansione
+
+    private var dashboardLink: some View {
+        NavigationLink {
+            DashboardView(environment: environment)
+        } label: {
+            Label("Vedi i numeri veri", systemImage: "chart.bar.doc.horizontal")
+                .font(.headline)
+        }
+        .foregroundStyle(AuroraBrand.accentAzzurro)
     }
 
     // MARK: Non-goals
