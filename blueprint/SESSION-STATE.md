@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**sessione di BUILD rifinitura HIG — R-05**: stati vuoto/errore uniformati sull'idioma iOS 17 `ContentUnavailableView` su Dashboard/CategoryReview/Compressione/ExtraPhotoDomains, con retry preservato e distinzione onesta errore≠vuoto. **CI Apple run #43 `success`** (`9730b36`, verde al primo colpo). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; rifinitura HIG **6/12** (R-00…R-05 chiusi)) |
-| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG — R-05).** **R-05 — stati vuoto/errore uniformi su `ContentUnavailableView` (trasversale)**: empty/error-state erano card custom disomogenee (a volte `Text` nudo). Ora usano l'idioma iOS 17 `ContentUnavailableView` (icona + titolo + descrizione + azione), preservando la distinzione **onesta** errore≠vuoto e il retry dove serve: Dashboard `failedCard` (con «Riprova» gated su `showsRetry`), CategoryReview `emptyCard`, Compressione `noVideosCard`+`indexFailedCard` (con «Riprova»), ExtraPhotoDomains stato vuoto d'**intera schermata** quando contatti E calendari sono vuoti e non c'è errore/esito. **VERDE (comando, L-COL-002)**: **CI run #43 `success`** (`9730b36`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Solo-View, nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: le View sono compilate dai due job CI ma **senza test di rendering** → resa a runtime dichiarata non coperta. **Prossimo: R-06** (rispetto di Reduce Motion sulle animazioni). Storico dei task HIG precedenti (R-00…R-04) in §2 e §5. |
+| **Ultimo aggiornamento** | 2026-08-23 (**sessione di BUILD rifinitura HIG — R-06**: micro-interazioni aptiche sui momenti-firma (vocabolario per rarità `FeedbackEvent`→`FeedbackLevel` puro) + toggle «Feedback aptico» + transizione onboarding→home gated su Reduce Motion. **CI Apple run #44 `success`** (`18892a9`, verde al primo colpo). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; rifinitura HIG **7/12** (R-00…R-06 chiusi)) |
+| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG — R-06).** **R-06 — micro-interazioni & haptics + Reduce Motion (trasversale)**: i momenti-firma non davano feedback e le transizioni di fase erano tagli netti. **Layer PURO (oracolo, target_tests)**: `FeedbackEvent` (actionAdvance/destructivePreview/success/failure) → `FeedbackLevel`, vocabolario per rarità (un evento = un livello, livelli distinti — `FeedbackTests`); `HapticsPreference` (default attivo). **Guardato SwiftUI**: `FeedbackLevel.sensoryFeedback` (mappa a `SensoryFeedback`) + modificatore `.hapticFeedback(on:)` che rispetta il toggle utente (nessun buzz se disattivato). **Wiring (un solo owner per evento)**: Home fine scan (success/failure), Compressione done/failed, ExtraPhotoDomains esito (applied→success, failed→error), CategoryReview apertura anteprima distruttiva (warning), Onboarding avanzamento (impact leggero). **Transizione di fase**: onboarding→home animata con `withAnimation` + `.transition(.opacity)` ma **SEMPRE gated su Reduce Motion** (`withAnimation(nil)` = equivalente statico, parità informativa). **Toggle** «Feedback aptico» in `ThemeSettingsView` (titolo → «Impostazioni»). **VERDE (comando, L-COL-002)**: **CI run #44 `success`** (`18892a9`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata (haptics = API di sistema, nessun permesso/rete). **Copertura (L-COL-006)**: il vocabolario puro è coperto dai target_tests; wiring/transizioni/haptics compilati dai due job CI ma **senza test di rendering** → resa a runtime (vibrazioni, animazioni) dichiarata non coperta. **Prossimo: R-07** (`ProgressView` sempre etichettata + avanzamento determinato). Storico dei task HIG precedenti (R-00…R-05) in §2 e §5. |
 
 ---
 
@@ -36,7 +36,7 @@
 
 ## 2. Macrotask corrente
 
-> **⭐ IN CORSO = BUILD della rifinitura HIG (6/12).** Coda `R-00…R-11` del
+> **⭐ IN CORSO = BUILD della rifinitura HIG (7/12).** Coda `R-00…R-11` del
 > `blueprint/HIG-REFINEMENT-PLAN.md`, 1-2 task per sessione, ognuno **chiuso al
 > confine CI** (`swift build -warnings-as-errors` + `swift test` + `swiftlint
 > --strict` + build app iOS verdi). **Chiusi**: **R-00** (persistenza onboarding
@@ -55,8 +55,12 @@
 > — Dashboard errore, CategoryReview vuoto, Compressione «nessun video»+errore d'indice,
 > ExtraPhotoDomains stato vuoto d'intera schermata; retry preservato, errore≠vuoto) a
 > **run #43 `success`** (`9730b36`, verde al primo colpo).
-> **Prossimo consigliato: R-06** (rispetto di Reduce Motion sulle animazioni). Poi i
-> restanti medi R-07…R-09, infine i bassi R-10/R-11. Nessuna logica
+> **R-06** (micro-interazioni aptiche sui momenti-firma con vocabolario per rarità
+> `FeedbackEvent`→`FeedbackLevel` puro; toggle utente «Feedback aptico»; transizione
+> onboarding→home animata ma gated su Reduce Motion) a **run #44 `success`**
+> (`18892a9`, verde al primo colpo).
+> **Prossimo consigliato: R-07** (`ProgressView` sempre etichettata + avanzamento
+> determinato). Poi R-08/R-09, infine i bassi R-10/R-11. Nessuna logica
 > nuova Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if
 > canImport(SwiftUI)`; le decisioni presentabili (helper hero, label di stima,
 > vocabolario haptic) nel layer PURO con `target_tests` in `AngavuFeaturesTests`,
@@ -377,7 +381,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `9730b36` feat(ui-shell) R-05 stati vuoto/errore su `ContentUnavailableView` — **CI verde run #43** (verde al primo colpo). Precedente: `59616f0` (R-04, run #42), `57e919a` (R-03, run #41), `091b71f` (R-02, run #39) |
+| Ultimo commit | `18892a9` feat(ui-shell) R-06 micro-interazioni aptiche + Reduce Motion — **CI verde run #44** (verde al primo colpo). Precedente: `9730b36` (R-05, run #43), `59616f0` (R-04, run #42), `57e919a` (R-03, run #41) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -388,7 +392,24 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
-- **Rifinitura HIG — R-05: stati vuoto/errore uniformi** (questa sessione): empty ed
+- **Rifinitura HIG — R-06: micro-interazioni aptiche + Reduce Motion** (questa
+  sessione): i momenti-firma non davano feedback, le transizioni di fase erano tagli
+  netti. **Layer PURO (oracolo)**: `FeedbackEvent`→`FeedbackLevel`, vocabolario per
+  rarità (un evento = un livello, livelli distinti — `FeedbackTests`); `HapticsPreference`
+  (default attivo). **Guardato SwiftUI**: `FeedbackLevel.sensoryFeedback` + modificatore
+  `.hapticFeedback(on:)` subordinato al toggle utente (nessun buzz se disattivato).
+  **Wiring** (un solo owner per evento): Home fine scan (success/failure), Compressione
+  done/failed, ExtraPhotoDomains esito, CategoryReview apertura anteprima distruttiva
+  (warning), Onboarding avanzamento (impact leggero). **Transizione** onboarding→home
+  animata ma **gated su Reduce Motion** (`withAnimation(nil)` = equivalente statico).
+  **Toggle** «Feedback aptico» in `ThemeSettingsView`. Nessuna logica Domain/Data nuova.
+  - **VERDE (comando, L-COL-002)**: **CI Apple run #44 `success`** (`18892a9`, verde al
+    primo colpo) — build (-warnings-as-errors), test, lint --strict, build app iOS.
+  - **Copertura (L-COL-006)**: vocabolario puro coperto dai target_tests; wiring/
+    transizioni/haptics compilati dai due job CI ma **senza test di rendering** → resa a
+    runtime (vibrazioni, animazioni) dichiarata non coperta.
+
+- **Rifinitura HIG — R-05: stati vuoto/errore uniformi** (sessione precedente): empty ed
   error-state erano card custom disomogenee (a volte `Text` nudo). Uniformati
   sull'idioma iOS 17 **`ContentUnavailableView`** (icona + titolo + descrizione +
   azione), preservando la distinzione **onesta** errore≠vuoto e il retry dove serve:
