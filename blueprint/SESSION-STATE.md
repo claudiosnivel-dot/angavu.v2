@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 7-8/8 — coppia del manifesto** cablata alla presentazione, CI verde run #35; piano build 11/11 + `wiring` 8/8 invariati) |
-| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermate **7 e 8** (coppia del manifesto, T-100, richieste insieme dall'utente): le due viste a contenuto statico allineate alle altre 6 (Presentation pura testabile su Linux + resa SwiftUI). **Schermata 7 «Cosa NON facciamo»**: `NonGoalsPresentation` (puro, 7 target_tests) mappa i non-goals in righe con SF Symbol per categoria + invariante `allAreRenunciations` (AC-100-2); vista riscritta; **navigazione riparata** — dall'onboarding il link apriva un callback che SALTAVA l'onboarding (`onShowNonGoals`→`didFinishOnboarding`), ora è un `NavigationLink` reale verso `NonGoalsView` (callback rotto rimosso da `ContentView`). **Schermata 8 «Onboarding-manifesto»**: `OnboardingManifestoPresentation` (puro, 7 target_tests) — wordmark, headline dal contenuto, righe promessa con SF Symbol + invariante `allPromisesOnDevice` (AC-100-2); vista riscritta, mappa d'icona nel layer puro. CI verde **run #35** (`db51f27`), al primo colpo. **Guscio UI ora 8/8 schermate.** |
+| **Ultimo aggiornamento** | 2026-08-23 (**sessione di DESIGN/PIANO**: audit HIG del guscio UI 8/8 → `blueprint/HIG-REFINEMENT-PLAN.md`, 12 task atomici R-00…R-11; commit `6f93720`. Nessuna build/CI in questa sessione. Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati) |
+| **Sessione corrente** | **Chiusa (sessione di design/piano, non build).** Prodotto il **piano di rifinitura HIG** del guscio UI già completo (8/8 schermate): audit HIG di sola-lettura delle view SwiftUI (`apple-skills:ios` ui-review + `apple-skills:design` typography/game-feel), rilievi ancorati a `file:line`, sintetizzati per **pattern trasversali** in 12 task atomici (`R-00…R-11`) in `blueprint/HIG-REFINEMENT-PLAN.md`. Alti: **R-00** bug persistenza onboarding (`@State`→`@AppStorage`), **R-01** cifra-hero fissa `size:44` → text style scalabile + `monospacedDigit` + `numericText()`, **R-02** titolo duplicato (nav large + header gradiente) su 6 schermate. Medi: R-03 raggruppamento VoiceOver, R-04 label+tap target ≥44pt, R-05 stati vuoto/errore su `ContentUnavailableView`, R-06 micro-interazioni & haptics (Reduce Motion + toggle), R-07 `ProgressView` etichettata, R-08 layout adattivo `ViewThatFits`, R-09 parsimonia gradiente/glow + contrasto. Bassi: R-10 accessibilità stima/simboli, R-11 minori. **Nessuna logica nuova Domain/Data**: il lavoro vivrà in `AngavuFeatures` + `App/`; le decisioni presentabili nel layer puro con `target_tests`, le View compilate-non-rese (L-COL-006). **VERIFICA APPLE NON APPLICABILE** (sessione di piano): nessun `swift build/test/lint` né CI girati; l'oracolo Apple entrerà quando i task R-* verranno costruiti. |
 
 ---
 
@@ -36,11 +36,22 @@
 
 ## 2. Macrotask corrente
 
-> **Piano di build completo (11/11) + `wiring` (DI-009) completo (8/8).** Nessun
-> macrotask aperto: l'ultimo, `wiring`, è verde in CI (run #25). Le prossime
-> sessioni non hanno un "macrotask corrente" da costruire — solo rigenerazione
-> dell'`.ipa`, merge su `main` (decisione utente), release-review pre-App-Store, o
-> rifinitura design/animazioni HIG.
+> **⭐ PROSSIMA SESSIONE = BUILD della rifinitura HIG.** Il piano è pronto
+> (`blueprint/HIG-REFINEMENT-PLAN.md`, task atomici `R-00…R-11`): la fase di
+> progettazione è chiusa, si passa a **costruire**. Coda di lavoro: eseguire 1-2
+> task per sessione, in ordine di priorità (prima gli alti **R-00**, **R-01**,
+> **R-02**), ognuno **chiuso al confine CI** (`swift build -warnings-as-errors` +
+> `swift test` + `swiftlint --strict` + build app iOS verdi). **Primo task
+> consigliato: R-00** (bug: onboarding `@State`→`@AppStorage`, ricompare a ogni
+> avvio) oppure **R-01** (cifra-hero scalabile, tocca 4 schermate). Nessuna logica
+> nuova Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if canImport(SwiftUI)`;
+> le decisioni presentabili (helper hero, label di stima, vocabolario haptic) nel
+> layer PURO con `target_tests` in `AngavuFeaturesTests`, le View compilate-non-rese
+> (L-COL-006). L'altitudine resta invariata (Domain puro).
+>
+> **Piano di build originale completo (11/11) + `wiring` (DI-009) 8/8 + guscio UI
+> 8/8**, tutti verdi in CI. Alternative sempre disponibili (decisione utente):
+> rigenerare l'`.ipa`, merge su `main`, release-review pre-App-Store.
 
 - **Chiuso (wiring, DI-009)**: cablaggio dati completo — 7 view-model/seam dietro
   i port dell'`AppEnvironment`, tutti verificati dai target_tests in
@@ -353,7 +364,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `db51f27` feat(ui-shell) manifesto onesto — schermate 7-8 cablate alla presentazione — CI verde (run #35) |
+| Ultimo commit | `6f93720` docs(blueprint) piano di rifinitura HIG del guscio UI (design session) — nessuna CI (sessione di piano). Precedenti: `ee3b6d8`/`4445ddb` (doc chiusura guscio 7-8), `db51f27` (schermate 7-8, CI verde run #35) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -779,18 +790,20 @@
 
 ## 6. Prossimi passi
 
-- **⭐ PROSSIMA SESSIONE = PROGETTAZIONE della rifinitura HIG (deciso dall'utente
-  2026-08-23)**: NON costruire una nuova schermata; **progettare** il piano di
-  rifinitura HIG sul guscio già fatto (schermate 1–5). È una sessione di *design/piano*
-  (usare `apple-skills:design` e `apple-skills:ios` per la review HIG), non di build.
-  Perimetro atteso: coerenza tipografica e spaziatura (Dynamic Type), gerarchia e uso
-  parsimonioso del gradiente/glow Aurora, SF Symbols coerenti, stati (vuoto/carico/
-  errore) uniformi, accessibilità (VoiceOver, contrasto, target ≥44pt), micro-interazioni
-  e feedback (haptics/animazioni) dove sensato, dark mode già integrata da verificare.
-  Output: un piano/checklist di rifinitura (eventualmente task atomici) da eseguire poi
-  a cadenza, ciascuno chiuso al confine CI. Riferimento visivo: artifact mockup
-  (Chiaro/Scuro) + `AuroraTheme`. La build della schermata 6 (report onesto) e il
-  produttore di proposte restano in coda DOPO la progettazione HIG.
+- ✅ **PROGETTAZIONE della rifinitura HIG — FATTA** (2026-08-23): audit HIG del
+  guscio UI 8/8 (`apple-skills:ios` ui-review + `apple-skills:design`) → piano
+  `blueprint/HIG-REFINEMENT-PLAN.md` con 12 task atomici `R-00…R-11` raccolti per
+  pattern trasversali (perimetro coperto: tipografia/Dynamic Type, spaziatura,
+  gradiente/glow parsimonioso, SF Symbols, stati vuoto/carico/errore, accessibilità
+  VoiceOver+contrasto+tap target ≥44pt, micro-interazioni/haptics con Reduce Motion,
+  dark mode). Commit `6f93720`.
+- **⭐ PROSSIMA SESSIONE = BUILD della rifinitura HIG**: eseguire i task del piano
+  (`R-00…R-11`), 1-2 per sessione, in ordine di priorità (alti prima: **R-00** bug
+  onboarding, **R-01** cifra-hero scalabile, **R-02** titolo unico), ognuno chiuso al
+  confine CI (build+test+lint+app iOS verdi). Nessuna logica nuova Domain/Data (solo
+  `AngavuFeatures` + `App/`); decisioni presentabili nel layer puro con `target_tests`,
+  View compilate-non-rese (L-COL-006). Riferimento visivo: artifact mockup
+  (Chiaro/Scuro) + `AuroraTheme`.
 
 - **⭐ GUSCIO UI — cadenza "una schermata per sessione, fatta bene" (deciso
   dall'utente 2026-08-23)**: costruire il guscio completo che presenta i view-model
