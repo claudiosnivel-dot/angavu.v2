@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (BUILD `wiring` in corso: T-110, T-111 e T-112 verdi in CI) |
-| **Sessione corrente** | **In corso**. Macrotask `wiring` **in_progress, 3/8**: T-110 composition root (run #17), T-111 `ScanViewModel` (run #19), **T-112 `DashboardViewModel` (run #20)** verdi in CI. **Prossima → riprendere `wiring` da T-113** (schermate categorie + eliminazione via safety_net), poi T-114…T-117 |
+| **Ultimo aggiornamento** | 2026-08-23 (BUILD `wiring` **completo 8/8**, CI verde run #17→#25) |
+| **Sessione corrente** | **Chiusa sul verde**. Macrotask `wiring` **done, 8/8**: T-110 (run #17), T-111 (run #19), T-112 (run #20), T-113 (run #21), T-114 (run #22), T-115 (run #23), T-116 (run #24), T-117 (run #25) — tutti `success` in CI. **Piano di build 11/11 + `wiring` (DI-009) completi.** Nessun macrotask residuo: prossimi passi = rigenerare l'`.ipa`, merge su `main` (decisione utente), release-review pre-App-Store |
 
 ---
 
@@ -32,14 +32,20 @@
 | `video_compression` | done | **CI verde** (build+test+lint+app iOS, run #11) | T-080/T-081/T-082; stima `estimated` + gate opt-in, export HEVC cancellabile (adapter AVFoundation guardato, API async iOS18/macOS15), sostituzione solo dopo export verificato + anteprima via DeletionFlow. AC-080/081/082 verdi via target_tests (HEVCExportTests via fake) |
 | `extra_photo_domains` | done | **CI verde** (build+test+lint+app iOS, run #12) | T-090/T-091/T-092; `DI-007`. Contatti duplicati (cluster per nome normalizzato + numero/email condiviso), calendari-spam (solo sottoscrizioni sospette, mai i locali), applicazione confermata (gate `proposed→confirmed`, esito applied/cancelled/failed). Domain puro; adapter Contacts/EventKit guardati (compilati in CI, runtime device non coperto). NS…UsageDescription contatti/calendario sincere |
 | `ui_shell` | done | **CI verde** (build+test+lint+app iOS, run #13) | T-100/T-101/T-102. Manifesto+non-goals come dati (coerenti VISION §4), navigazione col gate anteprima (unico `DeletionEntryPoint`→`DeletionFlow`), `HonestReport`. Design HIG: brand token "Aurora" dall'Android ricostruiti nativi (`AuroraTheme`) + 3 schermate SwiftUI. AC-100/101/102 verdi via target_tests; nuovo target `AngavuFeaturesTests` |
-| `wiring` | in_progress | **CI verde** T-110 (run #17), T-111 (run #19), T-112 (run #20) | **3/8**: T-110 composition root (`AppEnvironment` + `live`), T-111 `ScanViewModel` (permessi→enumerazione→indice, cancellabile), T-112 `DashboardViewModel` (numeri veri per categoria, caveat iCloud, banner limited). Fix lungo il percorso: `AnalysisProgress: Sendable`. Restano T-113…T-117 |
+| `wiring` | done | **CI verde** run #17→#25 (T-110…T-117, tutti `success`) | **8/8**: T-110 composition root (`AppEnvironment`+`live`), T-111 `ScanViewModel`, T-112 `DashboardViewModel`, T-113 `CategoryReviewViewModel` (delete via `DeletionFlow`), T-114 `HonestReportViewModel` (+`LibraryFiguresReader` condiviso), T-115 `ContactsReviewViewModel`/`CalendarsReviewViewModel`, T-116 `CompressionViewModel`, T-117 `ScreenResolutionProviding`+factory. Fix lungo il percorso: `AnalysisProgress: Sendable`. Seam onesta caveat iCloud: `DeviceStorageInspecting` (residenza best-effort, raffinabile) |
 
 ## 2. Macrotask corrente
 
-> **Piano di build completo (11/11).** Nessun macrotask aperto: l'ultimo,
-> `ui_shell`, è verde in CI (run #13). Le prossime sessioni non hanno un
-> "macrotask corrente" da costruire — solo eventuale manutenzione, il cablaggio
-> dei dati veri nelle schermate `ui_shell`, o il merge su `main` (decisione utente).
+> **Piano di build completo (11/11) + `wiring` (DI-009) completo (8/8).** Nessun
+> macrotask aperto: l'ultimo, `wiring`, è verde in CI (run #25). Le prossime
+> sessioni non hanno un "macrotask corrente" da costruire — solo rigenerazione
+> dell'`.ipa`, merge su `main` (decisione utente), release-review pre-App-Store, o
+> rifinitura design/animazioni HIG.
+
+- **Chiuso (wiring, DI-009)**: cablaggio dati completo — 7 view-model/seam dietro
+  i port dell'`AppEnvironment`, tutti verificati dai target_tests in
+  `AngavuFeaturesTests` (le View SwiftUI dal build app in CI). Altitudine invariata
+  (Domain puro). Dettaglio in §5 (Storico wiring).
 
 - **Chiuso (build-11)**: `ui_shell` — implementazione **completa** dei 3 task
   atomici (T-100/T-101/T-102). Domain puro + Features platform-puro (verificati dai
@@ -347,8 +353,8 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `2142afe` feat(wiring) T-112 `DashboardViewModel` — CI verde (run #20) |
-| Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
+| Ultimo commit | `8241a0e` feat(wiring) T-117 — CI verde (run #25); `wiring` 8/8 chiuso |
+| Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
 ## 4. Baseline & budget
@@ -357,6 +363,37 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **BUILD `wiring` (DI-009) — completo 8/8** (questa sessione, T-112→T-117; T-110/T-111
+  già chiusi): cablaggio dei dati veri in view-model osservabili dietro i port
+  dell'`AppEnvironment`, verificati dai target_tests in `AngavuFeaturesTests`.
+  - **T-112 `DashboardViewModel`** (run #20): righe categoria coi byte veri
+    exact/estimated separati, banner limited, spazio recuperabile. Nuovo port onesto
+    `DeviceStorageInspecting` iniettato senza default nascosto.
+  - **T-113 `CategoryReviewViewModel`** (run #21): normalizza le 4 proposte
+    (KeepOne/Deletion/Bulk/blurry) in keep/removable e instrada OGNI eliminazione al
+    `DeletionFlow` (keep mai eliminati; nessuna anteprima vuota).
+  - **T-114 `HonestReportViewModel`** (run #22): report onesto (device vs libreria +
+    caveat iCloud). Estratto `LibraryFiguresReader` condiviso con la dashboard
+    (meno duplicazione; `DashboardViewModel` rifattorizzato a comportamento identico).
+  - **T-115 `ContactsReviewViewModel`/`CalendarsReviewViewModel`** (run #23): proposte
+    extra-foto confermabili; applicazione dietro il gate `proposed→confirmed` (T-092);
+    calendari locali mai toccati.
+  - **T-116 `CompressionViewModel`** (run #24): stima → gate opt-in → export → (su
+    success verificato + anteprima confermata) sostituzione con originale instradato
+    al `DeletionFlow`. Nessun avvio senza consenso; nessuna perdita di dati.
+  - **T-117 `ScreenResolutionProviding` + factory** (run #25): l'euristica
+    screen-recording (T-061) consuma le risoluzioni dal provider invece di hardcoded.
+- **VERDE (comando)**: **CI Apple run #17→#25 tutti `success`** (ultimo commit
+  `8241a0e`), entrambi i job — `swift build -warnings-as-errors`, `swift test`,
+  `swiftlint lint --strict` + `build app (iOS Simulator)`. Il verdetto è di un
+  **comando** (L-COL-002), verificabile nella tab Actions.
+- **Copertura dichiarata (L-COL-006)**: AC-110…117 coperti dai target_tests
+  Domain/Features puri (`swift test`) in `AngavuFeaturesTests`. Le View SwiftUI sono
+  **compilate** dal build app in CI ma **senza test di rendering**: resa a runtime non
+  coperta. `DeviceStorageInspecting` reale è compilato in CI ma la residenza per-asset
+  è **best-effort** (device==libreria), raffinabile con residenza iCloud reale (async):
+  runtime device non coperto. Baseline privacy invariata (nessun nuovo permesso/rete).
 
 - **BUILD `ui_shell` — implementazione completa** (build-11): T-100 (manifesto +
   non-goals come dati coerenti col VISION §4, con invarianti di onestà: rinuncia mai
@@ -531,18 +568,17 @@
   large_old_media, blurry_photos, video_compression, extra_photo_domains,
   **ui_shell** (run #13, `success`). **Piano di build di 00-INDEX §2 completo.**
   Nessun macrotask residuo.
-- **Macrotask `wiring` IN CORSO** (`DI-009`, `12-wiring.md`): **3/8 verdi** —
-  T-110 composition root (`AppEnvironment`+`live`, run #17), T-111 `ScanViewModel`
-  (run #19), T-112 `DashboardViewModel` (run #20: righe categoria coi byte veri
-  exact/estimated separati, spazio recuperabile via `ReclaimableSpaceCalculator`
-  con nuovo port onesto `DeviceStorageInspecting`, banner limited). Fix lungo il
-  percorso: `AnalysisProgress: Sendable`.
-  **Prossima → riprendere da T-113** (schermate categorie + eliminazione via
-  safety_net), poi T-114 (report onesto), T-115 (extra-foto), T-116 (compressione
-  video), T-117 (risoluzioni schermo).
-  Nota T-112: la residenza per-asset dell'adapter reale `SystemDeviceStorageInspector`
-  è best-effort (device==libreria) e sarà raffinata in T-114 (report onesto);
-  dichiarato apertamente (L-COL-006), compilato in CI, runtime device non coperto.
+- **Macrotask `wiring` COMPLETO** (`DI-009`, `12-wiring.md`): **8/8 verdi** in CI
+  (run #17→#25, tutti `success`). Nessun task residuo. Dettaglio in §5 (Storico
+  wiring). Nota di copertura ancora aperta: la residenza per-asset di
+  `SystemDeviceStorageInspector` è best-effort (device==libreria); la residenza
+  iCloud reale (async PhotoKit) è un raffinamento futuro dichiarato (L-COL-006).
+- **Prossimi passi possibili** (nessun macrotask da costruire):
+  1. **Rigenerare l'`.ipa`** (workflow `ipa.yml`, `workflow_dispatch`) per provare
+     l'app cablata sull'iPhone.
+  2. **Merge su `main`** (decisione utente; gate verde soddisfatto).
+  3. **Release-review pre-App-Store** (`apple-skills:release-review`).
+  4. Rifinitura design/animazioni HIG (`apple-skills:design`).
   Pattern consolidato: view-model `@Observable` dietro i port dell'AppEnvironment,
   test in `AngavuFeaturesTests`; le View verificate dal build app in CI. Ogni task
   chiude al confine con la CI verde. Poi rigenerare l'`.ipa`.
