@@ -67,6 +67,35 @@ final class ExtraPhotoDomainsPresentationTests: XCTestCase {
         XCTAssertEqual(row.displayName, "Contatto senza nome")
     }
 
+    // MARK: Etichette d'azione VoiceOver (R-04) — verbo + oggetto specifico
+
+    func test_contactActionLabel_namesTheContact_notAnIsolatedVerb() {
+        let primary = contact(id: "a", given: "Mario", family: "Rossi")
+        let row = ExtraPhotoDomainsPresentation.contactRow(
+            for: ContactMergeProposal(primary: primary, duplicates: [primary]))
+        XCTAssertEqual(row.actionLabel, "Fondi Mario Rossi")
+        // Contro-prova: l'oggetto è nell'etichetta, non un «Fondi» nudo.
+        XCTAssertNotEqual(row.actionLabel, "Fondi")
+        XCTAssertTrue(row.actionLabel.contains(row.displayName))
+    }
+
+    func test_namelessContactActionLabel_usesHonestFallback() {
+        let primary = ContactEntry(id: "a", givenName: "", familyName: "")
+        let row = ExtraPhotoDomainsPresentation.contactRow(
+            for: ContactMergeProposal(primary: primary, duplicates: [primary]))
+        XCTAssertEqual(row.actionLabel, "Fondi Contatto senza nome")
+    }
+
+    func test_calendarActionLabel_namesTheCalendar_notAnIsolatedVerb() {
+        let row = ExtraPhotoDomainsPresentation.calendarRow(
+            for: CalendarEntry(id: "sub", title: "Offerte lampo", kind: .subscription))
+        XCTAssertEqual(row.actionLabel, "Rimuovi calendario Offerte lampo")
+        // Contro-prova: non un «Rimuovi» nudo; l'oggetto («calendario» + titolo) c'è.
+        XCTAssertNotEqual(row.actionLabel, "Rimuovi")
+        XCTAssertTrue(row.actionLabel.contains(row.title))
+        XCTAssertTrue(row.actionLabel.contains("calendario"))
+    }
+
     // MARK: Calendari — i locali non compaiono mai
 
     func test_calendars_onlySuspiciousSubscriptionsAppear_neverLocals() {

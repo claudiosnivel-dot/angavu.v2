@@ -120,6 +120,16 @@ public struct ExtraPhotoDomainsView: View {
             Button("Fondi", action: action)
                 .buttonStyle(.borderless)
                 .foregroundStyle(AuroraBrand.accentViola)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .accessibilityLabel(row.actionLabel)
+        }
+        // Affordance idiomatica in lista (R-04): lo swipe apre lo STESSO gate
+        // human-gated del bottone in coda — nessuna scorciatoia distruttiva.
+        .swipeActions(edge: .trailing) {
+            Button("Fondi", action: action)
+                .tint(AuroraBrand.accentViola)
+                .accessibilityLabel(row.actionLabel)
         }
     }
 
@@ -152,6 +162,15 @@ public struct ExtraPhotoDomainsView: View {
             Spacer()
             Button("Rimuovi", role: .destructive, action: action)
                 .buttonStyle(.borderless)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .accessibilityLabel(row.actionLabel)
+        }
+        // Swipe distruttivo idiomatico (R-04): stesso gate human-gated del bottone,
+        // solo un'affordance più naturale in lista.
+        .swipeActions(edge: .trailing) {
+            Button("Rimuovi", role: .destructive, action: action)
+                .accessibilityLabel(row.actionLabel)
         }
     }
 

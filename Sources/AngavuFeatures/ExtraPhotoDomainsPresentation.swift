@@ -34,6 +34,11 @@ public struct ExtraPhotoDomainsPresentation: Equatable, Sendable {
             self.duplicateCount = duplicateCount
             self.detail = detail
         }
+
+        /// Etichetta VoiceOver del bottone d'azione: verbo + oggetto SPECIFICO, mai
+        /// un «Fondi» isolato che non dice CHI si fonde (R-04). Riusa il nome
+        /// visualizzato (già col fallback onesto per i contatti senza nome).
+        public var actionLabel: String { "Fondi \(displayName)" }
     }
 
     /// Riga presentabile di una sottoscrizione calendario rimovibile.
@@ -45,6 +50,11 @@ public struct ExtraPhotoDomainsPresentation: Equatable, Sendable {
             self.id = id
             self.title = title
         }
+
+        /// Etichetta VoiceOver dell'azione distruttiva: verbo + oggetto specifico,
+        /// mai un «Rimuovi» isolato (R-04). Nomina l'oggetto come «calendario» così
+        /// chi ascolta sa esattamente cosa sparisce.
+        public var actionLabel: String { "Rimuovi calendario \(title)" }
     }
 
     public let contactsTitle: String

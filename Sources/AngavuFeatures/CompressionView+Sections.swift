@@ -60,8 +60,13 @@ extension CompressionView {
                         estimate(for: candidate)
                     } label: {
                         CompressionCandidateRow(candidate: candidate)
+                            // Tap target ≥44pt sull'intera riga, non solo sul testo (R-04).
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    // L'azione della riga stima soltanto, non comprime: dichiaralo (R-04).
+                    .accessibilityHint(candidate.actionHint)
                     if candidate.id != candidates.last?.id { Divider() }
                 }
             }

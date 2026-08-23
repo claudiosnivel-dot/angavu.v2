@@ -136,4 +136,13 @@ final class CompressionCandidateSourceTests: XCTestCase {
         let exact = CompressionCandidate(id: "V/L0/2", originalBytes: 1_000, isSizeEstimated: false)
         XCTAssertEqual(exact.accessibilityValue(formattedBytes: "1 KB"), "1 KB")
     }
+
+    // R-04 — l'azione della riga non è ovvia: toccarla STIMA, non comprime. Il
+    // suggerimento VoiceOver lo dichiara e non nomina la compressione (che avviene
+    // solo dopo, dietro consenso opt-in T-080).
+    func test_candidate_actionHint_declaresEstimate_notCompression() {
+        let candidate = CompressionCandidate(id: "V/L0/9", originalBytes: 2_000, isSizeEstimated: false)
+        XCTAssertEqual(candidate.actionHint, "Stima il risparmio")
+        XCTAssertFalse(candidate.actionHint.lowercased().contains("comprim"))
+    }
 }

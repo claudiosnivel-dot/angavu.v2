@@ -37,6 +37,10 @@ public struct CompressionCandidate: Equatable, Sendable, Identifiable {
     public func accessibilityValue(formattedBytes: String) -> String {
         isSizeEstimated ? formattedBytes + ", stima" : formattedBytes
     }
+
+    /// Suggerimento VoiceOver del tocco sulla riga: NON comprime, stima soltanto il
+    /// risparmio (l'azione non è ovvia dalla sola etichetta «Video» + byte, R-04).
+    public var actionHint: String { "Stima il risparmio" }
 }
 
 /// Produttore dei candidati reali dall'indice. `throws`: la lettura dell'indice non
