@@ -576,6 +576,23 @@
 
 ## 6. Prossimi passi
 
+- **⭐ PROSSIMA SESSIONE (deciso dall'utente 2026-08-23) — costruire il "guscio
+  mancante"**: sostituire lo **stub** `App/ContentView.swift` (oggi una `List` con 2
+  voci) con le schermate SwiftUI reali dei mockup, che **presentano i view-model già
+  cablati** (`wiring` 8/8, tutti verdi). Nessun nuovo lavoro su Domain/Data: solo
+  strato `AngavuFeatures` + `App/`, guardato `#if canImport(SwiftUI)`, chiuso al
+  confine CI (build+test+lint+app iOS verdi). Schermate da agganciare:
+  - **Home** (mockup 2): pulsante scansione + recap onesto → `ScanViewModel`.
+  - **Dashboard «Numeri veri»** (mockup 3) → `DashboardViewModel`.
+  - **Foto simili / review categorie** (mockup 4) → `CategoryReviewViewModel`.
+  - **Rete di sicurezza** — gate anteprima (mockup 5) → `DeletionFlow`.
+  - Agganci compressione / contatti / calendari → `CompressionViewModel`,
+    `Contacts/CalendarsReviewViewModel`.
+  Riferimento visivo: artifact mockup (2 pagine Chiaro/Scuro). Le 3 viste già fatte
+  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`) restano; il tema
+  in-app (Sistema/Chiaro/Scuro) è già integrato nel guscio. Copertura attesa: viste
+  compilate dal build app iOS in CI, resa a runtime non coperta da test (L-COL-006).
+
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
 - **11 macrotask su 11 VERIFICATI** (oracolo Apple verde in CI): foundation,
   library_index, safety_net, dashboard, exact_duplicates, similar_photos,
