@@ -30,6 +30,11 @@ private struct StubByteResolver: AssetByteSizeResolving {
     }
 }
 
+private struct StubDeviceStorage: DeviceStorageInspecting {
+    func optimizeStorageStatus() -> ICloudOptimizeStorage { .disabled }
+    func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 { libraryBytes }
+}
+
 private func photo(_ id: String) -> RawEnumeratedAsset {
     RawEnumeratedAsset(
         localIdentifier: id,
@@ -48,7 +53,8 @@ private func makeEnv(access: PhotoAccess, raws: [RawEnumeratedAsset], index: Rec
         enumerator: StubEnumerator(raws: raws),
         indexReader: index,
         indexWriter: index,
-        byteResolver: StubByteResolver()
+        byteResolver: StubByteResolver(),
+        deviceStorage: StubDeviceStorage()
     )
 }
 

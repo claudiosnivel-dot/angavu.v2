@@ -30,6 +30,11 @@ private struct FakeByteResolver: AssetByteSizeResolving {
     }
 }
 
+private struct FakeDeviceStorage: DeviceStorageInspecting {
+    func optimizeStorageStatus() -> ICloudOptimizeStorage { .disabled }
+    func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 { libraryBytes }
+}
+
 private func makeEnvironment(access: PhotoAccess, indexCount: Int) -> AppEnvironment {
     let index = FakeIndex(total: indexCount)
     return AppEnvironment(
@@ -37,7 +42,8 @@ private func makeEnvironment(access: PhotoAccess, indexCount: Int) -> AppEnviron
         enumerator: FakeEnumerator(),
         indexReader: index,
         indexWriter: index,
-        byteResolver: FakeByteResolver()
+        byteResolver: FakeByteResolver(),
+        deviceStorage: FakeDeviceStorage()
     )
 }
 

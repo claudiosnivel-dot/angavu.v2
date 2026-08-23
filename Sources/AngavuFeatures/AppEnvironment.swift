@@ -19,19 +19,22 @@ public struct AppEnvironment {
     public let indexReader: any AssetIndexReading
     public let indexWriter: any AssetIndexWriting
     public let byteResolver: any AssetByteSizeResolving
+    public let deviceStorage: any DeviceStorageInspecting
 
     public init(
         authorizer: any PhotoLibraryAuthorizing,
         enumerator: any PhotoAssetEnumerating,
         indexReader: any AssetIndexReading,
         indexWriter: any AssetIndexWriting,
-        byteResolver: any AssetByteSizeResolving
+        byteResolver: any AssetByteSizeResolving,
+        deviceStorage: any DeviceStorageInspecting
     ) {
         self.authorizer = authorizer
         self.enumerator = enumerator
         self.indexReader = indexReader
         self.indexWriter = indexWriter
         self.byteResolver = byteResolver
+        self.deviceStorage = deviceStorage
     }
 }
 
@@ -49,7 +52,8 @@ extension AppEnvironment {
             enumerator: SystemPhotoAssetEnumerator(),
             indexReader: index,
             indexWriter: index,
-            byteResolver: PHAssetByteSizeResolver()
+            byteResolver: PHAssetByteSizeResolver(),
+            deviceStorage: SystemDeviceStorageInspector()
         )
     }
 }
