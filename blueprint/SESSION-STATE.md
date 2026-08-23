@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 5/N — Contatti e calendari** col gate conferma, CI verde run #33; piano build 11/11 + `wiring` 8/8 invariati) |
-| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 5 (cadenza "una schermata per sessione"): **Contatti e calendari** — presenta i due domini extra-foto cablati (`Contacts/CalendarsReviewViewModel`, T-115): contatti duplicati da fondere e sottoscrizioni calendario sospette da rimuovere, ogni azione **human-gated** (T-092: tap → `confirmationDialog` → solo allora l'adapter), i calendari **locali non compaiono mai** (T-091). `ExtraPhotoDomainsPresentation` (puro, 10 target_tests) + view guardata; composition root esteso con `ExtraDomainsPorts` opzionale (nil finché `.live()` non cabla Contacts/EventKit — assente, mai un fake). Aggancio dalla Dashboard («Oltre le foto»). CI verde **run #33** (`abf6be6`). NB: la schermata 4 (Compressione video) era stata chiusa a **run #32** (`ebe0ead`) senza aggiornare questo doc — recuperato ora |
+| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 6/N — Report onesto** cablato coi caveat, CI verde run #34; piano build 11/11 + `wiring` 8/8 invariati) |
+| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 6 (cadenza "una schermata per sessione"): **Report onesto** — cabla la schermata al `HonestReportViewModel` (T-114/T-102), finora wired ma senza schermata viva (`HonestReportView` prendeva un valore statico e non era in navigazione). `HonestReportPresentation` (puro, 10 target_tests): cifra-hero esatta **solo** se nulla è stimato, altrimenti marcata stima (mai un totale "esatto" con stime dentro, AC-102-1); righe per categoria con marca della stima; spazio recuperabile libreria vs device ORA + caveat iCloud (AC-102-1); banner conteggio parziale + invito all'accesso completo su `limited` (AC-102-2); errore con motivo + «Riprova». `HonestReportView` riscritta (`init(environment:)`); aggancio dalla Dashboard (sezione «Il quadro completo»). CI verde **run #34** (`3116bbc`), al primo colpo |
 
 ---
 
@@ -353,7 +353,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `abf6be6` feat(ui-shell) «Contatti e calendari» — schermata 5 col gate conferma — CI verde (run #33); schermata 4 (Compressione) chiusa a run #32 (`ebe0ead`) |
+| Ultimo commit | `3116bbc` feat(ui-shell) «Report onesto» — schermata 6, report cablato coi caveat — CI verde (run #34) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -364,7 +364,39 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
-- **Guscio UI — schermata 5/N: Contatti e calendari** (questa sessione; cadenza
+- **Guscio UI — schermata 6/N: Report onesto** (questa sessione; cadenza "una
+  schermata per sessione, fatta bene"): cablata la schermata del report onesto al
+  `HonestReportViewModel` (T-114) — che era wired ma senza schermata viva: la vecchia
+  `HonestReportView` prendeva un `HonestReport` statico in `init(report:)` e **non era
+  in navigazione**. Nessuna logica nuova nel Domain/Data.
+  - `HonestReportPresentation` (`Sources/AngavuFeatures/HonestReportPresentation.swift`,
+    PURO): mappa `HonestReportState` (idle/ready/failed) nelle decisioni di UI —
+    **cifra-hero** esatta SOLO quando nulla è stimato, altrimenti marcata come stima
+    (mai un unico totale "esatto" quando c'è una porzione stimata, AC-102-1); righe per
+    categoria con la marca della stima; riepilogo spazio recuperabile libreria vs device
+    ORA + **caveat iCloud** (derivato, AC-102-1); banner **conteggio parziale** con invito
+    all'accesso completo su accesso `limited` (AC-102-2); stato d'errore con motivo +
+    «Riprova». Riusa `DashboardPresentation.title(for:)` come unica fonte dei titoli
+    categoria. Testabile senza device.
+  - `HonestReportView` (`Sources/AngavuFeatures/HonestReportView.swift`, SwiftUI guardata
+    `canImport(SwiftUI)`): **riscritta** per consumare `HonestReportViewModel` via la
+    presentazione (`init(environment:)`, `onAppear` una-volta, «Riprova» ricompone),
+    invece del valore statico slegato dalla navigazione. Hero, righe categoria, card
+    recuperabile con nota iCloud, banner parziale, errore.
+  - `DashboardView`: nuova sezione «Il quadro completo» che naviga al `HonestReportView`,
+    conservando l'`AppEnvironment` iniettato (nessun singleton).
+  - **VERDE (comando)**: **CI Apple run #34 `success`** (`3116bbc`) — `swift build`
+    (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint
+    --strict`, `build app (iOS Simulator)`. Verde al primo colpo. Il verdetto è di un
+    **comando** (L-COL-002), verificabile nella tab Actions.
+  - **Copertura (L-COL-006)**: `HonestReportPresentation` coperta da 10 target_tests
+    (`HonestReportPresentationTests`: idle/ready/failed, hero esatto vs stima + contro-prova,
+    marca stima per categoria, caveat iCloud + contro-prova, banner parziale/invito +
+    contro-prova). `HonestReportViewModel` già coperto (wiring T-114). `HonestReportView`
+    compilata dai due job CI ma **senza test di rendering**: resa a runtime non coperta.
+    Baseline privacy invariata (nessun nuovo permesso/rete/framework).
+
+- **Guscio UI — schermata 5/N: Contatti e calendari** (sessione precedente; cadenza
   "una schermata per sessione, fatta bene"): costruita la schermata dei domini
   extra-foto che presenta i due view-model cablati (`Contacts/CalendarsReviewViewModel`,
   T-115). Contatti duplicati da fondere e sottoscrizioni calendario sospette da
