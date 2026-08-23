@@ -25,6 +25,18 @@ public struct CompressionCandidate: Equatable, Sendable, Identifiable {
         self.originalBytes = originalBytes
         self.isSizeEstimated = isSizeEstimated
     }
+
+    /// Etichetta VoiceOver UMANA della riga candidata. L'`id` è un
+    /// `localIdentifier` PhotoKit (rumore per chi ascolta): resta visibile a
+    /// schermo ma NON va mai letto ad alta voce.
+    public var accessibilityLabel: String { "Video" }
+
+    /// Valore VoiceOver: i byte (formattati dalla View, unica fonte del formato
+    /// locale) con la marca di stima quando il byte-size non è esatto (mai una
+    /// stima spacciata per esatta anche all'ascolto).
+    public func accessibilityValue(formattedBytes: String) -> String {
+        isSizeEstimated ? formattedBytes + ", stima" : formattedBytes
+    }
 }
 
 /// Produttore dei candidati reali dall'indice. `throws`: la lettura dell'indice non

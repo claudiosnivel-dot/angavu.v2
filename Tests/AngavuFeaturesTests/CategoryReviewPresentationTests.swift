@@ -108,4 +108,22 @@ final class CategoryReviewPresentationTests: XCTestCase {
         XCTAssertEqual(pres.title, "Screenshot")
         XCTAssertEqual(pres.subtitle, "le catture di schermo")
     }
+
+    // R-03 — VoiceOver: l'etichetta di una riga è UMANA, mai il `localIdentifier`
+    // grezzo (rumore per chi ascolta), con la disposizione come valore.
+    func test_row_accessibility_isHumanAndNeverRawIdentifier() {
+        let removable = CategoryReviewPresentation.Row(
+            id: "9F1C0A2B-1234-4E5F-ABCD-0011AA22BB33/L0/001",
+            disposition: .removable
+        )
+        XCTAssertEqual(removable.accessibilityLabel, "Elemento")
+        XCTAssertEqual(removable.accessibilityValue, "da eliminare")
+        // Contro-prova d'onestà: l'id grezzo NON compare nell'annuncio vocale.
+        XCTAssertFalse(removable.accessibilityLabel.contains(removable.id))
+        XCTAssertFalse(removable.accessibilityValue.contains(removable.id))
+
+        let keep = CategoryReviewPresentation.Row(id: "KEEP/L0/007", disposition: .keep)
+        XCTAssertEqual(keep.accessibilityValue, "da tenere")
+        XCTAssertFalse(keep.accessibilityValue.contains(keep.id))
+    }
 }

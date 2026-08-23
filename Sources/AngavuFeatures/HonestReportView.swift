@@ -59,6 +59,7 @@ public struct HonestReportView: View {
             Text(presentation.title)
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(AuroraBrand.gradient)
+                .accessibilityAddTraits(.isHeader)
             if let detail = presentation.detail, presentation.kind != .failed {
                 Text(detail)
                     .font(.title3)
@@ -128,6 +129,7 @@ public struct HonestReportView: View {
         } icon: {
             Image(systemName: "photo.badge.exclamationmark")
                 .foregroundStyle(AuroraBrand.accentAzzurro)
+                .accessibilityHidden(true)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -164,6 +166,7 @@ public struct HonestReportView: View {
                 } icon: {
                     Image(systemName: "icloud")
                         .foregroundStyle(AuroraBrand.accentBlu)
+                        .accessibilityHidden(true)
                 }
                 .padding(.top, 4)
             }
@@ -185,6 +188,7 @@ public struct HonestReportView: View {
             } icon: {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(AuroraBrand.accentFucsia)
+                    .accessibilityHidden(true)
             }
             if pres.showsRetry {
                 Button {
@@ -228,6 +232,11 @@ private struct HonestReportCategoryRow: View {
             }
         }
         .padding(.vertical, 4)
+        // VoiceOver: un solo elemento leggibile (titolo + conteggio/byte/stima),
+        // dal layer puro — non i frammenti che i figli produrrebbero.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityValue(row.accessibilityValue(formattedBytes: formatReportBytes(row.totalBytes)))
     }
 }
 #endif

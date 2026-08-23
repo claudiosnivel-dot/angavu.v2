@@ -81,7 +81,9 @@ public struct CategoryReviewView: View {
             } icon: {
                 Image(systemName: category.symbol)
                     .foregroundStyle(AuroraBrand.accentViola)
+                    .accessibilityHidden(true)
             }
+            .accessibilityAddTraits(.isHeader)
             Text(category.subtitle)
                 .font(.title3)
                 .foregroundStyle(.secondary)
@@ -141,6 +143,7 @@ public struct CategoryReviewView: View {
             } icon: {
                 Image(systemName: "arrow.uturn.backward.circle")
                     .foregroundStyle(AuroraBrand.accentAzzurro)
+                    .accessibilityHidden(true)
             }
             .padding(.top, 4)
         }
@@ -155,6 +158,7 @@ public struct CategoryReviewView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             VStack(spacing: 0) {
                 ForEach(rows, id: \.id) { row in
                     CategoryReviewRowView(row: row)
@@ -177,6 +181,7 @@ public struct CategoryReviewView: View {
             } icon: {
                 Image(systemName: "checkmark.circle")
                     .foregroundStyle(AuroraBrand.accentAzzurro)
+                    .accessibilityHidden(true)
             }
             Text("La tua libreria non contiene elementi in questa categoria. "
                 + "Se hai appena concesso l'accesso, esegui prima un'analisi dalla Home.")
@@ -201,6 +206,7 @@ public struct CategoryReviewView: View {
             } icon: {
                 Image(systemName: "checkmark.seal")
                     .foregroundStyle(AuroraBrand.accentAzzurro)
+                    .accessibilityHidden(true)
             }
             Text(pres.safetyNote)
                 .font(.subheadline)
@@ -231,6 +237,7 @@ public struct CategoryReviewView: View {
             } icon: {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(AuroraBrand.accentFucsia)
+                    .accessibilityHidden(true)
             }
             Button {
                 loadPhase = .loading
@@ -307,6 +314,7 @@ private struct CategoryReviewRowView: View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
+                .accessibilityHidden(true)
             Text(row.id)
                 .font(.body.monospaced())
                 .lineLimit(1)
@@ -317,6 +325,11 @@ private struct CategoryReviewRowView: View {
                 .foregroundStyle(tint)
         }
         .padding(.vertical, 8)
+        // VoiceOver: un solo elemento con etichetta UMANA — mai il `localIdentifier`
+        // grezzo (che resta visibile a schermo), la disposizione come valore.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityValue(row.accessibilityValue)
     }
 
     private var symbol: String {

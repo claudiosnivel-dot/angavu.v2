@@ -37,6 +37,20 @@ public struct CategoryReviewPresentation: Equatable, Sendable {
             self.id = id
             self.disposition = disposition
         }
+
+        /// Etichetta VoiceOver UMANA della riga. L'`id` è un `localIdentifier`
+        /// PhotoKit (rumore per chi ascolta): resta visibile a schermo ma NON va
+        /// mai letto ad alta voce. VoiceOver annuncia la natura dell'elemento e,
+        /// come valore, la sua disposizione.
+        public var accessibilityLabel: String { "Elemento" }
+
+        /// Valore VoiceOver: la disposizione in parole umane.
+        public var accessibilityValue: String {
+            switch disposition {
+            case .keep: return "da tenere"
+            case .removable: return "da eliminare"
+            }
+        }
     }
 
     /// Titolo della categoria di pulizia (es. «Screenshot»).

@@ -64,6 +64,7 @@ public struct HomeView: View {
             Text("Angavu")
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(AuroraBrand.gradient)
+                .accessibilityAddTraits(.isHeader)
             Text("Numeri veri, sul tuo dispositivo.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
@@ -83,7 +84,9 @@ public struct HomeView: View {
             } icon: {
                 Image(systemName: statusSymbol(for: pres.kind))
                     .foregroundStyle(statusTint(for: pres.kind))
+                    .accessibilityHidden(true)
             }
+            .accessibilityAddTraits(.isHeader)
 
             if let detail = pres.detail {
                 Text(detail)

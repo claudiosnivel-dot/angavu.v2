@@ -61,6 +61,7 @@ public struct DashboardView: View {
             Text(presentation.title)
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(AuroraBrand.gradient)
+                .accessibilityAddTraits(.isHeader)
             if let detail = presentation.detail, presentation.kind != .failed {
                 Text(detail)
                     .font(.title3)
@@ -107,6 +108,7 @@ public struct DashboardView: View {
         } icon: {
             Image(systemName: "photo.badge.exclamationmark")
                 .foregroundStyle(AuroraBrand.accentAzzurro)
+                .accessibilityHidden(true)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -133,6 +135,7 @@ public struct DashboardView: View {
                 } icon: {
                     Image(systemName: "icloud")
                         .foregroundStyle(AuroraBrand.accentBlu)
+                        .accessibilityHidden(true)
                 }
                 .padding(.top, 4)
             }
@@ -148,6 +151,7 @@ public struct DashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Rivedi ed elimina")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             ForEach(CleanupCategory.allCases, id: \.self) { category in
                 NavigationLink {
                     CategoryReviewView(environment: environment, category: category)
@@ -163,6 +167,7 @@ public struct DashboardView: View {
                     } icon: {
                         Image(systemName: category.symbol)
                             .foregroundStyle(AuroraBrand.accentViola)
+                            .accessibilityHidden(true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
@@ -179,6 +184,7 @@ public struct DashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Libera spazio senza cancellare")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             NavigationLink {
                 CompressionView(environment: environment)
             } label: {
@@ -194,6 +200,7 @@ public struct DashboardView: View {
                 } icon: {
                     Image(systemName: "arrow.down.right.and.arrow.up.left")
                         .foregroundStyle(AuroraBrand.accentViola)
+                        .accessibilityHidden(true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
@@ -211,6 +218,7 @@ public struct DashboardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Oltre le foto")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 NavigationLink {
                     ExtraPhotoDomainsView(ports: extra)
                 } label: {
@@ -226,6 +234,7 @@ public struct DashboardView: View {
                     } icon: {
                         Image(systemName: "person.2")
                             .foregroundStyle(AuroraBrand.accentViola)
+                            .accessibilityHidden(true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
@@ -242,6 +251,7 @@ public struct DashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Il quadro completo")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             NavigationLink {
                 HonestReportView(environment: environment)
             } label: {
@@ -257,6 +267,7 @@ public struct DashboardView: View {
                 } icon: {
                     Image(systemName: "doc.text.magnifyingglass")
                         .foregroundStyle(AuroraBrand.accentViola)
+                        .accessibilityHidden(true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
@@ -288,6 +299,7 @@ public struct DashboardView: View {
             } icon: {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(AuroraBrand.accentFucsia)
+                    .accessibilityHidden(true)
             }
             if pres.showsRetry {
                 Button {
@@ -331,6 +343,11 @@ private struct DashboardCategoryRow: View {
             }
         }
         .padding(.vertical, 4)
+        // VoiceOver: un solo elemento leggibile (titolo + conteggio/byte/stima),
+        // dal layer puro — non i 3-4 frammenti che i figli produrrebbero.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityValue(row.accessibilityValue(formattedBytes: formatDashboardBytes(row.totalBytes)))
     }
 }
 #endif

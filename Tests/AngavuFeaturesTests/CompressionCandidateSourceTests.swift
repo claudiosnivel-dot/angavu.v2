@@ -119,4 +119,21 @@ final class CompressionCandidateSourceTests: XCTestCase {
         let env = makeEnvironment(index: ThrowingIndex())
         XCTAssertThrowsError(try CompressionCandidateSource.candidates(from: env))
     }
+
+    // R-03 — VoiceOver: l'etichetta di un candidato è UMANA («Video»), mai il
+    // `localIdentifier` grezzo; i byte (formattati dalla View) sono il valore, con
+    // la stima marcata anche all'ascolto.
+    func test_candidate_accessibility_isHumanAndNeverRawIdentifier() {
+        let estimated = CompressionCandidate(
+            id: "9F1C0A2B-1234-4E5F-ABCD-0011AA22BB33/L0/001",
+            originalBytes: 134_217_728, isSizeEstimated: true
+        )
+        XCTAssertEqual(estimated.accessibilityLabel, "Video")
+        XCTAssertFalse(estimated.accessibilityLabel.contains(estimated.id))
+        XCTAssertEqual(estimated.accessibilityValue(formattedBytes: "128 MB"), "128 MB, stima")
+        XCTAssertFalse(estimated.accessibilityValue(formattedBytes: "128 MB").contains(estimated.id))
+
+        let exact = CompressionCandidate(id: "V/L0/2", originalBytes: 1_000, isSizeEstimated: false)
+        XCTAssertEqual(exact.accessibilityValue(formattedBytes: "1 KB"), "1 KB")
+    }
 }

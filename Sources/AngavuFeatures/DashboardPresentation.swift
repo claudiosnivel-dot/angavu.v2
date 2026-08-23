@@ -45,6 +45,19 @@ public struct DashboardPresentation: Equatable, Sendable {
             self.totalBytes = totalBytes
             self.isEstimated = isEstimated
         }
+
+        /// Etichetta VoiceOver: il titolo di categoria (umano), così la riga è un
+        /// solo elemento leggibile invece di 3-4 frammenti separati.
+        public var accessibilityLabel: String { title }
+
+        /// Valore VoiceOver: conteggio + byte (formattati dalla View, unica fonte
+        /// del formato locale) + la marca di stima quando presente (mai un totale
+        /// stimato spacciato per esatto anche all'ascolto).
+        public func accessibilityValue(formattedBytes: String) -> String {
+            let items = count == 1 ? "1 elemento" : "\(count) elementi"
+            let base = "\(items), \(formattedBytes)"
+            return isEstimated ? base + ", stima" : base
+        }
     }
 
     /// Riepilogo onesto dello spazio recuperabile: libreria vs device ORA.

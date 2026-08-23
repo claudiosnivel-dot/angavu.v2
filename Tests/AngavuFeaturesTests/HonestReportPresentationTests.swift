@@ -133,4 +133,21 @@ final class HonestReportPresentationTests: XCTestCase {
         XCTAssertTrue(pres.categoryRows.isEmpty)
         XCTAssertNil(pres.reclaimable)
     }
+
+    // R-03 — VoiceOver: la riga categoria è un solo elemento leggibile — titolo
+    // come etichetta, conteggio + byte (formattati dalla View) come valore, con
+    // la stima marcata anche all'ascolto e il singolare coniugato.
+    func test_categoryRow_accessibility_labelAndValue() {
+        let exact = HonestReportPresentation.CategoryRow(
+            category: .photo, title: "Foto", count: 3, totalBytes: 300, isEstimated: false
+        )
+        XCTAssertEqual(exact.accessibilityLabel, "Foto")
+        XCTAssertEqual(exact.accessibilityValue(formattedBytes: "300 byte"), "3 elementi, 300 byte")
+
+        let estimatedSingular = HonestReportPresentation.CategoryRow(
+            category: .video, title: "Video", count: 1, totalBytes: 900, isEstimated: true
+        )
+        XCTAssertEqual(estimatedSingular.accessibilityValue(formattedBytes: "900 byte"),
+                       "1 elemento, 900 byte, stima")
+    }
 }

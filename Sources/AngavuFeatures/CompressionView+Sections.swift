@@ -16,6 +16,7 @@ extension CompressionView {
         VStack(alignment: .leading, spacing: 8) {
             Text("Qualità della ricodifica")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             Picker("Preset", selection: $preset) {
                 ForEach(HEVCPreset.allCases, id: \.self) { option in
                     Text(presetLabel(option)).tag(option)
@@ -38,6 +39,7 @@ extension CompressionView {
         VStack(alignment: .leading, spacing: 12) {
             Text("Video nella libreria")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             if let notice = specNotice {
                 Label {
                     Text(notice)
@@ -46,6 +48,7 @@ extension CompressionView {
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "info.circle").foregroundStyle(AuroraBrand.accentAzzurro)
+                        .accessibilityHidden(true)
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -114,6 +117,7 @@ extension CompressionView {
                 Text(pres.title).font(.headline)
             } icon: {
                 Image(systemName: "checkmark.circle").foregroundStyle(AuroraBrand.accentAzzurro)
+                    .accessibilityHidden(true)
             }
             if let detail = pres.detail {
                 Text(detail)
@@ -177,6 +181,7 @@ extension CompressionView {
                 Text(pres.title).font(.headline)
             } icon: {
                 Image(systemName: "checkmark.seal").foregroundStyle(AuroraBrand.accentAzzurro)
+                    .accessibilityHidden(true)
             }
             if let output = pres.compressedOutputBytes {
                 Text("Versione compressa: \(formatCompressionBytes(output))")
@@ -192,6 +197,7 @@ extension CompressionView {
                 } icon: {
                     Image(systemName: "arrow.uturn.backward.circle")
                         .foregroundStyle(AuroraBrand.accentAzzurro)
+                        .accessibilityHidden(true)
                 }
             }
             Button {
@@ -223,6 +229,7 @@ extension CompressionView {
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: symbol).foregroundStyle(tint)
+                    .accessibilityHidden(true)
             }
             HStack(spacing: 12) {
                 if retry, let candidate = selected {
@@ -253,6 +260,7 @@ extension CompressionView {
                     .font(.headline)
             } icon: {
                 Image(systemName: "film").foregroundStyle(AuroraBrand.accentAzzurro)
+                    .accessibilityHidden(true)
             }
             Text("La tua libreria indicizzata non contiene video. Se hai appena concesso "
                 + "l'accesso, esegui prima un'analisi dalla Home.")
@@ -275,6 +283,7 @@ extension CompressionView {
             } icon: {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(AuroraBrand.accentFucsia)
+                    .accessibilityHidden(true)
             }
             Button {
                 loadPhase = .loading
@@ -299,6 +308,7 @@ private struct CompressionCandidateRow: View {
         HStack(spacing: 12) {
             Image(systemName: "film")
                 .foregroundStyle(AuroraBrand.accentViola)
+                .accessibilityHidden(true)
             Text(candidate.id)
                 .font(.body.monospaced())
                 .lineLimit(1)
@@ -315,6 +325,12 @@ private struct CompressionCandidateRow: View {
             }
         }
         .padding(.vertical, 8)
+        // VoiceOver: un solo elemento con etichetta UMANA — mai il `localIdentifier`
+        // grezzo (che resta visibile a schermo), byte + stima come valore.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(candidate.accessibilityLabel)
+        .accessibilityValue(candidate.accessibilityValue(
+            formattedBytes: formatCompressionBytes(candidate.originalBytes)))
     }
 }
 #endif

@@ -103,4 +103,29 @@ final class DashboardPresentationTests: XCTestCase {
         XCTAssertTrue(pres.categoryRows.isEmpty)
         XCTAssertNil(pres.reclaimable)
     }
+
+    // R-03 — VoiceOver: la riga categoria è un solo elemento leggibile — titolo
+    // come etichetta, conteggio + byte (formattati dalla View) come valore.
+    func test_categoryRow_accessibility_labelAndValue() {
+        let row = DashboardPresentation.CategoryRow(
+            category: .photo, title: "Foto", count: 12, totalBytes: 1_024, isEstimated: false
+        )
+        XCTAssertEqual(row.accessibilityLabel, "Foto")
+        XCTAssertEqual(row.accessibilityValue(formattedBytes: "1 KB"), "12 elementi, 1 KB")
+    }
+
+    // R-03 — VoiceOver: il singolare è coniugato e la stima è marcata anche
+    // all'ascolto (mai un totale stimato spacciato per esatto).
+    func test_categoryRow_accessibility_singularAndEstimateMarked() {
+        let singular = DashboardPresentation.CategoryRow(
+            category: .video, title: "Video", count: 1, totalBytes: 900, isEstimated: true
+        )
+        XCTAssertEqual(singular.accessibilityValue(formattedBytes: "900 byte"),
+                       "1 elemento, 900 byte, stima")
+
+        let exact = DashboardPresentation.CategoryRow(
+            category: .video, title: "Video", count: 2, totalBytes: 900, isEstimated: false
+        )
+        XCTAssertFalse(exact.accessibilityValue(formattedBytes: "900 byte").contains("stima"))
+    }
 }

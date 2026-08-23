@@ -40,6 +40,7 @@ public struct NonGoalsView: View {
             Text(presentation.title)
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(AuroraBrand.gradient)
+                .accessibilityAddTraits(.isHeader)
             Text(presentation.subtitle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -69,6 +70,8 @@ private struct NonGoalRow: View {
                 .foregroundStyle(AuroraBrand.accentFucsia)
                 .accessibilityHidden(true)
         }
+        // VoiceOver: rinuncia + motivazione come un solo elemento leggibile.
+        .accessibilityElement(children: .combine)
     }
 }
 #endif
