@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (BUILD `wiring` **completo 8/8**, CI verde run #17→#25) |
-| **Sessione corrente** | **Chiusa sul verde**. Macrotask `wiring` **done, 8/8**: T-110 (run #17), T-111 (run #19), T-112 (run #20), T-113 (run #21), T-114 (run #22), T-115 (run #23), T-116 (run #24), T-117 (run #25) — tutti `success` in CI. **Piano di build 11/11 + `wiring` (DI-009) completi.** Nessun macrotask residuo: prossimi passi = rigenerare l'`.ipa`, merge su `main` (decisione utente), release-review pre-App-Store |
+| **Ultimo aggiornamento** | 2026-08-23 (feature ad-hoc **tema in-app** Sistema/Chiaro/Scuro, CI verde run #27; piano build 11/11 + `wiring` 8/8 invariati) |
+| **Sessione corrente** | **Chiusa sul verde**. Feature ad-hoc (fuori blueprint): **selezione tema in-app** Sistema/Chiaro/Scuro — `ThemeChoice` (Domain, testato), `ThemeSettingsView`+`@AppStorage`, `AngavuApp`/`ContentView`. CI verde **run #27** (`05a280b`; #26 rosso solo lint, poi fix). Consegnati anche i **mockup dark** (artifact, 2 pagine Chiaro/Scuro). Piano build 11/11 + `wiring` 8/8 invariati; nessun macrotask residuo |
 
 ---
 
@@ -353,7 +353,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `8241a0e` feat(wiring) T-117 — CI verde (run #25); `wiring` 8/8 chiuso |
+| Ultimo commit | `05a280b` fix(theme) footer <120 col — CI verde (run #27); feature tema in-app chiusa (`a866b50`→`05a280b`) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -363,6 +363,20 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **Feature ad-hoc — tema in-app (fuori blueprint)**: selezione Sistema/Chiaro/Scuro.
+  `ThemeChoice` (Domain puro, persistenza a stringa, degrado sicuro `.system`);
+  `ThemeSettingsView` + chiave `@AppStorage("angavu.theme")` (guardata SwiftUI);
+  `AngavuApp` applica `.preferredColorScheme`; Home con ingranaggio→sheet. Il tema
+  Aurora era già adattivo (`Color(light:dark:)` + colori semantici iOS): questa è
+  l'opzione per forzarlo.
+  - **VERDE (comando)**: CI Apple **run #27 `success`** (`05a280b`) — build+test+lint
+    + build app iOS. Il run #26 (`a866b50`) era rosso **solo** sul lint
+    (`line_length` 138>120 su `ThemeSettings.swift:64`), fix riverificata.
+  - **Copertura (L-COL-006)**: `ThemeChoice` coperto da `ThemeChoiceTests` (`swift test`).
+    `ThemeSettingsView`/`AngavuApp`/`ContentView` compilati dal build app iOS ma senza
+    test di rendering: switch dark/light a runtime non coperto. Mockup dark = artefatto
+    di design (artifact), non codice verificato. Baseline privacy invariata.
 
 - **BUILD `wiring` (DI-009) — completo 8/8** (questa sessione, T-112→T-117; T-110/T-111
   già chiusi): cablaggio dei dati veri in view-model osservabili dietro i port
