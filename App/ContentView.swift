@@ -19,8 +19,7 @@ struct ContentView: View {
                 HomeView(environment: .live(context: modelContext))
             } else {
                 OnboardingManifestoView(
-                    onContinue: { didFinishOnboarding = true },
-                    onShowNonGoals: { didFinishOnboarding = true }
+                    onContinue: { didFinishOnboarding = true }
                 )
             }
         }
