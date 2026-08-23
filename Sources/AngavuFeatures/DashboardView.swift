@@ -82,6 +82,7 @@ public struct DashboardView: View {
             categoriesList(pres.categoryRows)
             cleanupSection
             compressionSection
+            extraDomainsSection
         case .failed:
             failedCard(pres)
         }
@@ -195,6 +196,39 @@ public struct DashboardView: View {
                 .background(.thinMaterial, in: .rect(cornerRadius: 12))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: Contatti e calendari — domini extra-foto (solo se le porte sono cablate)
+
+    @ViewBuilder
+    private var extraDomainsSection: some View {
+        if let extra = environment.extraDomains {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Oltre le foto")
+                    .font(.headline)
+                NavigationLink {
+                    ExtraPhotoDomainsView(ports: extra)
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Contatti e calendari").font(.headline)
+                            Text("Contatti duplicati da fondere e sottoscrizioni "
+                                + "calendario sospette — sempre su tua conferma.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } icon: {
+                        Image(systemName: "person.2")
+                            .foregroundStyle(AuroraBrand.accentViola)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(.thinMaterial, in: .rect(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

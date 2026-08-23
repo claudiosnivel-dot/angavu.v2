@@ -22,6 +22,9 @@ public struct AppEnvironment {
     public let deviceStorage: any DeviceStorageInspecting
     public let videoExporter: any VideoExporting
     public let videoSpecProvider: any VideoSpecProviding
+    /// Porte dei domini extra-foto (contatti, calendari). `nil` finché non cablate
+    /// dal grafo reale: capacità permission-gated ASSENTE, mai un fake nascosto.
+    public let extraDomains: ExtraDomainsPorts?
 
     public init(
         authorizer: any PhotoLibraryAuthorizing,
@@ -31,7 +34,8 @@ public struct AppEnvironment {
         byteResolver: any AssetByteSizeResolving,
         deviceStorage: any DeviceStorageInspecting,
         videoExporter: any VideoExporting,
-        videoSpecProvider: any VideoSpecProviding
+        videoSpecProvider: any VideoSpecProviding,
+        extraDomains: ExtraDomainsPorts? = nil
     ) {
         self.authorizer = authorizer
         self.enumerator = enumerator
@@ -41,6 +45,30 @@ public struct AppEnvironment {
         self.deviceStorage = deviceStorage
         self.videoExporter = videoExporter
         self.videoSpecProvider = videoSpecProvider
+        self.extraDomains = extraDomains
+    }
+}
+
+/// Porte dei domini extra-foto raccolte insieme: contatti duplicati (merge) e
+/// calendari-spam (rimozione sottoscrizione). Sono capacità permission-gated,
+/// presenti solo quando `AppEnvironment.live` le costruisce; l'assenza è esplicita
+/// (`AppEnvironment.extraDomains == nil`), mai un fake che finge di funzionare.
+public struct ExtraDomainsPorts {
+    public let contactsProvider: any ContactsProviding
+    public let contactMerger: any ContactMerging
+    public let calendarsProvider: any CalendarsProviding
+    public let calendarRemover: any CalendarSubscriptionRemoving
+
+    public init(
+        contactsProvider: any ContactsProviding,
+        contactMerger: any ContactMerging,
+        calendarsProvider: any CalendarsProviding,
+        calendarRemover: any CalendarSubscriptionRemoving
+    ) {
+        self.contactsProvider = contactsProvider
+        self.contactMerger = contactMerger
+        self.calendarsProvider = calendarsProvider
+        self.calendarRemover = calendarRemover
     }
 }
 
@@ -61,8 +89,24 @@ extension AppEnvironment {
             byteResolver: PHAssetByteSizeResolver(),
             deviceStorage: SystemDeviceStorageInspector(),
             videoExporter: AVFoundationVideoExporter(),
-            videoSpecProvider: AVFoundationVideoSpecProvider()
+            videoSpecProvider: AVFoundationVideoSpecProvider(),
+            extraDomains: liveExtraDomains()
         )
+    }
+
+    /// Costruisce le porte extra-foto reali quando i framework sono disponibili
+    /// (iOS/macOS); altrimenti `nil` — la schermata dichiara la capacità assente.
+    private static func liveExtraDomains() -> ExtraDomainsPorts? {
+        #if canImport(Contacts) && canImport(EventKit)
+        return ExtraDomainsPorts(
+            contactsProvider: SystemContactsProvider(),
+            contactMerger: SystemContactMerger(),
+            calendarsProvider: SystemCalendarsProvider(),
+            calendarRemover: SystemCalendarSubscriptionRemover()
+        )
+        #else
+        return nil
+        #endif
     }
 }
 #endif
