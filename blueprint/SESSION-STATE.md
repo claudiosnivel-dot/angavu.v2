@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**sessione di DESIGN/PIANO**: audit HIG del guscio UI 8/8 → `blueprint/HIG-REFINEMENT-PLAN.md`, 12 task atomici R-00…R-11; commit `6f93720`. Nessuna build/CI in questa sessione. Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati) |
-| **Sessione corrente** | **Chiusa (sessione di design/piano, non build).** Prodotto il **piano di rifinitura HIG** del guscio UI già completo (8/8 schermate): audit HIG di sola-lettura delle view SwiftUI (`apple-skills:ios` ui-review + `apple-skills:design` typography/game-feel), rilievi ancorati a `file:line`, sintetizzati per **pattern trasversali** in 12 task atomici (`R-00…R-11`) in `blueprint/HIG-REFINEMENT-PLAN.md`. Alti: **R-00** bug persistenza onboarding (`@State`→`@AppStorage`), **R-01** cifra-hero fissa `size:44` → text style scalabile + `monospacedDigit` + `numericText()`, **R-02** titolo duplicato (nav large + header gradiente) su 6 schermate. Medi: R-03 raggruppamento VoiceOver, R-04 label+tap target ≥44pt, R-05 stati vuoto/errore su `ContentUnavailableView`, R-06 micro-interazioni & haptics (Reduce Motion + toggle), R-07 `ProgressView` etichettata, R-08 layout adattivo `ViewThatFits`, R-09 parsimonia gradiente/glow + contrasto. Bassi: R-10 accessibilità stima/simboli, R-11 minori. **Nessuna logica nuova Domain/Data**: il lavoro vivrà in `AngavuFeatures` + `App/`; le decisioni presentabili nel layer puro con `target_tests`, le View compilate-non-rese (L-COL-006). **VERIFICA APPLE NON APPLICABILE** (sessione di piano): nessun `swift build/test/lint` né CI girati; l'oracolo Apple entrerà quando i task R-* verranno costruiti. |
+| **Ultimo aggiornamento** | 2026-08-23 (**sessione di BUILD rifinitura HIG — R-00 + R-01**: onboarding persistito con `@AppStorage`; cifra-hero scalabile con Dynamic Type. **CI Apple run #38 `success`** (`f0b22ec`). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; rifinitura HIG **2/12** (R-00, R-01 chiusi)) |
+| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG, 2 task).** Costruiti i due task **alti** della coda R-* del `HIG-REFINEMENT-PLAN.md`, ognuno chiuso al confine CI. **R-00 — persistenza onboarding (bug reale)**: `App/ContentView.swift` passava `didFinishOnboarding` come `@State` → azzerato a ogni cold-launch, l'onboarding-manifesto ricompariva a ogni avvio; ora `@AppStorage(OnboardingGate.didFinishStorageKey)`, compare una sola volta per installazione. Decisione «mostrare l'onboarding?» estratta nel PURO `OnboardingGate` (Features) → oracolo `OnboardingGateTests` (3 target_test) su Linux. **R-01 — cifra-hero scalabile (trasversale)**: le cifre-hero usavano una dimensione FISSA `.font(.system(size: 44/40 …))`, non scalabile col Dynamic Type e troncata alle AX sizes, con `monospacedDigit` incoerente. Introdotto `AuroraType` (PURO): stile cifra-hero come dati — text style semantico `largeTitle`, rounded, bold, `monospacedDigit`, cap Dynamic Type `accessibility3` (oracolo `AuroraTypeTests`, 3 target_test). Resa SwiftUI in `AuroraTheme`: `Font` derivato + modificatore `.auroraHeroNumber()` (`dynamicTypeSize` capped, `.contentTransition(.numericText())` **gated su Reduce Motion**, unico punto di traduzione). Riuso su tutte le cifre-hero: Dashboard, Review categorie, Report onesto (esatta+stima), Compressione; `monospacedDigit` aggiunto anche al valore «liberabili ora» del Report onesto. **VERDE (comando, L-COL-002)**: **CI run #38 `success`** — build (-warnings-as-errors), test (target_tests+regressione), `swiftlint lint --strict`, build app iOS. NB: run #37 era rosso **solo** sul lint (nesting `AuroraType.swift:23`, `TextStyle` a 2 livelli → promosso a `AuroraType.HeroTextStyle`), fix riverificata su #38. **Copertura (L-COL-006)**: helper puri coperti dai target_test (incl. cap Dynamic Type e cifre monospaziate); le View SwiftUI compilate dai due job CI ma **senza test di rendering**. **Nessuna logica nuova Domain/Data**: altitudine invariata. Baseline privacy invariata (nessun nuovo permesso/rete/framework). Prossimo: **R-02** (titolo unico per schermata, niente doppioni nav-large + header gradiente su 6 schermate). |
 
 ---
 
@@ -36,18 +36,19 @@
 
 ## 2. Macrotask corrente
 
-> **⭐ PROSSIMA SESSIONE = BUILD della rifinitura HIG.** Il piano è pronto
-> (`blueprint/HIG-REFINEMENT-PLAN.md`, task atomici `R-00…R-11`): la fase di
-> progettazione è chiusa, si passa a **costruire**. Coda di lavoro: eseguire 1-2
-> task per sessione, in ordine di priorità (prima gli alti **R-00**, **R-01**,
-> **R-02**), ognuno **chiuso al confine CI** (`swift build -warnings-as-errors` +
-> `swift test` + `swiftlint --strict` + build app iOS verdi). **Primo task
-> consigliato: R-00** (bug: onboarding `@State`→`@AppStorage`, ricompare a ogni
-> avvio) oppure **R-01** (cifra-hero scalabile, tocca 4 schermate). Nessuna logica
-> nuova Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if canImport(SwiftUI)`;
-> le decisioni presentabili (helper hero, label di stima, vocabolario haptic) nel
-> layer PURO con `target_tests` in `AngavuFeaturesTests`, le View compilate-non-rese
-> (L-COL-006). L'altitudine resta invariata (Domain puro).
+> **⭐ IN CORSO = BUILD della rifinitura HIG (2/12).** Coda `R-00…R-11` del
+> `blueprint/HIG-REFINEMENT-PLAN.md`, 1-2 task per sessione, ognuno **chiuso al
+> confine CI** (`swift build -warnings-as-errors` + `swift test` + `swiftlint
+> --strict` + build app iOS verdi). **Chiusi (CI run #38 `success`)**: **R-00**
+> (persistenza onboarding `@State`→`@AppStorage` + `OnboardingGate` puro) e
+> **R-01** (cifra-hero scalabile: `AuroraType` puro + `.auroraHeroNumber()` su
+> Dashboard/Review/Report/Compressione). **Prossimo consigliato: R-02** (titolo
+> unico per schermata — niente doppione nav-large + header a gradiente su 6
+> schermate). Poi i medi R-03…R-09, infine i bassi R-10/R-11. Nessuna logica
+> nuova Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if
+> canImport(SwiftUI)`; le decisioni presentabili (helper hero, label di stima,
+> vocabolario haptic) nel layer PURO con `target_tests` in `AngavuFeaturesTests`,
+> le View compilate-non-rese (L-COL-006). L'altitudine resta invariata (Domain puro).
 >
 > **Piano di build originale completo (11/11) + `wiring` (DI-009) 8/8 + guscio UI
 > 8/8**, tutti verdi in CI. Alternative sempre disponibili (decisione utente):
@@ -364,7 +365,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `6f93720` docs(blueprint) piano di rifinitura HIG del guscio UI (design session) — nessuna CI (sessione di piano). Precedenti: `ee3b6d8`/`4445ddb` (doc chiusura guscio 7-8), `db51f27` (schermate 7-8, CI verde run #35) |
+| Ultimo commit | `f0b22ec` fix(ui-shell) R-01 appiattisci HeroTextStyle (SwiftLint nesting) — **CI verde run #38**. Precedenti: `dea3fc5` (R-01 cifra-hero, run #37 rosso solo-lint), `f934ad4` (R-00 onboarding `@AppStorage`), `6f93720` (piano rifinitura HIG) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
