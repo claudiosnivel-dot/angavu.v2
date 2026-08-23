@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 1/N — Home reale** con flusso di scansione cablato, CI verde run #28; piano build 11/11 + `wiring` 8/8 invariati) |
-| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 1 (cadenza "una schermata per sessione"): sostituito lo stub `ContentView`/`HomeView` con la **Home reale** che presenta `ScanViewModel` (avvia/annulla stop cooperativo/progresso/recap onesto con conteggio parziale marcato/errore→«Apri Impostazioni»). Composition root SwiftData nell'app (`AngavuApp` installa il modelContainer, `ContentView` inietta `AppEnvironment.live`). `HomeScanPresentation` (puro, 8 target_tests). CI verde **run #28** (`de79c07`) |
+| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 2/N — Dashboard «Numeri veri»** col recap navigabile, CI verde run #29; piano build 11/11 + `wiring` 8/8 invariati) |
+| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 2 (cadenza "una schermata per sessione"): **Dashboard «Numeri veri»** che presenta `DashboardViewModel` (T-112) — righe per categoria coi byte veri (exact/estimated separati, la stima marcata), spazio recuperabile con caveat iCloud (libreria vs device ORA), banner accesso limited col totale dichiarato parziale, stato d'errore con motivo esplicito + «Riprova». `DashboardPresentation` (puro, 9 target_tests). Aggancio di navigazione dal recap della Home (`completed` → «Vedi i numeri veri»). CI verde **run #29** (`2d19b82`) |
 
 ---
 
@@ -353,7 +353,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `de79c07` feat(ui-shell) Home reale con scansione cablata — CI verde (run #28) |
+| Ultimo commit | `2d19b82` feat(ui-shell) Dashboard «Numeri veri» — schermata 2 col recap navigabile — CI verde (run #29) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -364,7 +364,34 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
-- **Guscio UI — schermata 1/N: Home reale** (questa sessione; cadenza "una
+- **Guscio UI — schermata 2/N: Dashboard «Numeri veri»** (questa sessione; cadenza
+  "una schermata per sessione, fatta bene"): costruita la Dashboard che presenta il
+  `DashboardViewModel` (T-112) già cablato. Nessuna logica nuova nel Domain/Data.
+  - `DashboardPresentation` (`Sources/AngavuFeatures/DashboardPresentation.swift`,
+    PURO): mappa `DashboardState` (`idle`/`ready`/`failed`) nelle decisioni di UI —
+    righe per categoria (titolo localizzato, conteggio, byte totali + **marca della
+    quota stimata**), riepilogo dello spazio recuperabile (libreria vs device ORA +
+    **caveat iCloud** quando device < libreria), banner accesso limited e **marca del
+    totale parziale**, stato d'errore con motivo + «Riprova». Testabile senza device.
+  - `DashboardView` (`Sources/AngavuFeatures/DashboardView.swift`, SwiftUI guardata
+    `canImport(SwiftUI)`): rendering — carica alla comparsa (`onAppear` una volta),
+    banner limited, card spazio recuperabile con nota iCloud, righe categoria, stato
+    d'errore con Riprova. Byte formattati `.byteCount(.file)` (locale-aware).
+  - `HomeView`: conserva l'`AppEnvironment` iniettato e aggiunge il link
+    `DashboardView` nel recap (visibile solo a scansione `completed`): nessun singleton.
+  - **VERDE (comando)**: **CI Apple run #29 `success`** (`2d19b82`), entrambi i job
+    step per step — `swift build -warnings-as-errors` (22s), `swift test` (target_tests
+    + regressione, 20s), `swiftlint lint --strict` (4s) + `build app (iOS Simulator)`
+    (XcodeGen + build no-signing, 46s). Il verdetto è di un **comando** (L-COL-002),
+    verificabile nella tab Actions.
+  - **Copertura (L-COL-006)**: `DashboardPresentation` coperta da 9 target_tests
+    (`DashboardPresentationTests`: idle/ready/failed, marcatura stima + contro-prova,
+    caveat iCloud + contro-prova, banner limited + contro-prova). `DashboardViewModel`
+    già coperto (wiring T-112). `DashboardView` compilata dai due job CI ma **senza
+    test di rendering**: resa a runtime non coperta. Baseline privacy invariata
+    (nessun nuovo permesso/rete/framework).
+
+- **Guscio UI — schermata 1/N: Home reale** (sessione precedente; cadenza "una
   schermata per sessione, fatta bene" decisa dall'utente 2026-08-23): sostituito lo
   stub `ContentView`/`HomeView` con la Home vera che presenta `ScanViewModel` (T-111).
   - `HomeScanPresentation` (`Sources/AngavuFeatures/HomeScanPresentation.swift`, PURO):
@@ -609,18 +636,24 @@
   su Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if canImport(SwiftUI)`.
   - ✅ **Home** (schermata 1, FATTA — run #28): scansione + recap onesto →
     `ScanViewModel`, presentazione pura `HomeScanPresentation` (8 target_tests).
-  - **⭐ PROSSIMA (schermata 2): Dashboard «Numeri veri»** → `DashboardViewModel`.
-    Righe categoria coi byte veri (exact/estimated **separati**, mai fusi), spazio
-    recuperabile con caveat iCloud (libreria vs device ora), banner accesso limited.
-    Modello già pronto (`DashboardScreen`/`DashboardState`); pattern: view SwiftUI
-    guardata che presenta lo stato, aggancio di navigazione dalla Home (recap →
-    dashboard). Copertura attesa: `DashboardViewModel` già coperto dai target_tests;
-    la view compilata dai job CI, resa runtime non coperta (L-COL-006).
-  - **Poi (schermate successive)**: review categorie → `CategoryReviewViewModel`; rete
-    di sicurezza (gate anteprima) → `DeletionFlow`; compressione → `CompressionViewModel`;
-    contatti/calendari → `Contacts/CalendarsReviewViewModel`.
+  - ✅ **Dashboard «Numeri veri»** (schermata 2, FATTA — run #29): righe categoria coi
+    byte veri (exact/estimated **separati**, la stima marcata), spazio recuperabile con
+    caveat iCloud (libreria vs device ora), banner accesso limited col totale parziale →
+    `DashboardViewModel`, presentazione pura `DashboardPresentation` (9 target_tests).
+    Aggancio di navigazione dal recap della Home (`completed` → «Vedi i numeri veri»).
+  - **⭐ PROSSIMA (schermata 3): review categorie** → `CategoryReviewViewModel` (T-113).
+    Presenta una categoria di proposte (KeepOne/Deletion/Bulk/blurry normalizzate in
+    keep/removable) e instrada OGNI eliminazione al `DeletionFlow` col **gate anteprima
+    obbligatorio** (keep mai eliminati; nessuna anteprima vuota). Pattern consolidato:
+    presentazione pura testabile (`CategoryReviewPresentation`) + view SwiftUI guardata
+    + aggancio dalla Dashboard (riga categoria → review). Copertura attesa: view-model
+    già coperto (wiring T-113); la nuova presentazione coperta dai target_tests, la view
+    compilata dai job CI con resa runtime non coperta (L-COL-006). NB: il gate anteprima
+    di `safety_net` (T-050) è la rete di sicurezza — nessuna eliminazione in autonomia.
+  - **Poi (schermate successive)**: rete di sicurezza (gate anteprima) → `DeletionFlow`;
+    compressione → `CompressionViewModel`; contatti/calendari → `Contacts/CalendarsReviewViewModel`.
   Riferimento visivo: artifact mockup (2 pagine Chiaro/Scuro). Viste già fatte
-  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`/**`HomeView`**) restano;
+  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`/`HomeView`/**`DashboardView`**) restano;
   tema in-app già integrato. Copertura attesa per ogni schermata: view compilata dal
   build app iOS in CI, resa a runtime non coperta da test (L-COL-006).
 
