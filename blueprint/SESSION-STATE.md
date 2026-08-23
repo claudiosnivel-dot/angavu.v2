@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-22 (BUILD `wiring` in corso: T-110 e T-111 verdi in CI) |
-| **Sessione corrente** | **Chiusa**. Macrotask `wiring` **in_progress, 2/8**: T-110 composition root (run #17) e T-111 `ScanViewModel` (run #19) verdi in CI; fix `AnalysisProgress: Sendable` lungo il percorso. **Prossima sessione → riprendere `wiring` da T-112** (dashboard view-model), poi T-113…T-117 |
+| **Ultimo aggiornamento** | 2026-08-23 (BUILD `wiring` in corso: T-110, T-111 e T-112 verdi in CI) |
+| **Sessione corrente** | **In corso**. Macrotask `wiring` **in_progress, 3/8**: T-110 composition root (run #17), T-111 `ScanViewModel` (run #19), **T-112 `DashboardViewModel` (run #20)** verdi in CI. **Prossima → riprendere `wiring` da T-113** (schermate categorie + eliminazione via safety_net), poi T-114…T-117 |
 
 ---
 
@@ -32,7 +32,7 @@
 | `video_compression` | done | **CI verde** (build+test+lint+app iOS, run #11) | T-080/T-081/T-082; stima `estimated` + gate opt-in, export HEVC cancellabile (adapter AVFoundation guardato, API async iOS18/macOS15), sostituzione solo dopo export verificato + anteprima via DeletionFlow. AC-080/081/082 verdi via target_tests (HEVCExportTests via fake) |
 | `extra_photo_domains` | done | **CI verde** (build+test+lint+app iOS, run #12) | T-090/T-091/T-092; `DI-007`. Contatti duplicati (cluster per nome normalizzato + numero/email condiviso), calendari-spam (solo sottoscrizioni sospette, mai i locali), applicazione confermata (gate `proposed→confirmed`, esito applied/cancelled/failed). Domain puro; adapter Contacts/EventKit guardati (compilati in CI, runtime device non coperto). NS…UsageDescription contatti/calendario sincere |
 | `ui_shell` | done | **CI verde** (build+test+lint+app iOS, run #13) | T-100/T-101/T-102. Manifesto+non-goals come dati (coerenti VISION §4), navigazione col gate anteprima (unico `DeletionEntryPoint`→`DeletionFlow`), `HonestReport`. Design HIG: brand token "Aurora" dall'Android ricostruiti nativi (`AuroraTheme`) + 3 schermate SwiftUI. AC-100/101/102 verdi via target_tests; nuovo target `AngavuFeaturesTests` |
-| `wiring` | in_progress | **CI verde** T-110 (run #17), T-111 (run #19) | **2/8**: T-110 composition root (`AppEnvironment` + `live`), T-111 `ScanViewModel` (permessi→enumerazione→indice, cancellabile). Fix lungo il percorso: `AnalysisProgress: Sendable`. Restano T-112…T-117 |
+| `wiring` | in_progress | **CI verde** T-110 (run #17), T-111 (run #19), T-112 (run #20) | **3/8**: T-110 composition root (`AppEnvironment` + `live`), T-111 `ScanViewModel` (permessi→enumerazione→indice, cancellabile), T-112 `DashboardViewModel` (numeri veri per categoria, caveat iCloud, banner limited). Fix lungo il percorso: `AnalysisProgress: Sendable`. Restano T-113…T-117 |
 
 ## 2. Macrotask corrente
 
@@ -347,7 +347,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `ce315f9` docs (guida install iPhone); ultimo commit di codice `82b431b` feat(ui_shell) — CI verde (run #13) |
+| Ultimo commit | `2142afe` feat(wiring) T-112 `DashboardViewModel` — CI verde (run #20) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -531,12 +531,18 @@
   large_old_media, blurry_photos, video_compression, extra_photo_domains,
   **ui_shell** (run #13, `success`). **Piano di build di 00-INDEX §2 completo.**
   Nessun macrotask residuo.
-- **Macrotask `wiring` IN CORSO** (`DI-009`, `12-wiring.md`): **2/8 verdi** —
+- **Macrotask `wiring` IN CORSO** (`DI-009`, `12-wiring.md`): **3/8 verdi** —
   T-110 composition root (`AppEnvironment`+`live`, run #17), T-111 `ScanViewModel`
-  (run #19). Fix lungo il percorso: `AnalysisProgress: Sendable`.
-  **Prossima sessione → riprendere da T-112** (dashboard view-model), poi T-113
-  (schermate categorie + eliminazione via safety_net), T-114 (report onesto),
-  T-115 (extra-foto), T-116 (compressione video), T-117 (risoluzioni schermo).
+  (run #19), T-112 `DashboardViewModel` (run #20: righe categoria coi byte veri
+  exact/estimated separati, spazio recuperabile via `ReclaimableSpaceCalculator`
+  con nuovo port onesto `DeviceStorageInspecting`, banner limited). Fix lungo il
+  percorso: `AnalysisProgress: Sendable`.
+  **Prossima → riprendere da T-113** (schermate categorie + eliminazione via
+  safety_net), poi T-114 (report onesto), T-115 (extra-foto), T-116 (compressione
+  video), T-117 (risoluzioni schermo).
+  Nota T-112: la residenza per-asset dell'adapter reale `SystemDeviceStorageInspector`
+  è best-effort (device==libreria) e sarà raffinata in T-114 (report onesto);
+  dichiarato apertamente (L-COL-006), compilato in CI, runtime device non coperto.
   Pattern consolidato: view-model `@Observable` dietro i port dell'AppEnvironment,
   test in `AngavuFeaturesTests`; le View verificate dal build app in CI. Ogni task
   chiude al confine con la CI verde. Poi rigenerare l'`.ipa`.
