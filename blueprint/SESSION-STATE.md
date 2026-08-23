@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 6/N — Report onesto** cablato coi caveat, CI verde run #34; piano build 11/11 + `wiring` 8/8 invariati) |
-| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 6 (cadenza "una schermata per sessione"): **Report onesto** — cabla la schermata al `HonestReportViewModel` (T-114/T-102), finora wired ma senza schermata viva (`HonestReportView` prendeva un valore statico e non era in navigazione). `HonestReportPresentation` (puro, 10 target_tests): cifra-hero esatta **solo** se nulla è stimato, altrimenti marcata stima (mai un totale "esatto" con stime dentro, AC-102-1); righe per categoria con marca della stima; spazio recuperabile libreria vs device ORA + caveat iCloud (AC-102-1); banner conteggio parziale + invito all'accesso completo su `limited` (AC-102-2); errore con motivo + «Riprova». `HonestReportView` riscritta (`init(environment:)`); aggancio dalla Dashboard (sezione «Il quadro completo»). CI verde **run #34** (`3116bbc`), al primo colpo |
+| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 7-8/8 — coppia del manifesto** cablata alla presentazione, CI verde run #35; piano build 11/11 + `wiring` 8/8 invariati) |
+| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermate **7 e 8** (coppia del manifesto, T-100, richieste insieme dall'utente): le due viste a contenuto statico allineate alle altre 6 (Presentation pura testabile su Linux + resa SwiftUI). **Schermata 7 «Cosa NON facciamo»**: `NonGoalsPresentation` (puro, 7 target_tests) mappa i non-goals in righe con SF Symbol per categoria + invariante `allAreRenunciations` (AC-100-2); vista riscritta; **navigazione riparata** — dall'onboarding il link apriva un callback che SALTAVA l'onboarding (`onShowNonGoals`→`didFinishOnboarding`), ora è un `NavigationLink` reale verso `NonGoalsView` (callback rotto rimosso da `ContentView`). **Schermata 8 «Onboarding-manifesto»**: `OnboardingManifestoPresentation` (puro, 7 target_tests) — wordmark, headline dal contenuto, righe promessa con SF Symbol + invariante `allPromisesOnDevice` (AC-100-2); vista riscritta, mappa d'icona nel layer puro. CI verde **run #35** (`db51f27`), al primo colpo. **Guscio UI ora 8/8 schermate.** |
 
 ---
 
@@ -353,7 +353,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `3116bbc` feat(ui-shell) «Report onesto» — schermata 6, report cablato coi caveat — CI verde (run #34) |
+| Ultimo commit | `db51f27` feat(ui-shell) manifesto onesto — schermate 7-8 cablate alla presentazione — CI verde (run #35) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -364,7 +364,45 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
-- **Guscio UI — schermata 6/N: Report onesto** (questa sessione; cadenza "una
+- **Guscio UI — schermate 7-8/8: coppia del manifesto** (questa sessione; le due
+  schermate richieste insieme dall'utente). Erano le uniche due viste del guscio a
+  **contenuto statico** senza layer di presentazione puro: ora allineate alle altre 6.
+  Nessuna logica nuova nel Domain/Data (contenuto già in `ManifestContent`, T-100).
+  - **Schermata 7 — «Cosa NON facciamo»** (`NonGoalsView`):
+    - `NonGoalsPresentation` (`Sources/AngavuFeatures/NonGoalsPresentation.swift`, PURO):
+      mappa `ManifestContent.nonGoals` in righe presentabili con **SF Symbol per
+      categoria** (prima un'unica `xmark`); porta in superficie l'invariante di onestà
+      `allAreRenunciations` (nessun non-goal è un claim di capacità, AC-100-2). Riusa la
+      mappa d'icona come dato puro.
+    - `NonGoalsView` riscritta per consumare la presentazione + `navigationTitle` inline
+      (guardato `UIKit`).
+    - **Navigazione riparata (bug reale)**: dall'onboarding il link «Cosa NON facciamo»
+      invocava `onShowNonGoals` che faceva solo `didFinishOnboarding = true` → **saltava
+      l'onboarding e andava alla Home**, la schermata non veniva mai mostrata da lì. Ora
+      è un `NavigationLink` reale verso `NonGoalsView`; callback rotto rimosso da
+      `ContentView`. (Restava comunque raggiungibile dalla Home, `HomeView`.)
+  - **Schermata 8 — «Onboarding-manifesto»** (`OnboardingManifestoView`):
+    - `OnboardingManifestoPresentation` (`Sources/AngavuFeatures/OnboardingManifestoPresentation.swift`,
+      PURO): wordmark, headline dal contenuto, righe promessa con **SF Symbol**;
+      invariante `allPromisesOnDevice` (ogni promessa mantenibile on-device, AC-100-2).
+    - `OnboardingManifestoView` riscritta per consumare la presentazione; mappa d'icona
+      `symbol(for:)` spostata nel layer puro (prima era nella view).
+  - **VERDE (comando)**: **CI Apple run #35 `success`** (`db51f27`) — `swift build`
+    (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint
+    --strict`, `build app (iOS Simulator)`. Verde al primo colpo. Il verdetto è di un
+    **comando** (L-COL-002), verificabile nella tab Actions.
+  - **Copertura (L-COL-006)**: `NonGoalsPresentation` (7 target_tests:
+    `NonGoalsPresentationTests`) e `OnboardingManifestoPresentation` (7 target_tests:
+    `OnboardingManifestoPresentationTests`) coperti in `AngavuFeaturesTests`, **incluse
+    le contro-prove degli invarianti** (un claim di capacità rompe `allAreRenunciations`;
+    una promessa non-on-device rompe `allPromisesOnDevice` → oracoli non vacui) e la
+    distinzione delle icone per categoria. Le due View SwiftUI sono compilate dai due job
+    CI ma **senza test di rendering**: resa a runtime non coperta. Baseline privacy
+    invariata (nessun nuovo permesso/rete/framework; solo SF Symbols di sistema).
+  - **Guscio UI: 8/8 schermate «fatte bene»** (Home, Dashboard, Review categorie,
+    Compressione, Contatti/calendari, Report onesto, Cosa NON facciamo, Onboarding).
+
+- **Guscio UI — schermata 6/N: Report onesto** (sessione precedente; cadenza "una
   schermata per sessione, fatta bene"): cablata la schermata del report onesto al
   `HonestReportViewModel` (T-114) — che era wired ma senza schermata viva: la vecchia
   `HonestReportView` prendeva un `HonestReport` statico in `init(report:)` e **non era
