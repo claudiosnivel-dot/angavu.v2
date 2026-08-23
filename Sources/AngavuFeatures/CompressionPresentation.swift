@@ -88,69 +88,87 @@ public struct CompressionPresentation: Equatable, Sendable {
         + "~30 giorni: la sostituzione avviene solo dopo la tua conferma."
 
     /// Deriva la presentazione dallo stato della compressione. Deterministica e
-    /// totale: ogni `CompressionState` ha una e una sola presentazione.
+    /// totale: ogni `CompressionState` ha una e una sola presentazione. Le factory
+    /// per-fase tengono questo dispatch corto (function_body_length) senza cambiare
+    /// il comportamento.
     public init(state: CompressionState) {
         switch state {
-        case .idle:
-            self = .init(
-                phase: .idle,
-                title: "Comprimi video",
-                detail: "Angavu stima quanto spazio libereresti ricodificando in HEVC, "
-                    + "tutto sul dispositivo. Scegli un video per la stima."
-            )
-        case .estimated(let saving):
-            self = .init(
-                phase: .estimated,
-                title: "Risparmio stimato",
-                detail: "È una stima: la compressione reale può variare. Nessuna "
-                    + "ricodifica parte senza il tuo consenso.",
-                estimatedSavingBytes: saving.bytes,
-                offersConsent: true
-            )
-        case .consented:
-            self = .init(
-                phase: .consented,
-                title: "Pronto a comprimere",
-                detail: "Consenso registrato. Alla conferma dell'anteprima l'originale "
-                    + "sarà sostituito con la versione compressa.",
-                offersCompression: true
-            )
-        case .exporting:
-            self = .init(
-                phase: .working,
-                title: "Compressione in corso…",
-                detail: "Ricodifica HEVC sul dispositivo. Il video originale è intatto.",
-                isWorking: true
-            )
-        case .replacing:
-            self = .init(
-                phase: .working,
-                title: "Sostituzione in corso…",
-                detail: "Export riuscito: sto instradando l'originale alla rete di sicurezza.",
-                isWorking: true
-            )
-        case .done(let replacement):
-            self = .init(
-                phase: .done,
-                title: "Compressione completata",
-                detail: "La versione compressa è pronta; l'originale è stato instradato "
-                    + "alla rete di sicurezza.",
-                compressedOutputBytes: replacement.compressed.outputBytes,
-                safetyNote: Self.safetyNetText
-            )
-        case .cancelled:
-            self = .init(
-                phase: .cancelled,
-                title: "Compressione annullata",
-                detail: "Nessuna modifica: il video originale è intatto."
-            )
-        case .failed(let reason):
-            self = .init(
-                phase: .failed,
-                title: "Compressione non riuscita",
-                detail: reason,
-                offersRetry: true
-            )
+        case .idle: self = Self.idlePresentation
+        case .estimated(let saving): self = Self.estimatedPresentation(saving: saving)
+        case .consented: self = Self.consentedPresentation
+        case .exporting: self = Self.exportingPresentation
+        case .replacing: self = Self.replacingPresentation
+        case .done(let replacement): self = Self.donePresentation(replacement: replacement)
+        case .cancelled: self = Self.cancelledPresentation
+        case .failed(let reason): self = Self.failedPresentation(reason: reason)
         }
+    }
+
+    // MARK: Factory per-fase (comportamento identico, dispatch corto)
+
+    private static let idlePresentation = CompressionPresentation(
+        phase: .idle,
+        title: "Comprimi video",
+        detail: "Angavu stima quanto spazio libereresti ricodificando in HEVC, "
+            + "tutto sul dispositivo. Scegli un video per la stima."
+    )
+
+    private static func estimatedPresentation(saving: ByteSize) -> CompressionPresentation {
+        CompressionPresentation(
+            phase: .estimated,
+            title: "Risparmio stimato",
+            detail: "È una stima: la compressione reale può variare. Nessuna "
+                + "ricodifica parte senza il tuo consenso.",
+            estimatedSavingBytes: saving.bytes,
+            offersConsent: true
+        )
+    }
+
+    private static let consentedPresentation = CompressionPresentation(
+        phase: .consented,
+        title: "Pronto a comprimere",
+        detail: "Consenso registrato. Alla conferma dell'anteprima l'originale "
+            + "sarà sostituito con la versione compressa.",
+        offersCompression: true
+    )
+
+    private static let exportingPresentation = CompressionPresentation(
+        phase: .working,
+        title: "Compressione in corso…",
+        detail: "Ricodifica HEVC sul dispositivo. Il video originale è intatto.",
+        isWorking: true
+    )
+
+    private static let replacingPresentation = CompressionPresentation(
+        phase: .working,
+        title: "Sostituzione in corso…",
+        detail: "Export riuscito: sto instradando l'originale alla rete di sicurezza.",
+        isWorking: true
+    )
+
+    private static func donePresentation(replacement: CompressedReplacement) -> CompressionPresentation {
+        CompressionPresentation(
+            phase: .done,
+            title: "Compressione completata",
+            detail: "La versione compressa è pronta; l'originale è stato instradato "
+                + "alla rete di sicurezza.",
+            compressedOutputBytes: replacement.compressed.outputBytes,
+            safetyNote: safetyNetText
+        )
+    }
+
+    private static let cancelledPresentation = CompressionPresentation(
+        phase: .cancelled,
+        title: "Compressione annullata",
+        detail: "Nessuna modifica: il video originale è intatto."
+    )
+
+    private static func failedPresentation(reason: String) -> CompressionPresentation {
+        CompressionPresentation(
+            phase: .failed,
+            title: "Compressione non riuscita",
+            detail: reason,
+            offersRetry: true
+        )
     }
 }
