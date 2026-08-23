@@ -83,6 +83,7 @@ public struct DashboardView: View {
             cleanupSection
             compressionSection
             extraDomainsSection
+            reportSection
         case .failed:
             failedCard(pres)
         }
@@ -229,6 +230,36 @@ public struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    // MARK: Report onesto — riepilogo numeri veri coi caveat
+
+    private var reportSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Il quadro completo")
+                .font(.headline)
+            NavigationLink {
+                HonestReportView(environment: environment)
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Report onesto").font(.headline)
+                        Text("Byte reali per categoria, spazio recuperabile e caveat "
+                            + "iCloud — numeri veri, mai gonfiati.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } icon: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .foregroundStyle(AuroraBrand.accentViola)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(.thinMaterial, in: .rect(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
         }
     }
 
