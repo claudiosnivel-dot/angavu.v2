@@ -115,4 +115,46 @@ public final class CategoryReviewViewModel {
     public func requestDeletionOfAllRemovable() -> Bool {
         requestDeletion(of: review.removableIds)
     }
+
+    // MARK: - Gate d'anteprima a passi (per la UX reale)
+    //
+    // `requestDeletion` sopra attraversa il gate in un colpo solo (comodo per gli
+    // oracoli). La schermata reale, invece, DEVE mostrare l'anteprima e attendere
+    // l'assenso esplicito dell'utente: questi metodi espongono le transizioni del
+    // `DeletionFlow` una alla volta, senza mai aggirarlo (T-050). Restano fedeli
+    // agli stessi invarianti: solo id **removable** eleggibili, mai i keep; nessuna
+    // anteprima vuota.
+
+    /// Apre l'anteprima per gli id eleggibili (filtrati ai soli removable) e si
+    /// ferma lì, in attesa dell'assenso. Restituisce `true` sse l'anteprima si è
+    /// aperta su un insieme non vuoto (AC-113-2: selezione vuota ⇒ rifiutata).
+    @discardableResult
+    public func presentDeletionPreview(of ids: [String]) -> Bool {
+        let removable = Set(review.removableIds)
+        let eligible = ids.filter { removable.contains($0) }
+        guard !eligible.isEmpty else { return false }
+        return flow.presentPreview(for: eligible)
+    }
+
+    /// Comodità: apre l'anteprima per tutti i removable della proposta.
+    @discardableResult
+    public func presentDeletionPreviewForAllRemovable() -> Bool {
+        presentDeletionPreview(of: review.removableIds)
+    }
+
+    /// L'utente conferma l'anteprima mostrata: accetta e passa a `confirmed`
+    /// sull'insieme previewato. Consentito solo da un'anteprima aperta; l'insieme
+    /// confermato coincide con quello previewato (mai i keep). Restituisce `true`
+    /// sse è arrivato a `confirmed` (AC-113-1).
+    @discardableResult
+    public func confirmDeletion() -> Bool {
+        guard flow.acceptPreview() else { return false }
+        return flow.confirm()
+    }
+
+    /// L'utente annulla: azzera il gate e torna a rivedere (nessuna eliminazione).
+    /// Il `DeletionFlow` è un value type, quindi si riparte da uno pulito.
+    public func cancelDeletion() {
+        flow = DeletionFlow()
+    }
 }

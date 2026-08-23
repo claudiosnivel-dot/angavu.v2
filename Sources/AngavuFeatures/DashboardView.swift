@@ -21,8 +21,12 @@ private func formatDashboardBytes(_ bytes: Int64) -> String {
 
 public struct DashboardView: View {
     @State private var vm: DashboardViewModel
+    // Conservato per costruire le schermate a valle (review categorie) con lo
+    // stesso grafo di dipendenze iniettato: nessun singleton nascosto.
+    private let environment: AppEnvironment
 
     public init(environment: AppEnvironment) {
+        self.environment = environment
         _vm = State(initialValue: DashboardViewModel(environment: environment))
     }
 
@@ -76,6 +80,7 @@ public struct DashboardView: View {
             if pres.showsLimitedBanner { limitedBanner }
             if let reclaimable = pres.reclaimable { reclaimableCard(reclaimable) }
             categoriesList(pres.categoryRows)
+            cleanupSection
         case .failed:
             failedCard(pres)
         }
@@ -129,6 +134,37 @@ public struct DashboardView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial, in: .rect(cornerRadius: 16))
+    }
+
+    // MARK: Rivedi ed elimina — aggancio alle schermate di review (gate anteprima)
+
+    private var cleanupSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Rivedi ed elimina")
+                .font(.headline)
+            ForEach(CleanupCategory.allCases, id: \.self) { category in
+                NavigationLink {
+                    CategoryReviewView(environment: environment, category: category)
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(category.title).font(.headline)
+                            Text(category.subtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } icon: {
+                        Image(systemName: category.symbol)
+                            .foregroundStyle(AuroraBrand.accentViola)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(.thinMaterial, in: .rect(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: Righe per categoria
