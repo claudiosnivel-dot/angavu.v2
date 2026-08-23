@@ -45,6 +45,9 @@ public struct DashboardView: View {
         }
         .background(AuroraBrand.glow.ignoresSafeArea())
         .navigationTitle("Numeri veri")
+        #if canImport(UIKit)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .onAppear {
             // Carica una sola volta alla comparsa; il pull di «Riprova» ricarica.
             if case .idle = vm.state { vm.load() }

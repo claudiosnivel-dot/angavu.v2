@@ -63,6 +63,9 @@ public struct CompressionView: View {
         }
         .background(AuroraBrand.glow.ignoresSafeArea())
         .navigationTitle("Comprimi video")
+        #if canImport(UIKit)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .alert("Sostituire l'originale?", isPresented: confirmationBinding) {
             Button("Annulla", role: .cancel) { pendingConfirmation = nil }
             Button("Comprimi e sostituisci", role: .destructive) { startCompression() }

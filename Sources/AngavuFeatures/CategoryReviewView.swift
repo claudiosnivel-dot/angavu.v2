@@ -57,6 +57,9 @@ public struct CategoryReviewView: View {
         }
         .background(AuroraBrand.glow.ignoresSafeArea())
         .navigationTitle(category.title)
+        #if canImport(UIKit)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .safeAreaInset(edge: .bottom) { actionBar }
         .alert(previewAlertTitle, isPresented: isPreviewing) {
             Button("Annulla", role: .cancel) { vm.cancelDeletion() }

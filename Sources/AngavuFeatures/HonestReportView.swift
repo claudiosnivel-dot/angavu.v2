@@ -43,6 +43,9 @@ public struct HonestReportView: View {
         }
         .background(AuroraBrand.glow.ignoresSafeArea())
         .navigationTitle("Report onesto")
+        #if canImport(UIKit)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .onAppear {
             // Carica una sola volta alla comparsa; «Riprova» ricompone.
             if case .idle = vm.state { vm.load() }

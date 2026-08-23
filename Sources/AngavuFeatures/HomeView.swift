@@ -49,6 +49,9 @@ public struct HomeView: View {
         }
         .background(AuroraBrand.glow.ignoresSafeArea())
         .navigationTitle("Angavu")
+        #if canImport(UIKit)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar { toolbarContent }
         .safeAreaInset(edge: .bottom) { actionBar }
         .sheet(isPresented: $showThemeSettings) { themeSheet }
