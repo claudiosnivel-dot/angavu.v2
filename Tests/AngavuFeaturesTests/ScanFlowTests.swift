@@ -54,7 +54,9 @@ private func makeEnv(access: PhotoAccess, raws: [RawEnumeratedAsset], index: Rec
         indexReader: index,
         indexWriter: index,
         byteResolver: StubByteResolver(),
-        deviceStorage: StubDeviceStorage()
+        deviceStorage: StubDeviceStorage(),
+        videoExporter: NoopVideoExporter(),
+        videoSpecProvider: NoopVideoSpecProvider()
     )
 }
 

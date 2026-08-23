@@ -43,7 +43,9 @@ private func makeEnvironment(access: PhotoAccess, indexCount: Int) -> AppEnviron
         indexReader: index,
         indexWriter: index,
         byteResolver: FakeByteResolver(),
-        deviceStorage: FakeDeviceStorage()
+        deviceStorage: FakeDeviceStorage(),
+        videoExporter: NoopVideoExporter(),
+        videoSpecProvider: NoopVideoSpecProvider()
     )
 }
 

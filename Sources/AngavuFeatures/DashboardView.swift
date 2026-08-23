@@ -81,6 +81,7 @@ public struct DashboardView: View {
             if let reclaimable = pres.reclaimable { reclaimableCard(reclaimable) }
             categoriesList(pres.categoryRows)
             cleanupSection
+            compressionSection
         case .failed:
             failedCard(pres)
         }
@@ -164,6 +165,36 @@ public struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    // MARK: Comprimi video — libera spazio senza cancellare (opt-in)
+
+    private var compressionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Libera spazio senza cancellare")
+                .font(.headline)
+            NavigationLink {
+                CompressionView(environment: environment)
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Comprimi video").font(.headline)
+                        Text("Ricodifica HEVC on-device, opt-in: stima il risparmio "
+                            + "prima di procedere, l'originale resta recuperabile.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } icon: {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        .foregroundStyle(AuroraBrand.accentViola)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(.thinMaterial, in: .rect(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
         }
     }
 

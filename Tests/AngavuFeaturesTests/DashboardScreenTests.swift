@@ -78,7 +78,9 @@ private func makeEnv(
         indexReader: index,
         indexWriter: index,
         byteResolver: MapByteResolver(sizes: sizes),
-        deviceStorage: StubDeviceStorage(optimize: optimize)
+        deviceStorage: StubDeviceStorage(optimize: optimize),
+        videoExporter: NoopVideoExporter(),
+        videoSpecProvider: NoopVideoSpecProvider()
     )
 }
 

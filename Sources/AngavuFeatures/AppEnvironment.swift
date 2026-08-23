@@ -20,6 +20,8 @@ public struct AppEnvironment {
     public let indexWriter: any AssetIndexWriting
     public let byteResolver: any AssetByteSizeResolving
     public let deviceStorage: any DeviceStorageInspecting
+    public let videoExporter: any VideoExporting
+    public let videoSpecProvider: any VideoSpecProviding
 
     public init(
         authorizer: any PhotoLibraryAuthorizing,
@@ -27,7 +29,9 @@ public struct AppEnvironment {
         indexReader: any AssetIndexReading,
         indexWriter: any AssetIndexWriting,
         byteResolver: any AssetByteSizeResolving,
-        deviceStorage: any DeviceStorageInspecting
+        deviceStorage: any DeviceStorageInspecting,
+        videoExporter: any VideoExporting,
+        videoSpecProvider: any VideoSpecProviding
     ) {
         self.authorizer = authorizer
         self.enumerator = enumerator
@@ -35,6 +39,8 @@ public struct AppEnvironment {
         self.indexWriter = indexWriter
         self.byteResolver = byteResolver
         self.deviceStorage = deviceStorage
+        self.videoExporter = videoExporter
+        self.videoSpecProvider = videoSpecProvider
     }
 }
 
@@ -53,7 +59,9 @@ extension AppEnvironment {
             indexReader: index,
             indexWriter: index,
             byteResolver: PHAssetByteSizeResolver(),
-            deviceStorage: SystemDeviceStorageInspector()
+            deviceStorage: SystemDeviceStorageInspector(),
+            videoExporter: AVFoundationVideoExporter(),
+            videoSpecProvider: AVFoundationVideoSpecProvider()
         )
     }
 }

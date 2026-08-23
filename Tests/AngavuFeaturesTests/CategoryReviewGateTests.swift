@@ -53,7 +53,9 @@ private func makeEnvironment<Index: AssetIndexReading & AssetIndexWriting>(index
         indexReader: index,
         indexWriter: index,
         byteResolver: FakeByteResolver(),
-        deviceStorage: FakeDeviceStorage()
+        deviceStorage: FakeDeviceStorage(),
+        videoExporter: NoopVideoExporter(),
+        videoSpecProvider: NoopVideoSpecProvider()
     )
 }
 
