@@ -779,6 +779,19 @@
 
 ## 6. Prossimi passi
 
+- **⭐ PROSSIMA SESSIONE = PROGETTAZIONE della rifinitura HIG (deciso dall'utente
+  2026-08-23)**: NON costruire una nuova schermata; **progettare** il piano di
+  rifinitura HIG sul guscio già fatto (schermate 1–5). È una sessione di *design/piano*
+  (usare `apple-skills:design` e `apple-skills:ios` per la review HIG), non di build.
+  Perimetro atteso: coerenza tipografica e spaziatura (Dynamic Type), gerarchia e uso
+  parsimonioso del gradiente/glow Aurora, SF Symbols coerenti, stati (vuoto/carico/
+  errore) uniformi, accessibilità (VoiceOver, contrasto, target ≥44pt), micro-interazioni
+  e feedback (haptics/animazioni) dove sensato, dark mode già integrata da verificare.
+  Output: un piano/checklist di rifinitura (eventualmente task atomici) da eseguire poi
+  a cadenza, ciascuno chiuso al confine CI. Riferimento visivo: artifact mockup
+  (Chiaro/Scuro) + `AuroraTheme`. La build della schermata 6 (report onesto) e il
+  produttore di proposte restano in coda DOPO la progettazione HIG.
+
 - **⭐ GUSCIO UI — cadenza "una schermata per sessione, fatta bene" (deciso
   dall'utente 2026-08-23)**: costruire il guscio completo che presenta i view-model
   già cablati (`wiring` 8/8, tutti verdi), UNA schermata per sessione con tutti i
