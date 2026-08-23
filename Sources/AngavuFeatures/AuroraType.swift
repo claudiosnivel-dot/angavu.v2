@@ -14,19 +14,21 @@ public enum AuroraType {
         case accessibility3
     }
 
+    /// Text style semantico Dynamic Type di una cifra-hero (mappato a
+    /// `Font.TextStyle` nella View). Tipo di primo livello per non violare la
+    /// regola SwiftLint di annidamento (max 1 livello).
+    public enum HeroTextStyle: String, Equatable, Sendable {
+        case largeTitle
+        case title
+    }
+
     /// Stile della cifra-hero: un text style SEMANTICO (scala con Dynamic Type),
     /// non una dimensione fissa; cifre monospaziate per non "ballare" mentre
     /// cambiano a runtime. Descrizione pura, tradotta in `Font`/modificatori dalla
     /// View.
     public struct HeroNumberStyle: Equatable, Sendable {
-        /// Text style semantico Dynamic Type (mappato a `Font.TextStyle` nella View).
-        public enum TextStyle: String, Equatable, Sendable {
-            case largeTitle
-            case title
-        }
-
         /// Il text style di base (scala col Dynamic Type dell'utente).
-        public let textStyle: TextStyle
+        public let textStyle: HeroTextStyle
         /// Design arrotondato (coerente col carattere del brand).
         public let rounded: Bool
         /// Peso grassetto.
@@ -37,7 +39,7 @@ public enum AuroraType {
         public let dynamicTypeCap: DynamicTypeCap
 
         public init(
-            textStyle: TextStyle,
+            textStyle: HeroTextStyle,
             rounded: Bool,
             bold: Bool,
             monospacedDigit: Bool,
