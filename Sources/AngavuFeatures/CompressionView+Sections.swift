@@ -73,7 +73,7 @@ extension CompressionView {
     func estimateCard(_ pres: CompressionPresentation) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("~ \(formatCompressionBytes(pres.estimatedSavingBytes ?? 0))")
-                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .auroraHeroNumber()
                 .foregroundStyle(AuroraBrand.gradient)
             Text("risparmio stimato")
                 .font(.headline)

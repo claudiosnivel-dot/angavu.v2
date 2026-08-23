@@ -41,6 +41,61 @@ public enum AuroraBrand {
     )
 }
 
+// MARK: - Cifra-hero (R-01): resa SwiftUI dello stile PURO `AuroraType.heroNumber`
+
+extension AuroraType.HeroNumberStyle {
+    /// Traduce il text style semantico in `Font.TextStyle` (scala col Dynamic Type).
+    var fontTextStyle: Font.TextStyle {
+        switch textStyle {
+        case .largeTitle: return .largeTitle
+        case .title: return .title
+        }
+    }
+
+    /// Il `Font` risultante: text style semantico + design arrotondato + peso +
+    /// cifre monospaziate. Nessuna dimensione fissa → scala col Dynamic Type.
+    var font: Font {
+        var font = Font.system(fontTextStyle, design: rounded ? .rounded : .default)
+        if bold { font = font.weight(.bold) }
+        if monospacedDigit { font = font.monospacedDigit() }
+        return font
+    }
+
+    /// Il cap superiore del Dynamic Type tradotto in `DynamicTypeSize`.
+    var maxDynamicTypeSize: DynamicTypeSize {
+        switch dynamicTypeCap {
+        case .accessibility3: return .accessibility3
+        }
+    }
+}
+
+/// Modificatore che applica lo stile cifra-hero del brand a un `Text`. La
+/// `.contentTransition(.numericText())` (la cifra "scorre" invece di
+/// teletrasportare quando cambia a runtime) è **gated su Reduce Motion** (R-06):
+/// con Reduce Motion attivo il cambio è netto, senza animazione.
+struct AuroraHeroNumberModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// La cifra cambia a runtime (idle→ready): abilita il transition numerico.
+    let animatesChange: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .font(AuroraType.heroNumber.font)
+            .dynamicTypeSize(...AuroraType.heroNumber.maxDynamicTypeSize)
+            .contentTransition(animatesChange && !reduceMotion ? .numericText() : .identity)
+    }
+}
+
+public extension View {
+    /// Applica lo stile cifra-hero del brand (R-01): text style semantico
+    /// scalabile con Dynamic Type, `design: .rounded`, `.bold`, `.monospacedDigit`
+    /// e — se `animatesChange` e Reduce Motion è spento — `.contentTransition(.numericText())`.
+    /// Sostituisce il `.font(.system(size: 44 …))` fisso su ogni cifra-hero.
+    func auroraHeroNumber(animatesChange: Bool = true) -> some View {
+        modifier(AuroraHeroNumberModifier(animatesChange: animatesChange))
+    }
+}
+
 extension Color {
     /// Costruisce un colore che sceglie fra due esadecimali secondo il color
     /// scheme (light/dark) del sistema. Rispetta dark mode senza asset catalog.

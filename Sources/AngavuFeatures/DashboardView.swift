@@ -115,7 +115,7 @@ public struct DashboardView: View {
     private func reclaimableCard(_ summary: DashboardPresentation.ReclaimableSummary) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(formatDashboardBytes(summary.deviceBytesNow))
-                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .auroraHeroNumber()
                 .foregroundStyle(AuroraBrand.gradient)
             Text("liberabili sul telefono ora")
                 .font(.headline)

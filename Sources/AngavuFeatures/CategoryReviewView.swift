@@ -120,7 +120,7 @@ public struct CategoryReviewView: View {
     private func summaryCard(_ pres: CategoryReviewPresentation) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("\(pres.removableCount)")
-                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .auroraHeroNumber()
                 .foregroundStyle(AuroraBrand.gradient)
             Text(pres.removableCount == 1 ? "elemento da eliminare" : "elementi da eliminare")
                 .font(.headline)

@@ -90,14 +90,14 @@ public struct HonestReportView: View {
         VStack(alignment: .leading, spacing: 6) {
             if hero.isExact {
                 Text(formatReportBytes(hero.bytes))
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .auroraHeroNumber()
                     .foregroundStyle(AuroraBrand.gradient)
                 Text("recuperabili")
                     .font(.headline)
                     .foregroundStyle(.secondary)
             } else {
                 Text("~ \(formatReportBytes(hero.bytes))")
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .auroraHeroNumber()
                     .foregroundStyle(AuroraBrand.gradient)
                 Text("stima (parte dei byte non è misurata con precisione)")
                     .font(.subheadline)
@@ -146,7 +146,7 @@ public struct HonestReportView: View {
     private func reclaimableCard(_ summary: HonestReportPresentation.ReclaimableSummary) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(formatReportBytes(summary.deviceBytesNow))
-                .font(.title2.weight(.semibold))
+                .font(.title2.weight(.semibold).monospacedDigit())
                 .foregroundStyle(.primary)
             Text("liberabili sul telefono ora")
                 .font(.subheadline)
