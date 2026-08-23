@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 3/N — Review categorie «Rivedi ed elimina»** col gate anteprima, CI verde run #30; piano build 11/11 + `wiring` 8/8 invariati) |
-| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 3 (cadenza "una schermata per sessione"): **Review categorie «Rivedi ed elimina»** che presenta `CategoryReviewViewModel` (T-113) con la UX del **gate d'anteprima obbligatorio** della rete di sicurezza (`DeletionFlow`, T-050) — righe keep/removable, azione «Elimina» che apre SEMPRE l'anteprima (alert conferma/annulla), mai i keep, mai un'anteprima vuota, stato vuoto e stato d'errore con «Riprova». `CategoryReviewPresentation` (puro, 11 target_tests) + gate a passi sul view-model. Dati **reali** dall'indice per gli **Screenshot** (filtro puro sul sottotipo indicizzato, zero API device-only); le altre categorie richiedono un produttore di proposte (device/soglie), non fabbricato. Aggancio dalla Dashboard (sezione «Rivedi ed elimina»). CI verde **run #30** (`3906a00`) |
+| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 5/N — Contatti e calendari** col gate conferma, CI verde run #33; piano build 11/11 + `wiring` 8/8 invariati) |
+| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 5 (cadenza "una schermata per sessione"): **Contatti e calendari** — presenta i due domini extra-foto cablati (`Contacts/CalendarsReviewViewModel`, T-115): contatti duplicati da fondere e sottoscrizioni calendario sospette da rimuovere, ogni azione **human-gated** (T-092: tap → `confirmationDialog` → solo allora l'adapter), i calendari **locali non compaiono mai** (T-091). `ExtraPhotoDomainsPresentation` (puro, 10 target_tests) + view guardata; composition root esteso con `ExtraDomainsPorts` opzionale (nil finché `.live()` non cabla Contacts/EventKit — assente, mai un fake). Aggancio dalla Dashboard («Oltre le foto»). CI verde **run #33** (`abf6be6`). NB: la schermata 4 (Compressione video) era stata chiusa a **run #32** (`ebe0ead`) senza aggiornare questo doc — recuperato ora |
 
 ---
 
@@ -353,7 +353,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `3906a00` feat(ui-shell) Review categorie «Rivedi ed elimina» — schermata 3 col gate anteprima — CI verde (run #30) |
+| Ultimo commit | `abf6be6` feat(ui-shell) «Contatti e calendari» — schermata 5 col gate conferma — CI verde (run #33); schermata 4 (Compressione) chiusa a run #32 (`ebe0ead`) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -364,8 +364,37 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
-- **Guscio UI — schermata 3/N: Review categorie «Rivedi ed elimina»** (questa
-  sessione; cadenza "una schermata per sessione, fatta bene"): costruita la
+- **Guscio UI — schermata 5/N: Contatti e calendari** (questa sessione; cadenza
+  "una schermata per sessione, fatta bene"): costruita la schermata dei domini
+  extra-foto che presenta i due view-model cablati (`Contacts/CalendarsReviewViewModel`,
+  T-115). Contatti duplicati da fondere e sottoscrizioni calendario sospette da
+  rimuovere; ogni azione è **human-gated** (T-092): un tap apre un `confirmationDialog`
+  e SOLO dopo la conferma l'adapter è invocato; l'esito reale (applicato/annullato/
+  fallito) è mostrato onestamente. I calendari **locali non compaiono mai** (T-091).
+  - **Composition root esteso**: `ExtraDomainsPorts` come bundle **opzionale** su
+    `AppEnvironment` — `nil` finché `.live()` non cabla gli adapter reali
+    (Contacts/EventKit, sotto guardia `canImport`). Capacità permission-gated ASSENTE,
+    mai un fake nascosto; zero churn ai 6 helper di test (parametro con default).
+  - **`ExtraPhotoDomainsPresentation`** (puro): righe presentabili, stati vuoti onesti,
+    nota di sicurezza, messaggi d'esito — 10 target_tests, girano su Linux.
+  - **`ExtraPhotoDomainsView`** (guardata SwiftUI): due sezioni + `confirmationDialog`
+    per azione; aggancio dalla Dashboard (sezione «Oltre le foto», solo se le porte
+    sono cablate).
+  - **VERDE (comando)**: **CI Apple run #33 `success`** (`abf6be6`) — `swift build`
+    (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint
+    --strict`, `build app (iOS Simulator)`. Verde al primo colpo.
+  - **Copertura (L-COL-006)**: la presentazione è coperta dai target_tests; la view è
+    **compilata** dal build app iOS ma **senza test di rendering** (resa a runtime non
+    coperta); gli adapter reali `System*` (Contacts/EventKit) compilati in CI ma runtime
+    device non coperto (Apple-only). Baseline privacy invariata (permessi già dichiarati).
+
+- **Guscio UI — schermata 4/N: Compressione video** (chiusa a **run #32**, `ebe0ead`,
+  senza aggiornare questo doc — recuperato ora): presenta `CompressionViewModel` (T-116)
+  col gate opt-in, export HEVC on-device e sostituzione instradata al `DeletionFlow`.
+  `CompressionPresentation` (puro, testato) + view guardata; aggancio dalla Dashboard.
+
+- **Guscio UI — schermata 3/N: Review categorie «Rivedi ed elimina»** (sessione
+  precedente; cadenza "una schermata per sessione, fatta bene"): costruita la
   schermata che presenta il `CategoryReviewViewModel` (T-113) già cablato con la
   UX del **gate d'anteprima obbligatorio** della rete di sicurezza (`DeletionFlow`,
   T-050). Nessuna logica nuova nel Domain/Data.
@@ -700,14 +729,24 @@
     target_tests) + gate a passi sul view-model + produttore reale
     `CategoryReviewSource` per gli **Screenshot** (dati veri dall'indice, zero API
     device-only). Aggancio dalla Dashboard (sezione «Rivedi ed elimina»).
-  - **⭐ PROSSIMA (schermata 4): compressione video** → `CompressionViewModel` (T-116).
-    Presenta il flusso: stima `estimated` → **gate opt-in** → export HEVC → (su success
-    verificato + anteprima confermata) sostituzione dell'originale instradata al
-    `DeletionFlow`. Nessun avvio senza consenso; nessuna perdita di dati. Pattern
-    consolidato: presentazione pura testabile (`CompressionPresentation`) + view SwiftUI
-    guardata + aggancio (dalla Home o dalla Dashboard). Copertura attesa: view-model già
-    coperto (wiring T-116); nuova presentazione coperta dai target_tests, view compilata
-    dai job CI con resa runtime non coperta (L-COL-006).
+  - ✅ **Compressione video** (schermata 4, FATTA — run #32): presenta
+    `CompressionViewModel` (T-116) — stima `estimated` → **gate opt-in** → export HEVC →
+    (su success verificato + anteprima confermata) sostituzione dell'originale instradata
+    al `DeletionFlow`. Nessun avvio senza consenso; nessuna perdita di dati.
+    `CompressionPresentation` (puro, testato) + view guardata; aggancio dalla Dashboard.
+  - ✅ **Contatti e calendari** (schermata 5, FATTA — run #33): presenta i due domini
+    extra-foto cablati (`Contacts/CalendarsReviewViewModel`, T-115) — contatti duplicati
+    da fondere e sottoscrizioni calendario sospette da rimuovere, ogni azione **human-gated**
+    (T-092: tap → `confirmationDialog` → solo allora l'adapter), esito reale mostrato. I
+    calendari **locali non compaiono mai** (T-091). `ExtraPhotoDomainsPresentation` (puro,
+    10 target_tests) + view guardata. Composition root esteso: `ExtraDomainsPorts` opzionale
+    su `AppEnvironment` (nil finché `.live()` non cabla gli adapter reali Contacts/EventKit
+    — capacità assente, mai un fake). Aggancio dalla Dashboard (sezione «Oltre le foto»,
+    solo se le porte sono cablate).
+  - **⭐ PROSSIMA (schermata 6): report onesto** → `HonestReportViewModel` (T-114). La
+    `HonestReportView` esiste già da `ui_shell`: va cablata al view-model coi dati veri
+    (device vs libreria + caveat iCloud) e agganciata alla navigazione (dalla Home o dalla
+    Dashboard). Pattern consolidato: presentazione pura testabile + view guardata + aggancio.
   - **⭐ PROSSIMO passo trasversale — produttore di proposte per le review**: oggi la
     schermata 3 mostra dati reali SOLO per gli Screenshot (pura, off-device). Le altre
     categorie (duplicati esatti, foto simili, video grandi/vecchi, sfocate) richiedono
@@ -715,10 +754,8 @@
     (device), Vision (device) o decisioni di soglia (grande/vecchio). Da cablare in
     Features quando la sorgente reale è disponibile: NB `large_old_media` è Domain puro
     e potrebbe partire off-device con soglie esplicite dichiarate.
-  - **Poi (schermate successive)**: contatti/calendari → `Contacts/CalendarsReviewViewModel`;
-    report onesto → `HonestReportViewModel` (la `HonestReportView` esiste già da ui_shell).
   Riferimento visivo: artifact mockup (2 pagine Chiaro/Scuro). Viste già fatte
-  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`/`HomeView`/`DashboardView`/**`CategoryReviewView`**) restano;
+  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`/`HomeView`/`DashboardView`/`CategoryReviewView`/`CompressionView`/**`ExtraPhotoDomainsView`**) restano;
   tema in-app già integrato. Copertura attesa per ogni schermata: view compilata dal
   build app iOS in CI, resa a runtime non coperta da test (L-COL-006).
 
