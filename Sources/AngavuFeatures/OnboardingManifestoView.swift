@@ -16,6 +16,8 @@ import SwiftUI
 public struct OnboardingManifestoView: View {
     private let presentation: OnboardingManifestoPresentation
     private let onContinue: () -> Void
+    // R-06: tick per il feedback aptico di avanzamento (impatto leggero) al tocco.
+    @State private var advanceTick = 0
 
     public init(
         content: ManifestContent = .angavu,
@@ -37,6 +39,7 @@ public struct OnboardingManifestoView: View {
         }
         .background(backdrop)
         .safeAreaInset(edge: .bottom) { continueBar }
+        .hapticFeedback(on: advanceTick) { _, _ in .actionAdvance }
     }
 
     private var header: some View {
@@ -79,7 +82,10 @@ public struct OnboardingManifestoView: View {
     }
 
     private var continueBar: some View {
-        Button(action: onContinue) {
+        Button {
+            advanceTick += 1
+            onContinue()
+        } label: {
             Text(presentation.continueTitle)
                 .font(.headline)
                 .frame(maxWidth: .infinity)

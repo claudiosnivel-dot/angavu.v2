@@ -43,6 +43,7 @@ extension ThemeChoice {
 /// Schermata di selezione del tema (Sistema / Chiaro / Scuro).
 public struct ThemeSettingsView: View {
     @Binding private var choice: ThemeChoice
+    @AppStorage(HapticsPreference.storageKey) private var hapticsEnabled = HapticsPreference.defaultEnabled
 
     public init(choice: Binding<ThemeChoice>) {
         self._choice = choice
@@ -64,8 +65,17 @@ public struct ThemeSettingsView: View {
                 Text("«Sistema» segue l'impostazione di iOS. Il tema Aurora si adatta a "
                     + "chiaro e scuro con gli stessi colori d'identità.")
             }
+
+            Section {
+                Toggle(isOn: $hapticsEnabled) {
+                    Label("Feedback aptico", systemImage: "hand.tap")
+                }
+            } footer: {
+                Text("Una breve vibrazione sui momenti chiave (fine analisi, conferma, "
+                    + "completamento). Disattivalo per silenziare del tutto gli haptics.")
+            }
         }
-        .navigationTitle("Tema")
+        .navigationTitle("Impostazioni")
     }
 }
 #endif

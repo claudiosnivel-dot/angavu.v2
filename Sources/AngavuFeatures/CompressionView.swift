@@ -73,6 +73,13 @@ public struct CompressionView: View {
             Text(CompressionPresentation.safetyNetText)
         }
         .onAppear { loadIfNeeded() }
+        .hapticFeedback(on: vm.state) { _, new in
+            switch new {
+            case .done: return .success
+            case .failed: return .failure
+            default: return nil
+            }
+        }
     }
 
     // MARK: Header

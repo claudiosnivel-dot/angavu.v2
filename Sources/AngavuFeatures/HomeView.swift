@@ -55,6 +55,13 @@ public struct HomeView: View {
         .toolbar { toolbarContent }
         .safeAreaInset(edge: .bottom) { actionBar }
         .sheet(isPresented: $showThemeSettings) { themeSheet }
+        .hapticFeedback(on: presentation.kind) { _, new in
+            switch new {
+            case .completed: return .success
+            case .failed: return .failure
+            default: return nil
+            }
+        }
     }
 
     // MARK: Header

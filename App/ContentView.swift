@@ -16,16 +16,30 @@ struct ContentView: View {
     // dichiarata da `OnboardingGate`, unica fonte del nome. Compare una sola
     // volta per installazione.
     @AppStorage(OnboardingGate.didFinishStorageKey) private var didFinishOnboarding = false
+    // R-06: la transizione di fase è animata ma SEMPRE gated su Reduce Motion, con
+    // equivalente statico (parità informativa: cambia solo la dissolvenza).
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
-            if OnboardingGate.shouldPresentOnboarding(hasFinishedOnboarding: didFinishOnboarding) {
-                OnboardingManifestoView(
-                    onContinue: { didFinishOnboarding = true }
-                )
-            } else {
-                HomeView(environment: .live(context: modelContext))
-            }
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if OnboardingGate.shouldPresentOnboarding(hasFinishedOnboarding: didFinishOnboarding) {
+            OnboardingManifestoView(onContinue: finishOnboarding)
+                .transition(.opacity)
+        } else {
+            HomeView(environment: .live(context: modelContext))
+                .transition(.opacity)
+        }
+    }
+
+    private func finishOnboarding() {
+        withAnimation(reduceMotion ? nil : .easeInOut) {
+            didFinishOnboarding = true
         }
     }
 }

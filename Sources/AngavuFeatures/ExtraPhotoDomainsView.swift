@@ -69,6 +69,14 @@ public struct ExtraPhotoDomainsView: View {
         } message: { _ in
             Text("Rimuove solo la sottoscrizione .ics, non i tuoi calendari.")
         }
+        .hapticFeedback(on: lastOutcome) { _, new in
+            guard let outcome = new else { return nil }
+            switch outcome {
+            case .applied: return .success
+            case .failed: return .failure
+            case .cancelled: return nil
+            }
+        }
     }
 
     @ViewBuilder

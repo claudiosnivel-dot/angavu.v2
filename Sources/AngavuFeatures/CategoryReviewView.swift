@@ -68,6 +68,10 @@ public struct CategoryReviewView: View {
             Text(presentation.safetyNote)
         }
         .onAppear { loadIfNeeded() }
+        .hapticFeedback(on: presentation.phase) { old, new in
+            // Allerta tenue all'apertura dell'anteprima distruttiva (un solo owner).
+            (old != .previewing && new == .previewing) ? .destructivePreview : nil
+        }
     }
 
     // MARK: Header
