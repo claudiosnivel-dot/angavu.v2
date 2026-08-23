@@ -61,7 +61,8 @@ public struct ThemeSettingsView: View {
             } header: {
                 Text("Aspetto")
             } footer: {
-                Text("«Sistema» segue l'impostazione di iOS. Il tema Aurora si adatta a chiaro e scuro con gli stessi colori d'identità.")
+                Text("«Sistema» segue l'impostazione di iOS. Il tema Aurora si adatta a "
+                    + "chiaro e scuro con gli stessi colori d'identità.")
             }
         }
         .navigationTitle("Tema")
