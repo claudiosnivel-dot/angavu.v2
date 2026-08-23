@@ -11,16 +11,20 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var didFinishOnboarding = false
+    // R-00: persistito con `@AppStorage` (prima era `@State`, azzerato a ogni
+    // cold-launch → l'onboarding ricompariva a ogni avvio). La chiave è quella
+    // dichiarata da `OnboardingGate`, unica fonte del nome. Compare una sola
+    // volta per installazione.
+    @AppStorage(OnboardingGate.didFinishStorageKey) private var didFinishOnboarding = false
 
     var body: some View {
         NavigationStack {
-            if didFinishOnboarding {
-                HomeView(environment: .live(context: modelContext))
-            } else {
+            if OnboardingGate.shouldPresentOnboarding(hasFinishedOnboarding: didFinishOnboarding) {
                 OnboardingManifestoView(
                     onContinue: { didFinishOnboarding = true }
                 )
+            } else {
+                HomeView(environment: .live(context: modelContext))
             }
         }
     }
