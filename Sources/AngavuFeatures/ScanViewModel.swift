@@ -22,6 +22,11 @@ public enum ScanState: Equatable, Sendable {
 
 @Observable
 public final class ScanViewModel {
+    /// Messaggio di fallimento quando l'accesso alla libreria non è concesso.
+    /// Esposto come costante così che la presentazione possa distinguere questo
+    /// fallimento (per offrire "Apri Impostazioni") senza string-matching fragile.
+    public static let accessDeniedMessage = "Accesso alla libreria non concesso."
+
     public private(set) var state: ScanState = .idle
 
     private let authorizer: any PhotoLibraryAuthorizing
@@ -44,7 +49,7 @@ public final class ScanViewModel {
 
         // Accesso negato / non determinato: nessuna enumerazione tentata.
         guard decision.shouldEnumerate else {
-            state = .failed("Accesso alla libreria non concesso.")
+            state = .failed(Self.accessDeniedMessage)
             return state
         }
 

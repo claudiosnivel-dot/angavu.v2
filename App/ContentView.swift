@@ -1,18 +1,22 @@
-// Guscio dell'app (macrotask `ui_shell`): onboarding-manifesto → home, con la
-// schermata "cosa NON facciamo" e la selezione del tema raggiungibili. Il report
-// onesto (`HonestReportView`) è pronto in AngavuFeatures e viene alimentato dai
-// dati veri della libreria nel cablaggio (`wiring`).
+// Guscio dell'app (guscio UI): onboarding-manifesto → Home reale. La Home presenta
+// il flusso di scansione cablato coi dati veri (`ScanViewModel` dietro i port
+// dell'`AppEnvironment`), con la schermata "cosa NON facciamo" e la selezione del
+// tema raggiungibili da lì. L'`AppEnvironment` di produzione (`.live`) è costruito
+// qui dal `ModelContext` SwiftData installato in `AngavuApp`.
+import AngavuData
 import AngavuDomain
 import AngavuFeatures
+import SwiftData
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var didFinishOnboarding = false
 
     var body: some View {
         NavigationStack {
             if didFinishOnboarding {
-                HomeView()
+                HomeView(environment: .live(context: modelContext))
             } else {
                 OnboardingManifestoView(
                     onContinue: { didFinishOnboarding = true },
@@ -23,49 +27,7 @@ struct ContentView: View {
     }
 }
 
-/// Home minimale del guscio: dà accesso ai non-goals e al tema. Le sezioni del
-/// cuore-foto si agganciano qui nel cablaggio (`wiring`).
-private struct HomeView: View {
-    @AppStorage(ThemePreference.storageKey) private var theme: ThemeChoice = .system
-    @State private var showThemeSettings = false
-
-    var body: some View {
-        List {
-            NavigationLink {
-                NonGoalsView()
-            } label: {
-                Label("Cosa NON facciamo", systemImage: "xmark.seal")
-            }
-            Button {
-                showThemeSettings = true
-            } label: {
-                Label("Tema: \(theme.label)", systemImage: theme.symbolName)
-            }
-        }
-        .navigationTitle("Angavu")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showThemeSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .accessibilityLabel("Impostazioni tema")
-            }
-        }
-        .sheet(isPresented: $showThemeSettings) {
-            NavigationStack {
-                ThemeSettingsView(choice: $theme)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Fatto") { showThemeSettings = false }
-                        }
-                    }
-            }
-        }
-    }
-}
-
 #Preview {
     ContentView()
+        .modelContainer(for: AssetRecord.self, inMemory: true)
 }

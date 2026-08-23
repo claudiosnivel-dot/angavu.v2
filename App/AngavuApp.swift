@@ -4,6 +4,8 @@
 // SwiftPM locale. Il deployment target iOS 17.0 è dichiarato in
 // Config/Shared.xcconfig (fonte canonica) e in App/project.yml (spec XcodeGen).
 import SwiftUI
+import SwiftData
+import AngavuData
 import AngavuDomain
 import AngavuFeatures
 
@@ -18,5 +20,8 @@ struct AngavuApp: App {
                 // nil per `.system` → segue iOS; altrimenti forza chiaro/scuro.
                 .preferredColorScheme(theme.preferredColorScheme)
         }
+        // Indice SwiftData on-device (zero backend): il ModelContext creato qui
+        // alimenta l'`AppEnvironment.live` costruito in ContentView.
+        .modelContainer(for: AssetRecord.self)
     }
 }
