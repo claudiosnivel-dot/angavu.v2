@@ -71,13 +71,24 @@ public struct ExtraPhotoDomainsView: View {
         }
     }
 
+    @ViewBuilder
     private var listContent: some View {
-        List {
-            if let message = presentation.outcomeMessage { outcomeRow(message) }
-            if let error = loadError { errorSection(error) }
-            contactsSection
-            calendarsSection
-            safetySection
+        if presentation.contactsEmpty && presentation.calendarsEmpty
+            && loadError == nil && presentation.outcomeMessage == nil {
+            ContentUnavailableView(
+                "Tutto in ordine",
+                systemImage: "checkmark.seal",
+                description: Text("Nessun contatto duplicato e nessuna sottoscrizione "
+                    + "calendario sospetta da rivedere.")
+            )
+        } else {
+            List {
+                if let message = presentation.outcomeMessage { outcomeRow(message) }
+                if let error = loadError { errorSection(error) }
+                contactsSection
+                calendarsSection
+                safetySection
+            }
         }
     }
 

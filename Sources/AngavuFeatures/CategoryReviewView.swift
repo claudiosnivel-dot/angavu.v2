@@ -174,24 +174,12 @@ public struct CategoryReviewView: View {
     // MARK: Stato vuoto (niente da eliminare)
 
     private var emptyCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label {
-                Text("Niente da eliminare qui")
-                    .font(.headline)
-            } icon: {
-                Image(systemName: "checkmark.circle")
-                    .foregroundStyle(AuroraBrand.accentAzzurro)
-                    .accessibilityHidden(true)
-            }
-            Text("La tua libreria non contiene elementi in questa categoria. "
+        ContentUnavailableView(
+            "Niente da eliminare qui",
+            systemImage: "checkmark.circle",
+            description: Text("La tua libreria non contiene elementi in questa categoria. "
                 + "Se hai appena concesso l'accesso, esegui prima un'analisi dalla Home.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: .rect(cornerRadius: 16))
+        )
     }
 
     // MARK: Conferma (eliminazione autorizzata → rete di sicurezza)

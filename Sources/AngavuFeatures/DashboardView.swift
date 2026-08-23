@@ -159,30 +159,20 @@ public struct DashboardView: View {
     // MARK: Stato d'errore
 
     private func failedCard(_ pres: DashboardPresentation) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label {
-                Text(pres.detail ?? "Errore sconosciuto.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "exclamationmark.triangle")
-                    .foregroundStyle(AuroraBrand.accentFucsia)
-                    .accessibilityHidden(true)
-            }
+        ContentUnavailableView {
+            Label("Numeri non disponibili", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(pres.detail ?? "Errore sconosciuto.")
+        } actions: {
             if pres.showsRetry {
                 Button {
                     vm.load()
                 } label: {
                     Label("Riprova", systemImage: "arrow.clockwise")
-                        .font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(.bordered)
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: .rect(cornerRadius: 16))
     }
 }
 

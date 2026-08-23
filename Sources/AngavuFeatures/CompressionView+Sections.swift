@@ -259,49 +259,28 @@ extension CompressionView {
     // MARK: Stati «nessun video» e errore d'indice
 
     var noVideosCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label {
-                Text("Nessun video da comprimere")
-                    .font(.headline)
-            } icon: {
-                Image(systemName: "film").foregroundStyle(AuroraBrand.accentAzzurro)
-                    .accessibilityHidden(true)
-            }
-            Text("La tua libreria indicizzata non contiene video. Se hai appena concesso "
-                + "l'accesso, esegui prima un'analisi dalla Home.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: .rect(cornerRadius: 16))
+        ContentUnavailableView(
+            "Nessun video da comprimere",
+            systemImage: "film",
+            description: Text("La tua libreria indicizzata non contiene video. Se hai appena "
+                + "concesso l'accesso, esegui prima un'analisi dalla Home.")
+        )
     }
 
     func indexFailedCard(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label {
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "exclamationmark.triangle")
-                    .foregroundStyle(AuroraBrand.accentFucsia)
-                    .accessibilityHidden(true)
-            }
+        ContentUnavailableView {
+            Label("Analisi non disponibile", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(message)
+        } actions: {
             Button {
                 loadPhase = .loading
                 loadIfNeeded(force: true)
             } label: {
                 Label("Riprova", systemImage: "arrow.clockwise")
-                    .font(.subheadline.weight(.semibold))
             }
             .buttonStyle(.bordered)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: .rect(cornerRadius: 16))
     }
 }
 
