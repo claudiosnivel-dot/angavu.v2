@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (feature ad-hoc **tema in-app** Sistema/Chiaro/Scuro, CI verde run #27; piano build 11/11 + `wiring` 8/8 invariati) |
-| **Sessione corrente** | **Chiusa sul verde**. Feature ad-hoc (fuori blueprint): **selezione tema in-app** Sistema/Chiaro/Scuro — `ThemeChoice` (Domain, testato), `ThemeSettingsView`+`@AppStorage`, `AngavuApp`/`ContentView`. CI verde **run #27** (`05a280b`; #26 rosso solo lint, poi fix). Consegnati anche i **mockup dark** (artifact, 2 pagine Chiaro/Scuro). Piano build 11/11 + `wiring` 8/8 invariati; nessun macrotask residuo |
+| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 1/N — Home reale** con flusso di scansione cablato, CI verde run #28; piano build 11/11 + `wiring` 8/8 invariati) |
+| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 1 (cadenza "una schermata per sessione"): sostituito lo stub `ContentView`/`HomeView` con la **Home reale** che presenta `ScanViewModel` (avvia/annulla stop cooperativo/progresso/recap onesto con conteggio parziale marcato/errore→«Apri Impostazioni»). Composition root SwiftData nell'app (`AngavuApp` installa il modelContainer, `ContentView` inietta `AppEnvironment.live`). `HomeScanPresentation` (puro, 8 target_tests). CI verde **run #28** (`de79c07`) |
 
 ---
 
@@ -353,7 +353,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `05a280b` fix(theme) footer <120 col — CI verde (run #27); feature tema in-app chiusa (`a866b50`→`05a280b`) |
+| Ultimo commit | `de79c07` feat(ui-shell) Home reale con scansione cablata — CI verde (run #28) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -363,6 +363,32 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **Guscio UI — schermata 1/N: Home reale** (questa sessione; cadenza "una
+  schermata per sessione, fatta bene" decisa dall'utente 2026-08-23): sostituito lo
+  stub `ContentView`/`HomeView` con la Home vera che presenta `ScanViewModel` (T-111).
+  - `HomeScanPresentation` (`Sources/AngavuFeatures/HomeScanPresentation.swift`, PURO):
+    mappa `ScanState` nelle decisioni di UI — titolo/dettaglio onesti, quali controlli
+    (avvia / annulla / «Apri Impostazioni»), progresso, e la marca di conteggio
+    parziale (accesso limited mai spacciato per totale). Testabile senza device.
+  - `HomeView` (`Sources/AngavuFeatures/HomeView.swift`, SwiftUI guardata
+    `canImport(SwiftUI)`): avvia analisi, avanzamento determinato, **annulla** (stop
+    cooperativo, motore T-004), recap onesto, errore con motivo esplicito + scorciatoia
+    a Impostazioni su accesso negato; tema in-app e "cosa NON facciamo" raggiungibili.
+    API cross-platform (`.primaryAction`, `UIApplication` guardato) così il package
+    compila anche per macOS in CI.
+  - Composition root: `AngavuApp` installa il `modelContainer` SwiftData;
+    `ContentView` costruisce `AppEnvironment.live(context:)` e lo inietta.
+    `ScanViewModel.accessDeniedMessage` estratto a costante (rilevamento deterministico
+    del fallimento-permessi).
+  - **VERDE (comando)**: **CI Apple run #28 `success`** (`de79c07`), entrambi i job
+    step per step — `swift build -warnings-as-errors` (21s), `swift test` (target_tests
+    + regressione, 16s), `swiftlint lint --strict` (5s) + `build app (iOS Simulator)`
+    (39s). Il verdetto è di un **comando** (L-COL-002), verificabile nella tab Actions.
+  - **Copertura (L-COL-006)**: `HomeScanPresentation` coperta da 8 target_tests
+    (`HomeScanPresentationTests`, ogni `ScanState`). `HomeView` compilata dai due job CI
+    ma **senza test di rendering**: resa a runtime non coperta. Baseline privacy
+    invariata (nessun nuovo permesso/rete/framework).
 
 - **Feature ad-hoc — tema in-app (fuori blueprint)**: selezione Sistema/Chiaro/Scuro.
   `ThemeChoice` (Domain puro, persistenza a stringa, degrado sicuro `.system`);
@@ -576,22 +602,27 @@
 
 ## 6. Prossimi passi
 
-- **⭐ PROSSIMA SESSIONE (deciso dall'utente 2026-08-23) — costruire il "guscio
-  mancante"**: sostituire lo **stub** `App/ContentView.swift` (oggi una `List` con 2
-  voci) con le schermate SwiftUI reali dei mockup, che **presentano i view-model già
-  cablati** (`wiring` 8/8, tutti verdi). Nessun nuovo lavoro su Domain/Data: solo
-  strato `AngavuFeatures` + `App/`, guardato `#if canImport(SwiftUI)`, chiuso al
-  confine CI (build+test+lint+app iOS verdi). Schermate da agganciare:
-  - **Home** (mockup 2): pulsante scansione + recap onesto → `ScanViewModel`.
-  - **Dashboard «Numeri veri»** (mockup 3) → `DashboardViewModel`.
-  - **Foto simili / review categorie** (mockup 4) → `CategoryReviewViewModel`.
-  - **Rete di sicurezza** — gate anteprima (mockup 5) → `DeletionFlow`.
-  - Agganci compressione / contatti / calendari → `CompressionViewModel`,
-    `Contacts/CalendarsReviewViewModel`.
-  Riferimento visivo: artifact mockup (2 pagine Chiaro/Scuro). Le 3 viste già fatte
-  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`) restano; il tema
-  in-app (Sistema/Chiaro/Scuro) è già integrato nel guscio. Copertura attesa: viste
-  compilate dal build app iOS in CI, resa a runtime non coperta da test (L-COL-006).
+- **⭐ GUSCIO UI — cadenza "una schermata per sessione, fatta bene" (deciso
+  dall'utente 2026-08-23)**: costruire il guscio completo che presenta i view-model
+  già cablati (`wiring` 8/8, tutti verdi), UNA schermata per sessione con tutti i
+  controlli, chiusa al confine CI (build+test+lint+app iOS verdi). Nessun nuovo lavoro
+  su Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if canImport(SwiftUI)`.
+  - ✅ **Home** (schermata 1, FATTA — run #28): scansione + recap onesto →
+    `ScanViewModel`, presentazione pura `HomeScanPresentation` (8 target_tests).
+  - **⭐ PROSSIMA (schermata 2): Dashboard «Numeri veri»** → `DashboardViewModel`.
+    Righe categoria coi byte veri (exact/estimated **separati**, mai fusi), spazio
+    recuperabile con caveat iCloud (libreria vs device ora), banner accesso limited.
+    Modello già pronto (`DashboardScreen`/`DashboardState`); pattern: view SwiftUI
+    guardata che presenta lo stato, aggancio di navigazione dalla Home (recap →
+    dashboard). Copertura attesa: `DashboardViewModel` già coperto dai target_tests;
+    la view compilata dai job CI, resa runtime non coperta (L-COL-006).
+  - **Poi (schermate successive)**: review categorie → `CategoryReviewViewModel`; rete
+    di sicurezza (gate anteprima) → `DeletionFlow`; compressione → `CompressionViewModel`;
+    contatti/calendari → `Contacts/CalendarsReviewViewModel`.
+  Riferimento visivo: artifact mockup (2 pagine Chiaro/Scuro). Viste già fatte
+  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`/**`HomeView`**) restano;
+  tema in-app già integrato. Copertura attesa per ogni schermata: view compilata dal
+  build app iOS in CI, resa a runtime non coperta da test (L-COL-006).
 
 - Decision ledger **interamente confermato**: nessuna decisione pendente.
 - **11 macrotask su 11 VERIFICATI** (oracolo Apple verde in CI): foundation,
