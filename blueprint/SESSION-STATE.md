@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 2/N — Dashboard «Numeri veri»** col recap navigabile, CI verde run #29; piano build 11/11 + `wiring` 8/8 invariati) |
-| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 2 (cadenza "una schermata per sessione"): **Dashboard «Numeri veri»** che presenta `DashboardViewModel` (T-112) — righe per categoria coi byte veri (exact/estimated separati, la stima marcata), spazio recuperabile con caveat iCloud (libreria vs device ORA), banner accesso limited col totale dichiarato parziale, stato d'errore con motivo esplicito + «Riprova». `DashboardPresentation` (puro, 9 target_tests). Aggancio di navigazione dal recap della Home (`completed` → «Vedi i numeri veri»). CI verde **run #29** (`2d19b82`) |
+| **Ultimo aggiornamento** | 2026-08-23 (**guscio UI 3/N — Review categorie «Rivedi ed elimina»** col gate anteprima, CI verde run #30; piano build 11/11 + `wiring` 8/8 invariati) |
+| **Sessione corrente** | **Chiusa sul verde**. Guscio UI, schermata 3 (cadenza "una schermata per sessione"): **Review categorie «Rivedi ed elimina»** che presenta `CategoryReviewViewModel` (T-113) con la UX del **gate d'anteprima obbligatorio** della rete di sicurezza (`DeletionFlow`, T-050) — righe keep/removable, azione «Elimina» che apre SEMPRE l'anteprima (alert conferma/annulla), mai i keep, mai un'anteprima vuota, stato vuoto e stato d'errore con «Riprova». `CategoryReviewPresentation` (puro, 11 target_tests) + gate a passi sul view-model. Dati **reali** dall'indice per gli **Screenshot** (filtro puro sul sottotipo indicizzato, zero API device-only); le altre categorie richiedono un produttore di proposte (device/soglie), non fabbricato. Aggancio dalla Dashboard (sezione «Rivedi ed elimina»). CI verde **run #30** (`3906a00`) |
 
 ---
 
@@ -353,7 +353,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `2d19b82` feat(ui-shell) Dashboard «Numeri veri» — schermata 2 col recap navigabile — CI verde (run #29) |
+| Ultimo commit | `3906a00` feat(ui-shell) Review categorie «Rivedi ed elimina» — schermata 3 col gate anteprima — CI verde (run #30) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -364,7 +364,58 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
-- **Guscio UI — schermata 2/N: Dashboard «Numeri veri»** (questa sessione; cadenza
+- **Guscio UI — schermata 3/N: Review categorie «Rivedi ed elimina»** (questa
+  sessione; cadenza "una schermata per sessione, fatta bene"): costruita la
+  schermata che presenta il `CategoryReviewViewModel` (T-113) già cablato con la
+  UX del **gate d'anteprima obbligatorio** della rete di sicurezza (`DeletionFlow`,
+  T-050). Nessuna logica nuova nel Domain/Data.
+  - `CategoryReviewPresentation` (`Sources/AngavuFeatures/CategoryReviewPresentation.swift`,
+    PURO): mappa `CategoryReview` (righe keep/removable) + stato del `DeletionFlow`
+    nelle decisioni di UI — fase `reviewing`/`previewing`/`confirmed`, righe per
+    disposizione, offerta d'eliminazione **solo** mentre si rivede e c'è del
+    removable, insieme in anteprima/conferma, nota onesta della rete di sicurezza
+    (recupero ~30 gg). Testabile senza device.
+  - Gate a passi sul view-model (`CategoryReviewViewModel`, non-breaking):
+    `presentDeletionPreview`/`presentDeletionPreviewForAllRemovable` (apre
+    l'anteprima sui soli removable), `confirmDeletion` (accetta+conferma),
+    `cancelDeletion` (azzera il gate). Invarianti T-113 invariati: mai i keep, mai
+    un'anteprima vuota. Il vecchio `requestDeletion` one-shot resta per gli oracoli.
+  - `CategoryReviewSource` + `CleanupCategory`
+    (`Sources/AngavuFeatures/CategoryReviewSource.swift`): produce la
+    `CategoryReview` **reale** dall'indice per gli **Screenshot** — filtro puro sul
+    sottotipo `.screenshot` indicizzato (T-011), `ScreenshotCategory` (T-061) +
+    `BulkDeletionProposalComposer` (T-062), zero API device-only, zero soglie
+    arbitrarie. La lettura dell'indice `throws`: un errore è uno stato esplicito,
+    mai una lista vuota spacciata per «pulito». Le altre categorie
+    (duplicati/simili/video grandi-vecchi/sfocate) richiedono hashing/Vision sul
+    device o decisioni di soglia → **non cablate** (nessun numero fabbricato):
+    produttore di proposte dichiarato come prossimo passo.
+  - `CategoryReviewView` (`Sources/AngavuFeatures/CategoryReviewView.swift`, SwiftUI
+    guardata `canImport(SwiftUI)`): righe keep/removable con badge, azione «Elimina N»
+    che apre SEMPRE l'anteprima (alert con conferma distruttiva/annulla), card di
+    conferma («pronti per l'eliminazione via rete di sicurezza» + «Rivedi di nuovo»),
+    stato vuoto onesto, stato d'errore con «Riprova». `DashboardView`: nuova sezione
+    «Rivedi ed elimina» che naviga alle review (conserva l'`AppEnvironment` iniettato,
+    nessun singleton).
+  - **VERDE (comando)**: **CI Apple run #30 `success`** (`3906a00`), entrambi i job
+    step per step — `swift build -warnings-as-errors` (30s), `swift test` (target_tests
+    + regressione, 20s), `swiftlint lint --strict` (5s) + `build app (iOS Simulator)`
+    (XcodeGen + build no-signing, 49s). Il verdetto è di un **comando** (L-COL-002),
+    verificabile nella tab Actions.
+  - **Copertura (L-COL-006)**: `CategoryReviewPresentation` coperta da 11 target_tests
+    (`CategoryReviewPresentationTests`: fasi reviewing/previewing/confirmed/deleting,
+    offerta d'eliminazione gateata, stato vuoto/solo-keep, insieme anteprima/conferma,
+    nota di sicurezza). Gate a passi + produttore Screenshot coperti da
+    `CategoryReviewGateTests` (preview→confirm sull'esatto removable, filtro keep,
+    rifiuto selezione vuota/solo-keep, conferma senza anteprima, cancel; produttore
+    screenshot reale, vuoto senza screenshot, errore d'indice propagato). AC-113-1/2
+    già coperti da `CategoryReviewTests`. `CategoryReviewView` compilata dai due job CI
+    ma **senza test di rendering**: resa a runtime non coperta. L'esecuzione reale del
+    delete (adapter `SystemAssetDeleter`, safety_net) resta **fuori scope** (T-113): la
+    conferma AUTORIZZA, la rete di sicurezza esegue. Baseline privacy invariata
+    (nessun nuovo permesso/rete/framework).
+
+- **Guscio UI — schermata 2/N: Dashboard «Numeri veri»** (sessione precedente; cadenza
   "una schermata per sessione, fatta bene"): costruita la Dashboard che presenta il
   `DashboardViewModel` (T-112) già cablato. Nessuna logica nuova nel Domain/Data.
   - `DashboardPresentation` (`Sources/AngavuFeatures/DashboardPresentation.swift`,
@@ -641,19 +692,33 @@
     caveat iCloud (libreria vs device ora), banner accesso limited col totale parziale →
     `DashboardViewModel`, presentazione pura `DashboardPresentation` (9 target_tests).
     Aggancio di navigazione dal recap della Home (`completed` → «Vedi i numeri veri»).
-  - **⭐ PROSSIMA (schermata 3): review categorie** → `CategoryReviewViewModel` (T-113).
-    Presenta una categoria di proposte (KeepOne/Deletion/Bulk/blurry normalizzate in
-    keep/removable) e instrada OGNI eliminazione al `DeletionFlow` col **gate anteprima
-    obbligatorio** (keep mai eliminati; nessuna anteprima vuota). Pattern consolidato:
-    presentazione pura testabile (`CategoryReviewPresentation`) + view SwiftUI guardata
-    + aggancio dalla Dashboard (riga categoria → review). Copertura attesa: view-model
-    già coperto (wiring T-113); la nuova presentazione coperta dai target_tests, la view
-    compilata dai job CI con resa runtime non coperta (L-COL-006). NB: il gate anteprima
-    di `safety_net` (T-050) è la rete di sicurezza — nessuna eliminazione in autonomia.
-  - **Poi (schermate successive)**: rete di sicurezza (gate anteprima) → `DeletionFlow`;
-    compressione → `CompressionViewModel`; contatti/calendari → `Contacts/CalendarsReviewViewModel`.
+  - ✅ **Review categorie «Rivedi ed elimina»** (schermata 3, FATTA — run #30):
+    presenta `CategoryReviewViewModel` (T-113) con la UX del **gate anteprima
+    obbligatorio** della rete di sicurezza (`DeletionFlow`, T-050) — righe
+    keep/removable, azione «Elimina» che apre SEMPRE l'anteprima, mai i keep, mai
+    un'anteprima vuota. Presentazione pura `CategoryReviewPresentation` (11
+    target_tests) + gate a passi sul view-model + produttore reale
+    `CategoryReviewSource` per gli **Screenshot** (dati veri dall'indice, zero API
+    device-only). Aggancio dalla Dashboard (sezione «Rivedi ed elimina»).
+  - **⭐ PROSSIMA (schermata 4): compressione video** → `CompressionViewModel` (T-116).
+    Presenta il flusso: stima `estimated` → **gate opt-in** → export HEVC → (su success
+    verificato + anteprima confermata) sostituzione dell'originale instradata al
+    `DeletionFlow`. Nessun avvio senza consenso; nessuna perdita di dati. Pattern
+    consolidato: presentazione pura testabile (`CompressionPresentation`) + view SwiftUI
+    guardata + aggancio (dalla Home o dalla Dashboard). Copertura attesa: view-model già
+    coperto (wiring T-116); nuova presentazione coperta dai target_tests, view compilata
+    dai job CI con resa runtime non coperta (L-COL-006).
+  - **⭐ PROSSIMO passo trasversale — produttore di proposte per le review**: oggi la
+    schermata 3 mostra dati reali SOLO per gli Screenshot (pura, off-device). Le altre
+    categorie (duplicati esatti, foto simili, video grandi/vecchi, sfocate) richiedono
+    un "detector runner" che scansiona l'indice e produce la `CategoryReview` — hashing
+    (device), Vision (device) o decisioni di soglia (grande/vecchio). Da cablare in
+    Features quando la sorgente reale è disponibile: NB `large_old_media` è Domain puro
+    e potrebbe partire off-device con soglie esplicite dichiarate.
+  - **Poi (schermate successive)**: contatti/calendari → `Contacts/CalendarsReviewViewModel`;
+    report onesto → `HonestReportViewModel` (la `HonestReportView` esiste già da ui_shell).
   Riferimento visivo: artifact mockup (2 pagine Chiaro/Scuro). Viste già fatte
-  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`/`HomeView`/**`DashboardView`**) restano;
+  (`OnboardingManifestoView`/`NonGoalsView`/`HonestReportView`/`HomeView`/`DashboardView`/**`CategoryReviewView`**) restano;
   tema in-app già integrato. Copertura attesa per ogni schermata: view compilata dal
   build app iOS in CI, resa a runtime non coperta da test (L-COL-006).
 
