@@ -181,24 +181,18 @@ private struct DashboardCategoryRow: View {
     let row: DashboardPresentation.CategoryRow
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.title).font(.headline)
-                Text("\(row.count) elementi")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        // R-08: alle accessibility sizes il layout a due colonne si comprime;
+        // ViewThatFits ripiega su una colonna (valore sotto il titolo) prima di
+        // troncare. Stessi accessibility modifier in entrambi i branch.
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                titleColumn
+                Spacer(minLength: 12)
+                valueColumn
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(row.isEstimated
-                    ? "~ \(formatDashboardBytes(row.totalBytes))"
-                    : formatDashboardBytes(row.totalBytes))
-                    .font(.body.monospacedDigit())
-                if row.isEstimated {
-                    Text("stima")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 4) {
+                titleColumn
+                valueColumn
             }
         }
         .padding(.vertical, 4)
@@ -207,6 +201,32 @@ private struct DashboardCategoryRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(row.accessibilityLabel)
         .accessibilityValue(row.accessibilityValue(formattedBytes: formatDashboardBytes(row.totalBytes)))
+    }
+
+    private var titleColumn: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(row.title).font(.headline)
+                .lineLimit(2)
+                .allowsTightening(true)
+            Text("\(row.count) elementi")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var valueColumn: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(row.isEstimated
+                ? "~ \(formatDashboardBytes(row.totalBytes))"
+                : formatDashboardBytes(row.totalBytes))
+                .font(.body.monospacedDigit())
+                .lineLimit(1)
+            if row.isEstimated {
+                Text("stima")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 #endif

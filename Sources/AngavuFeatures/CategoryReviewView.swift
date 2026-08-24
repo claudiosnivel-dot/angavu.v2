@@ -303,6 +303,29 @@ private struct CategoryReviewRowView: View {
     let row: CategoryReviewPresentation.Row
 
     var body: some View {
+        // R-08: alle accessibility sizes il badge di disposizione verrebbe
+        // compresso contro l'id; ViewThatFits lo porta sotto (icona+id, poi badge)
+        // prima di comprimere. Stessi accessibility modifier in entrambi i branch.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                identity
+                Spacer(minLength: 12)
+                badge
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                identity
+                badge
+            }
+        }
+        .padding(.vertical, 8)
+        // VoiceOver: un solo elemento con etichetta UMANA — mai il `localIdentifier`
+        // grezzo (che resta visibile a schermo), la disposizione come valore.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityValue(row.accessibilityValue)
+    }
+
+    private var identity: some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
@@ -311,17 +334,14 @@ private struct CategoryReviewRowView: View {
                 .font(.body.monospaced())
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Spacer()
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(tint)
         }
-        .padding(.vertical, 8)
-        // VoiceOver: un solo elemento con etichetta UMANA — mai il `localIdentifier`
-        // grezzo (che resta visibile a schermo), la disposizione come valore.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(row.accessibilityLabel)
-        .accessibilityValue(row.accessibilityValue)
+    }
+
+    private var badge: some View {
+        Text(label)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
     }
 
     private var symbol: String {
