@@ -150,4 +150,25 @@ final class HonestReportPresentationTests: XCTestCase {
         XCTAssertEqual(estimatedSingular.accessibilityValue(formattedBytes: "900 byte"),
                        "1 elemento, 900 byte, stima")
     }
+
+    // R-10 (hero, VoiceOver): un totale esatto è letto senza marca di stima e
+    // MAI col "~" visivo (che VoiceOver leggerebbe come "tilde").
+    func test_hero_accessibilityLabel_exactHasNoEstimateMarkNorTilde() {
+        let hero = HonestReportPresentation.Hero(bytes: 128, isExact: true)
+        let label = hero.accessibilityLabel(formattedBytes: "128 MB")
+        XCTAssertEqual(label, "128 MB recuperabili")
+        XCTAssertFalse(label.contains("~"), "il '~' visivo non deve finire nella label parlata")
+        XCTAssertFalse(label.localizedCaseInsensitiveContains("stima"),
+                       "un totale esatto non va marcato come stima")
+    }
+
+    // R-10 (hero, VoiceOver): un totale con porzione stimata nomina "Stima" a voce,
+    // sempre senza il "~".
+    func test_hero_accessibilityLabel_estimateNamesStimaWithoutTilde() {
+        let hero = HonestReportPresentation.Hero(bytes: 128, isExact: false)
+        let label = hero.accessibilityLabel(formattedBytes: "128 MB")
+        XCTAssertEqual(label, "Stima, 128 MB recuperabili")
+        XCTAssertFalse(label.contains("~"), "la stima è nominata a parole, mai col '~'")
+        XCTAssertTrue(label.localizedCaseInsensitiveContains("stima"))
+    }
 }

@@ -47,6 +47,9 @@ public struct OnboardingManifestoView: View {
             Text(presentation.wordmark)
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(AuroraBrand.gradient)
+                // R-10: il wordmark è l'intestazione della schermata (coerente con
+                // Home/NonGoals) → trait header per la navigazione VoiceOver.
+                .accessibilityAddTraits(.isHeader)
             Text(presentation.headline)
                 .font(.title3)
                 .foregroundStyle(.primary)

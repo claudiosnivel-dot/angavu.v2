@@ -112,6 +112,11 @@ public struct HonestReportView: View {
             }
         }
         .padding(.top, 12)
+        // R-10: un solo elemento VoiceOver con label parlata dal layer puro — mai
+        // il "~" visivo (letto "tilde"): la stima è nominata "Stima" a voce.
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel(hero.accessibilityLabel(formattedBytes: formatReportBytes(hero.bytes)))
     }
 
     // MARK: Banner conteggio parziale (accesso limited)

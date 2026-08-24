@@ -39,6 +39,14 @@ public struct HonestReportPresentation: Equatable, Sendable {
             self.bytes = bytes
             self.isExact = isExact
         }
+
+        /// Etichetta VoiceOver della cifra-hero. Mai il prefisso "~" (che VoiceOver
+        /// legge come "tilde"): la stima è nominata a voce con la parola "Stima".
+        /// La View formatta i byte (unica fonte del formato locale).
+        public func accessibilityLabel(formattedBytes: String) -> String {
+            let base = "\(formattedBytes) recuperabili"
+            return isExact ? base : "Stima, \(base)"
+        }
     }
 
     /// Riga di una categoria, pronta per la View. La marca `isEstimated`
