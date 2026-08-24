@@ -80,6 +80,9 @@ jobs:
           # Deve essere un build DEVICE (iPhoneOS), non simulatore.
           pb CFBundleSupportedPlatforms | grep -q "iPhoneOS" \
             || { echo "::error::non è un build device: manca iPhoneOS in CFBundleSupportedPlatforms"; exit 1; }
+          # Icona app compilata: senza `Assets.car`/CFBundleIcons la firma dei
+          # sideloader (AltStore/Sideloadly) può fallire l'installazione.
+          [ -f "$APP/Assets.car" ] || { echo "::error::Assets.car assente: l'app non ha icona"; exit 1; }
           # Il plist dev'essere parseabile come property list: è ESATTAMENTE ciò che
           # fa AltStore all'import (un fallimento qui = «isn't in the correct format»).
           plutil -lint "$PLIST" || { echo "::error::Info.plist non è un plist valido (plutil -lint)"; exit 1; }

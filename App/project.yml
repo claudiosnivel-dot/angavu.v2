@@ -32,6 +32,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.angavu.app
         INFOPLIST_FILE: Info.plist
         GENERATE_INFOPLIST_FILE: NO
+        # Icona app: senza `Assets.car`/CFBundleIcons la firma di AltStore/Sideloadly
+        # può fallire l'installazione. L'asset catalog (App/Assets.xcassets) è già tra
+        # le sources; qui diciamo a Xcode quale set usare → compila l'icona e inietta
+        # CFBundleIcons/CFBundleIconName nell'Info.plist.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - package: Angavu
         product: AngavuFeatures
