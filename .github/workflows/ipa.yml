@@ -49,7 +49,11 @@ jobs:
           rm -rf Payload Angavu-unsigned.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          zip -r -q Angavu-unsigned.ipa Payload
+          # Impacchetta con `ditto` (lo zip canonico di Apple, come l'export Xcode):
+          # più compatibile col lettore ZIP dei sideloader (ZIPFoundation/AltStore)
+          # del classico `zip -r`, che può produrre archivi rifiutati con errore di
+          # «formato non adatto» pur avendo struttura corretta.
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload Angavu-unsigned.ipa
           echo "IPA creato:"; ls -lh Angavu-unsigned.ipa
 
       - name: Verifica formato .ipa (oracolo per sideload/AltStore)
@@ -76,7 +80,12 @@ jobs:
           # Deve essere un build DEVICE (iPhoneOS), non simulatore.
           pb CFBundleSupportedPlatforms | grep -q "iPhoneOS" \
             || { echo "::error::non è un build device: manca iPhoneOS in CFBundleSupportedPlatforms"; exit 1; }
-          echo "Struttura .ipa:"; unzip -l Angavu-unsigned.ipa | sed -n '1,25p'
+          # Il plist dev'essere parseabile come property list: è ESATTAMENTE ciò che
+          # fa AltStore all'import (un fallimento qui = «isn't in the correct format»).
+          plutil -lint "$PLIST" || { echo "::error::Info.plist non è un plist valido (plutil -lint)"; exit 1; }
+          echo "Struttura .ipa:"; unzip -l Angavu-unsigned.ipa | sed -n '1,40p'
+          echo "--- Contenuto .app (per diagnosi icona/asset) ---"; find "$APP" -maxdepth 2 -print
+          echo "--- Info.plist (xml) ---"; plutil -convert xml1 -o - "$PLIST"
           echo "OK: .ipa ben formato per il sideload."
 
       - name: Carica l'artefatto .ipa
