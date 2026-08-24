@@ -80,7 +80,7 @@ public struct DashboardView: View {
         let pres = presentation
         switch pres.kind {
         case .idle:
-            ProgressView().progressViewStyle(.circular)
+            ProgressView("Calcolo dei numeri veri…").progressViewStyle(.circular)
         case .ready:
             if pres.showsLimitedBanner { limitedBanner }
             if let reclaimable = pres.reclaimable { reclaimableCard(reclaimable) }

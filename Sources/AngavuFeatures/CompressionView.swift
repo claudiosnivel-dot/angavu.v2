@@ -109,7 +109,7 @@ public struct CompressionView: View {
     var content: some View {
         switch loadPhase {
         case .loading:
-            ProgressView().progressViewStyle(.circular)
+            ProgressView("Lettura dei video…").progressViewStyle(.circular)
         case .failed(let message):
             indexFailedCard(message)
         case .loaded(let candidates):

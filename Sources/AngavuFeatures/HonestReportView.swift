@@ -77,7 +77,7 @@ public struct HonestReportView: View {
         let pres = presentation
         switch pres.kind {
         case .idle:
-            ProgressView().progressViewStyle(.circular)
+            ProgressView("Calcolo del report…").progressViewStyle(.circular)
         case .ready:
             if let hero = pres.hero { heroHeader(hero) }
             if pres.showsPartialBanner { partialBanner(invitesFullAccess: pres.invitesFullAccess) }

@@ -102,7 +102,7 @@ public struct CategoryReviewView: View {
     private var content: some View {
         switch loadPhase {
         case .loading:
-            ProgressView().progressViewStyle(.circular)
+            ProgressView("Analisi della categoria…").progressViewStyle(.circular)
         case .failed(let message):
             failedCard(message)
         case .loaded:
