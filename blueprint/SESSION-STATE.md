@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-24 (**sessione di BUILD rifinitura HIG — R-08**: layout categoria adattivo a Dynamic Type grande via `ViewThatFits(in: .horizontal)`. **CI Apple run #46 `success`** (`1c075d9`, verde al primo colpo). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; rifinitura HIG **9/12** (R-00…R-08 chiusi)) |
-| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG — R-08).** **R-08 — layout categoria adattivo a Dynamic Type grande**: le righe «titolo … valore» erano `HStack` con `Spacer()` e titolo senza `lineLimit` → alle accessibility sizes i due lati si comprimevano/troncavano. Avvolte in **`ViewThatFits(in: .horizontal)`** con fallback a **colonna singola** (valore sotto il titolo) prima di troncare, ai **tre siti** dell'audit: `DashboardCategoryRow` (`DashboardView`), `HonestReportCategoryRow` (`HonestReportView`) — `titleColumn`/`valueColumn` estratti e riusati nei due branch, titolo `lineLimit(2)`+`allowsTightening`, byte `lineLimit(1)`; `CategoryReviewRowView` (`CategoryReviewView`) — `identity` (icona+id) / `badge` estratti, badge portato sotto nel fallback verticale con `lineLimit(1)`. **Accessibility invariata**: i modifier (`accessibilityElement(children:.ignore)` + label/value umani dal layer puro) avvolgono `ViewThatFits`, un solo elemento VoiceOver in **entrambi** i branch. **VERDE (comando, L-COL-002)**: **CI run #46 `success`** (`1c075d9`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Solo-View (`AngavuFeatures`), nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata (nessun permesso/rete/framework nuovo). **Copertura (L-COL-006)**: le View sono compilate dai due job CI ma **senza test di rendering** → resa a runtime a XXL/AX non coperta; nessun target_test nuovo (R-08 è View-level per piano). **Prossimo: R-09** (parsimonia di gradiente/glow e contrasto testo-su-accento). Storico R-07: `ProgressView` idle/loading sempre etichettata → CI run #45 `success` (`01c0db7`). |
+| **Ultimo aggiornamento** | 2026-08-24 (**sessione di BUILD rifinitura HIG — R-09**: parsimonia del gradiente (titoli-header → `.primary`, cifra-hero unico uso) e contrasto testo-su-accento (`AuroraBrand.onGradient` scheme-adaptive, verificato WCAG). **CI Apple run #47 `success`** (`4aef03c`, verde al primo colpo). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; rifinitura HIG **10/12** (R-00…R-09 chiusi)) |
+| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG — R-09).** **R-09 — parsimonia gradiente/glow + contrasto testo-su-accento**: (1) **Parsimonia** — il gradiente Aurora era usato due volte per schermata (titolo-header + cifra-hero). I titoli-header di Dashboard, HonestReport, Review categorie e Compressione passano da gradiente a **`.primary`**; la cifra-hero (o la stima) resta **l'unico** uso del gradiente. Il wordmark «Angavu» (Home/Onboarding) e il titolo NonGoals restano gradiente (uso singolo canonico). (2) **Contrasto CTA** — nuovo `AuroraBrand.onGradient = Color(light: bianco, dark: inchiostro scuro)`: il bianco su gradiente **scuro** era ~2,4:1 (illeggibile), l'inchiostro scuro su stop pastello dark = **7,3–8,1:1** (AA pieno); in chiaro il bianco su stop saturi = 3,4–4,4:1, reso conforme **AA-large** portando le CTA a `headline` **bold** (≥17pt bold = testo grande, soglia 3:1). Applicato ai 5 riempimenti CTA (Home, Review, Compressione ×2, Onboarding). (3) **Glow** verificato **top-anchored** (`RadialGradient` da `.top` che sfuma a `.clear` a 320pt, trasparente sotto) — non un fondo pieno, nessuna modifica. **VERDE (comando, L-COL-002)**: **CI run #47 `success`** (`4aef03c`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Solo-View (`AngavuFeatures`), nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: contrasto verificato per **calcolo WCAG** (ratii documentati); le View compilate dai due job CI ma **senza test di rendering** → resa a runtime non coperta; nessun target_test nuovo (View-level per piano). **Prossimo: R-10** (accessibilità di stima e simboli). Storico R-07/R-08 in §2/§5; R-00…R-06 in §2/§5. |
 | **~~Sessione R-07 (storico)~~** | **Chiusa sul verde (BUILD rifinitura HIG — R-07).** **R-07 — `ProgressView` sempre etichettata + avanzamento determinato**: gli spinner nudi degli stati idle/loading non dicevano cosa stesse accadendo (né a schermo né a VoiceOver). Etichettati i **quattro spinner lone di intera-schermata** con label oneste (la label di `ProgressView` è anche la sua accessibility label): `HonestReportView` idle → «Calcolo del report…», `DashboardView` idle → «Calcolo dei numeri veri…», `CompressionView` loading-indice → «Lettura dei video…», `CategoryReviewView` loading → «Analisi della categoria…». **Non-nudi, invariati**: gli spinner di `HomeView` (`.working`/`.requestingPermission`) e del `workingCard` di `CompressionView+Sections` sono già dentro card etichettate (title header/adiacente). `HomeView.scanning` è già `ProgressView(value:)` **determinato**. `ExtraPhotoDomainsView` non ha più spinner (load sincrono, refactor R-05): il riferimento del piano `:84-88` era stale (commit `ee3b6d8`). **Nessuna frazione reale d'export** è instradata nel Domain state (`CompressionState .exporting/.replacing` non la portano) → il `workingCard` resta indeterminato ma etichettato: niente numeri fabbricati (numeri veri). **VERDE (comando, L-COL-002)**: **CI run #45 `success`** (`01c0db7`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Solo-View (`AngavuFeatures`), nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: le View sono compilate dai due job CI ma **senza test di rendering** → resa a runtime non coperta (coerente con R-02/R-05); nessun target_test nuovo (R-07 è View-level per piano). **Prossimo: R-08** (layout categoria adattivo a Dynamic Type grande, `ViewThatFits`). Storico dei task HIG precedenti (R-00…R-06) in §2 e §5. |
 
 ---
@@ -37,7 +37,7 @@
 
 ## 2. Macrotask corrente
 
-> **⭐ IN CORSO = BUILD della rifinitura HIG (9/12).** Coda `R-00…R-11` del
+> **⭐ IN CORSO = BUILD della rifinitura HIG (10/12).** Coda `R-00…R-11` del
 > `blueprint/HIG-REFINEMENT-PLAN.md`, 1-2 task per sessione, ognuno **chiuso al
 > confine CI** (`swift build -warnings-as-errors` + `swift test` + `swiftlint
 > --strict` + build app iOS verdi). **Chiusi**: **R-00** (persistenza onboarding
@@ -73,8 +73,13 @@
 > `CategoryReviewRowView` (`identity`/`badge` estratti, badge sotto nel fallback);
 > accessibility invariata, un solo elemento VoiceOver in entrambi i branch) a
 > **run #46 `success`** (`1c075d9`, verde al primo colpo).
-> **Prossimo consigliato: R-09** (parsimonia di gradiente/glow e contrasto
-> testo-su-accento). Poi i bassi R-10/R-11. Nessuna logica
+> **R-09** (parsimonia gradiente: titoli-header di Dashboard/HonestReport/Review/
+> Compressione da gradiente a `.primary`, la cifra-hero resta l'unico uso; contrasto
+> CTA: `AuroraBrand.onGradient` scheme-adaptive — inchiostro scuro su gradiente dark
+> 7,3–8,1:1 AA, bianco su gradiente chiaro reso AA-large con CTA bold; glow verificato
+> top-anchored) a **run #47 `success`** (`4aef03c`, verde al primo colpo).
+> **Prossimo consigliato: R-10** (accessibilità di stima e simboli). Poi il basso
+> R-11. Nessuna logica
 > nuova Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if
 > canImport(SwiftUI)`; le decisioni presentabili (helper hero, label di stima,
 > vocabolario haptic) nel layer PURO con `target_tests` in `AngavuFeaturesTests`,
@@ -395,7 +400,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `1c075d9` feat(ui-shell) R-08 layout categoria adattivo a Dynamic Type grande (`ViewThatFits`) — **CI verde run #46** (verde al primo colpo). Precedente: `01c0db7` (R-07, run #45), `18892a9` (R-06, run #44), `9730b36` (R-05, run #43) |
+| Ultimo commit | `4aef03c` feat(ui-shell) R-09 parsimonia gradiente + contrasto CTA (onGradient) — **CI verde run #47** (verde al primo colpo). Precedente: `1c075d9` (R-08, run #46), `01c0db7` (R-07, run #45), `18892a9` (R-06, run #44) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -405,6 +410,21 @@
 - **Budget consumato**: 0 (BOOTSTRAP) / vedi `BASELINE-AND-BUDGET.md`.
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
+
+- **Rifinitura HIG — R-09: parsimonia gradiente + contrasto testo-su-accento** (questa
+  sessione). **Parsimonia**: un solo gradiente per schermata — i titoli-header di
+  Dashboard/HonestReport/Review/Compressione da gradiente a `.primary`, la cifra-hero
+  resta l'unico uso; wordmark «Angavu» e titolo NonGoals restano gradiente (uso singolo).
+  **Contrasto**: `AuroraBrand.onGradient` scheme-adaptive (bianco chiaro / inchiostro
+  scuro dark) sui 5 riempimenti CTA — risolve il bianco-su-gradiente-scuro ~2,4:1
+  (inchiostro scuro su pastello dark = 7,3–8,1:1, AA pieno); in chiaro AA-large con CTA
+  `headline` bold. **Glow** verificato top-anchored (sfuma a `.clear`, non fondo pieno).
+  - **VERDE (comando, L-COL-002)**: **CI Apple run #47 `success`** (`4aef03c`, verde al
+    primo colpo) — build (-warnings-as-errors), test, lint --strict, build app iOS.
+  - **Copertura (L-COL-006)**: contrasto verificato per calcolo WCAG (ratii documentati);
+    View compilate dai job CI ma senza test di rendering → resa a runtime non coperta;
+    nessun target_test nuovo (View-level). Solo-View, altitudine/privacy invariate.
+
 
 - **Rifinitura HIG — R-08: layout categoria adattivo a Dynamic Type grande** (questa
   sessione): le righe «titolo … valore» erano `HStack` con `Spacer()` e titolo senza
