@@ -8,8 +8,9 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-24 (**sessione di BUILD rifinitura HIG — R-10**: accessibilità di stima e simboli — cifra-hero del report come singolo elemento VoiceOver con label parlata dal layer puro (mai il `~`, «Stima» a voce), trait header sul wordmark onboarding. **CI Apple run #48 `success`** (`0d9ed69`, verde al primo colpo). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; rifinitura HIG **11/12** (R-00…R-10 chiusi; resta R-11)) |
-| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG — R-10).** **R-10 — accessibilità di stima e simboli**: (1) **Cifra-hero del report onesto** — nel ramo stima la View rendeva `Text("~ …")` come elemento a sé → VoiceOver leggeva «tilde 128 MB». Aggiunta `HonestReportPresentation.Hero.accessibilityLabel(formattedBytes:)` (layer PURO): esatto → «128 MB recuperabili»; stima → «Stima, 128 MB recuperabili» — **mai** il `~`. In `heroHeader` il VStack è ora un solo elemento VoiceOver (`accessibilityElement(children: .ignore)` + `.isHeader` + `accessibilityLabel`), il `~` resta solo visivo per i vedenti. (2) **Wordmark onboarding** → `.accessibilityAddTraits(.isHeader)` (coerente con Home `:74` e NonGoals `:43`, che l'avevano già). (3) **Righe categoria** (Dashboard/HonestReport) **già coperte** da R-03/R-08 (`children:.ignore` + `accessibilityValue` con «, stima»; il `~` visivo non è letto) → nessuna modifica. (4) **SF Symbols**: le icone sono dimensionate via `Label` dal font del testo → già coerenti per peso/scala; nessuna modifica fabbricata (L-COL-006, no falso via libera). **VERDE (comando, L-COL-002)**: **CI run #48 `success`** (`0d9ed69`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Layer puro (oracolo)**: 2 target_test nuovi in `HonestReportPresentationTests` (esatto senza marca né `~`; stima nomina «Stima» senza `~`). **Solo `AngavuFeatures` + `App/`, nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: label della stima verificata dai target_test; le View compilate dai due job CI ma **senza test di rendering** → resa VoiceOver a runtime non coperta. **Prossimo: R-11** (rifiniture minori: transizione idle→ready→failed, `Picker`/`labelsHidden` ridondante, spinner in coda durante fusione/rimozione). Storico R-09/R-08/R-07 in §2/§5. |
+| **Ultimo aggiornamento** | 2026-08-24 (**sessione di BUILD rifinitura HIG — R-11**: rifiniture minori — transizione di fase `idle→ready→failed` animata gated su Reduce Motion, `Picker` tema semplificato (via ridondanza label/header), riga extra-foto disabilitata + spinner in coda durante l'azione async. **CI Apple run #49 `success`** (`d4d1cac`, verde al primo colpo). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; **rifinitura HIG 12/12 — COMPLETA** (R-00…R-11 tutti chiusi)) |
+| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG — R-11, ULTIMO della coda).** **R-11 — rifiniture minori** (i tre siti residui dell'audit HIG): (1) **Transizione di fase** — in `HonestReportView` lo `switch idle→ready→failed` era un taglio netto; ora `content` ha `.animation(reduceMotion ? nil : .easeInOut, value: presentation.kind)` con `.transition(.opacity)` sui rami — dissolvenza **gated su Reduce Motion** (equivalente statico, parità informativa; stesso idioma di R-06/`ContentView`). (2) **`Picker` tema** — in `ThemeSettings` l'header di sezione «Aspetto» duplicava la label del `Picker`, tenuta nascosta con `.labelsHidden()`; ora **una sola** «Aspetto» (la label del Picker inline, che resta l'accessibility label per VoiceOver), niente header duplicato né `.labelsHidden()` da compensare. (3) **Feedback d'avanzamento** — in `ExtraPhotoDomainsView` durante il `Task` async di fusione/rimozione la riga restava interattiva e muta; ora `applyingContactID`/`applyingCalendarID` marcano la riga in corso → riga **disabilitata + spinner in coda** («Fusione/Rimozione in corso» come accessibility label), swipe soppresso, gate anti doppio-tap; liberata solo dopo l'esito reale e il ricarico. **VERDE (comando, L-COL-002)**: **CI run #49 `success`** (`d4d1cac`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Solo `AngavuFeatures`, nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: le View sono compilate dai due job CI ma **senza test di rendering** → transizione/spinner/semplificazione a runtime non coperti; nessun target_test nuovo (R-11 è View-level per piano, coerente con R-02/R-05/R-07/R-08). **Coda rifinitura HIG ESAURITA (12/12)**: nessun task R-* residuo. **Prossimo (decisione utente)**: merge su `main` (gate soddisfatto), rigenerare l'`.ipa`, o release-review pre-App-Store. Storico R-10/R-09/R-07 in §2/§5. |
+| **~~Sessione R-10 (storico)~~** | **Chiusa sul verde (BUILD rifinitura HIG — R-10).** **R-10 — accessibilità di stima e simboli**: (1) **Cifra-hero del report onesto** — nel ramo stima la View rendeva `Text("~ …")` come elemento a sé → VoiceOver leggeva «tilde 128 MB». Aggiunta `HonestReportPresentation.Hero.accessibilityLabel(formattedBytes:)` (layer PURO): esatto → «128 MB recuperabili»; stima → «Stima, 128 MB recuperabili» — **mai** il `~`. In `heroHeader` il VStack è ora un solo elemento VoiceOver (`accessibilityElement(children: .ignore)` + `.isHeader` + `accessibilityLabel`), il `~` resta solo visivo per i vedenti. (2) **Wordmark onboarding** → `.accessibilityAddTraits(.isHeader)` (coerente con Home `:74` e NonGoals `:43`, che l'avevano già). (3) **Righe categoria** (Dashboard/HonestReport) **già coperte** da R-03/R-08 (`children:.ignore` + `accessibilityValue` con «, stima»; il `~` visivo non è letto) → nessuna modifica. (4) **SF Symbols**: le icone sono dimensionate via `Label` dal font del testo → già coerenti per peso/scala; nessuna modifica fabbricata (L-COL-006, no falso via libera). **VERDE (comando, L-COL-002)**: **CI run #48 `success`** (`0d9ed69`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Layer puro (oracolo)**: 2 target_test nuovi in `HonestReportPresentationTests` (esatto senza marca né `~`; stima nomina «Stima» senza `~`). **Solo `AngavuFeatures` + `App/`, nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: label della stima verificata dai target_test; le View compilate dai due job CI ma **senza test di rendering** → resa VoiceOver a runtime non coperta. **Prossimo: R-11** (rifiniture minori: transizione idle→ready→failed, `Picker`/`labelsHidden` ridondante, spinner in coda durante fusione/rimozione). Storico R-09/R-08/R-07 in §2/§5. |
 | **~~Sessione R-09 (storico)~~** | **Chiusa sul verde (BUILD rifinitura HIG — R-09).** **R-09 — parsimonia gradiente/glow + contrasto testo-su-accento**: (1) **Parsimonia** — il gradiente Aurora era usato due volte per schermata (titolo-header + cifra-hero). I titoli-header di Dashboard, HonestReport, Review categorie e Compressione passano da gradiente a **`.primary`**; la cifra-hero (o la stima) resta **l'unico** uso del gradiente. Il wordmark «Angavu» (Home/Onboarding) e il titolo NonGoals restano gradiente (uso singolo canonico). (2) **Contrasto CTA** — nuovo `AuroraBrand.onGradient = Color(light: bianco, dark: inchiostro scuro)`: il bianco su gradiente **scuro** era ~2,4:1 (illeggibile), l'inchiostro scuro su stop pastello dark = **7,3–8,1:1** (AA pieno); in chiaro il bianco su stop saturi = 3,4–4,4:1, reso conforme **AA-large** portando le CTA a `headline` **bold** (≥17pt bold = testo grande, soglia 3:1). Applicato ai 5 riempimenti CTA (Home, Review, Compressione ×2, Onboarding). (3) **Glow** verificato **top-anchored** (`RadialGradient` da `.top` che sfuma a `.clear` a 320pt, trasparente sotto) — non un fondo pieno, nessuna modifica. **VERDE (comando, L-COL-002)**: **CI run #47 `success`** (`4aef03c`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Solo-View (`AngavuFeatures`), nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: contrasto verificato per **calcolo WCAG** (ratii documentati); le View compilate dai due job CI ma **senza test di rendering** → resa a runtime non coperta; nessun target_test nuovo (View-level per piano). **Prossimo: R-10** (accessibilità di stima e simboli). Storico R-07/R-08 in §2/§5; R-00…R-06 in §2/§5. |
 | **~~Sessione R-07 (storico)~~** | **Chiusa sul verde (BUILD rifinitura HIG — R-07).** **R-07 — `ProgressView` sempre etichettata + avanzamento determinato**: gli spinner nudi degli stati idle/loading non dicevano cosa stesse accadendo (né a schermo né a VoiceOver). Etichettati i **quattro spinner lone di intera-schermata** con label oneste (la label di `ProgressView` è anche la sua accessibility label): `HonestReportView` idle → «Calcolo del report…», `DashboardView` idle → «Calcolo dei numeri veri…», `CompressionView` loading-indice → «Lettura dei video…», `CategoryReviewView` loading → «Analisi della categoria…». **Non-nudi, invariati**: gli spinner di `HomeView` (`.working`/`.requestingPermission`) e del `workingCard` di `CompressionView+Sections` sono già dentro card etichettate (title header/adiacente). `HomeView.scanning` è già `ProgressView(value:)` **determinato**. `ExtraPhotoDomainsView` non ha più spinner (load sincrono, refactor R-05): il riferimento del piano `:84-88` era stale (commit `ee3b6d8`). **Nessuna frazione reale d'export** è instradata nel Domain state (`CompressionState .exporting/.replacing` non la portano) → il `workingCard` resta indeterminato ma etichettato: niente numeri fabbricati (numeri veri). **VERDE (comando, L-COL-002)**: **CI run #45 `success`** (`01c0db7`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Solo-View (`AngavuFeatures`), nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: le View sono compilate dai due job CI ma **senza test di rendering** → resa a runtime non coperta (coerente con R-02/R-05); nessun target_test nuovo (R-07 è View-level per piano). **Prossimo: R-08** (layout categoria adattivo a Dynamic Type grande, `ViewThatFits`). Storico dei task HIG precedenti (R-00…R-06) in §2 e §5. |
 
@@ -38,7 +39,7 @@
 
 ## 2. Macrotask corrente
 
-> **⭐ IN CORSO = BUILD della rifinitura HIG (11/12).** Coda `R-00…R-11` del
+> **✅ COMPLETATA = coda di rifinitura HIG (12/12).** Coda `R-00…R-11` del
 > `blueprint/HIG-REFINEMENT-PLAN.md`, 1-2 task per sessione, ognuno **chiuso al
 > confine CI** (`swift build -warnings-as-errors` + `swift test` + `swiftlint
 > --strict` + build app iOS verdi). **Chiusi**: **R-00** (persistenza onboarding
@@ -85,17 +86,25 @@
 > + `.isHeader` sul wordmark onboarding, coerente con Home/NonGoals; righe categoria
 > già coperte da R-03/R-08, SF Symbols già coerenti via `Label`) a **run #48
 > `success`** (`0d9ed69`, verde al primo colpo).
-> **Prossimo consigliato: R-11** (rifiniture minori: transizione idle→ready→failed
-> animata, `Picker`/`.labelsHidden()` ridondante in `ThemeSettings`, riga
-> fusione/rimozione disabilitata + spinner in coda durante il `Task`). Nessuna logica
-> nuova Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if
-> canImport(SwiftUI)`; le decisioni presentabili (helper hero, label di stima,
-> vocabolario haptic) nel layer PURO con `target_tests` in `AngavuFeaturesTests`,
-> le View compilate-non-rese (L-COL-006). L'altitudine resta invariata (Domain puro).
+> **R-11 — ULTIMO della coda** (rifiniture minori) a **run #49 `success`**
+> (`d4d1cac`, verde al primo colpo): (1) transizione di fase `idle→ready→failed` in
+> `HonestReportView` animata con dissolvenza **gated su Reduce Motion** (equivalente
+> statico, idioma R-06); (2) `Picker` tema in `ThemeSettings` semplificato — rimossa
+> la ridondanza header-di-sezione / label-Picker (una sola «Aspetto», niente
+> `.labelsHidden()` da compensare, accessibility label preservata); (3) in
+> `ExtraPhotoDomainsView` durante il `Task` async di fusione/rimozione la riga è
+> **disabilitata + spinner in coda** (label onesta, swipe soppresso, gate anti
+> doppio-tap), liberata solo dopo l'esito reale. Nessuna logica nuova Domain/Data:
+> solo `AngavuFeatures` + `App/`, guardato `#if canImport(SwiftUI)`; R-11 è
+> View-level (nessuna decisione presentabile pura estratta) → nessun target_test
+> nuovo, View compilate-non-rese (L-COL-006). L'altitudine resta invariata.
 >
-> **Piano di build originale completo (11/11) + `wiring` (DI-009) 8/8 + guscio UI
-> 8/8**, tutti verdi in CI. Alternative sempre disponibili (decisione utente):
-> rigenerare l'`.ipa`, merge su `main`, release-review pre-App-Store.
+> **➡️ CODA DI RIFINITURA HIG ESAURITA (12/12).** Nessun task R-* residuo. Con
+> **piano di build 11/11 + `wiring` 8/8 + guscio UI 8/8 + rifinitura HIG 12/12**
+> tutti verdi in CI, il blueprint è **interamente costruito e verificato**. Prossimi
+> passi possibili (**decisione utente**, nessuno è un task di blueprint aperto):
+> merge su `main` (gate soddisfatto, branch mergeabile), rigenerare l'`.ipa`,
+> release-review pre-App-Store (apple-skills:release-review).
 
 - **Chiuso (wiring, DI-009)**: cablaggio dati completo — 7 view-model/seam dietro
   i port dell'`AppEnvironment`, tutti verificati dai target_tests in
@@ -408,7 +417,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `0d9ed69` feat(ui-shell) R-10 accessibilità di stima e simboli (hero VoiceOver label dal layer puro, no `~`; `.isHeader` sul wordmark onboarding) — **CI verde run #48** (verde al primo colpo). Precedente: `4aef03c` (R-09, run #47), `1c075d9` (R-08, run #46), `01c0db7` (R-07, run #45) |
+| Ultimo commit | `d4d1cac` feat(ui-shell) R-11 rifiniture minori (transizione fase animata gated Reduce Motion, `Picker` tema semplificato, riga extra-foto disabilitata + spinner in coda durante il `Task`) — **CI verde run #49** (verde al primo colpo). Precedente: `0d9ed69` (R-10, run #48), `4aef03c` (R-09, run #47), `1c075d9` (R-08, run #46) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -419,7 +428,36 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
-- **Rifinitura HIG — R-10: accessibilità di stima e simboli** (questa sessione). La
+- **Rifinitura HIG — R-11: rifiniture minori (ULTIMO della coda)** (questa sessione).
+  I tre siti residui dell'audit HIG, tutti View-level in `AngavuFeatures`.
+  - **Transizione di fase** (`HonestReportView`): lo `switch idle→ready→failed` era un
+    taglio netto. Ora `content` porta `.animation(reduceMotion ? nil : .easeInOut,
+    value: presentation.kind)` con `.transition(.opacity)` sui rami → dissolvenza
+    **gated su Reduce Motion** con equivalente statico (parità informativa; stesso
+    idioma di R-06/`ContentView`). `presentation.kind` è già `Equatable`.
+  - **`Picker` tema** (`ThemeSettings`): l'header di sezione «Aspetto» duplicava la
+    label del `Picker`, nascosta con `.labelsHidden()`. Ora **una sola** «Aspetto» —
+    la label del `Picker` inline, che resta l'accessibility label per VoiceOver —,
+    header duplicato e `.labelsHidden()` rimossi. Nessun impatto funzionale sulla
+    selezione del tema.
+  - **Feedback d'avanzamento** (`ExtraPhotoDomainsView`): durante il `Task` async di
+    fusione/rimozione la riga restava interattiva e muta. Aggiunti
+    `applyingContactID`/`applyingCalendarID` (`String?`): la riga in corso è
+    **disabilitata** e mostra uno **spinner in coda** (accessibility label «Fusione/
+    Rimozione in corso»), lo swipe distruttivo è soppresso, un `guard` evita il
+    doppio-tap; la riga si libera solo dopo l'esito reale e il ricarico.
+  - **VERDE (comando, L-COL-002)**: **CI Apple run #49 `success`** (`d4d1cac`, verde al
+    primo colpo) — build (-warnings-as-errors), test (target_tests + regressione),
+    lint --strict, build app iOS.
+  - **Copertura (L-COL-006)**: R-11 è View-level → nessuna decisione presentabile pura
+    estratta, **nessun target_test nuovo** (coerente con R-02/R-05/R-07/R-08); le View
+    sono compilate dai due job CI ma **senza test di rendering** → transizione, spinner
+    e semplificazione a runtime non coperti. Solo `AngavuFeatures` + `App/`: altitudine
+    e baseline privacy invariate. **Con R-11 la coda di rifinitura HIG è esaurita
+    (12/12).**
+
+
+- **Rifinitura HIG — R-10: accessibilità di stima e simboli** (sessione precedente). La
   cifra-hero del report onesto, nel ramo stima, rendeva `Text("~ …")` come elemento a
   sé → VoiceOver leggeva «tilde 128 MB».
   - **Layer PURO (oracolo)**: aggiunta `HonestReportPresentation.Hero.accessibilityLabel(formattedBytes:)`
