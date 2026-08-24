@@ -58,7 +58,9 @@ public struct HonestReportView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(presentation.title)
                 .font(.largeTitle.weight(.bold))
-                .foregroundStyle(AuroraBrand.gradient)
+                // R-09 parsimonia: un solo gradiente per schermata → la cifra-hero
+                // vince, il titolo passa al colore di testo primario.
+                .foregroundStyle(.primary)
                 .accessibilityAddTraits(.isHeader)
             if let detail = presentation.detail, presentation.kind != .failed {
                 Text(detail)

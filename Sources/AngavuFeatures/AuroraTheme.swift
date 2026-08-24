@@ -23,6 +23,14 @@ public enum AuroraBrand {
     /// Accento di supporto: azzurro.
     public static let accentAzzurro = Color(light: 0x45C6F5, dark: 0x5FD4FA)
 
+    /// Testo sopra un riempimento a `gradient` (CTA). Adatta il colore al color
+    /// scheme per il CONTRASTO: in chiaro gli stop sono saturi → inchiostro bianco;
+    /// in scuro gli stop sono pastello chiari → inchiostro scuro (bianco su pastello
+    /// sarebbe ~2,4:1, illeggibile). Contrasto verificato (R-09): scuro ink→pastello
+    /// 7,3–8,1:1 (AA pieno); chiaro bianco→saturo 3,4–4,4:1 (AA large, le CTA sono
+    /// testo grande/grassetto). Vedi HIG-REFINEMENT-PLAN R-09.
+    public static let onGradient = Color(light: 0xFFFFFF, dark: 0x0B0B0F)
+
     /// Il gradiente d'accento del brand (blu→viola→fucsia). Uso parsimonioso:
     /// wordmark, CTA di conferma, cifra-hero — mai un fondo intero (§Spec Android).
     public static let gradient = LinearGradient(

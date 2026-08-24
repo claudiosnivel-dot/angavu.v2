@@ -97,11 +97,11 @@ extension CompressionView {
                     grantConsent()
                 } label: {
                     Text("Acconsento a comprimere")
-                        .font(.headline)
+                        .font(.headline.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(AuroraBrand.gradient, in: .capsule)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AuroraBrand.onGradient)
                 }
                 .padding(.top, 4)
             }
@@ -135,11 +135,11 @@ extension CompressionView {
                     pendingConfirmation = selected
                 } label: {
                     Text("Comprimi ora")
-                        .font(.headline)
+                        .font(.headline.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(AuroraBrand.gradient, in: .capsule)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AuroraBrand.onGradient)
                 }
             }
             Button("Annulla") { reset() }

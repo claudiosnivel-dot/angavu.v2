@@ -178,11 +178,11 @@ public struct HomeView: View {
                 startScan()
             } label: {
                 Text(pres.primaryActionTitle)
-                    .font(.headline)
+                    .font(.headline.weight(.bold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(AuroraBrand.gradient, in: .capsule)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AuroraBrand.onGradient)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 12)

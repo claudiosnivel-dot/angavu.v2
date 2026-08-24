@@ -89,7 +89,8 @@ public struct CompressionView: View {
             Label {
                 Text("Comprimi video")
                     .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(AuroraBrand.gradient)
+                    // R-09 parsimonia: la cifra-hero (stima) vince, il titolo va a `.primary`.
+                    .foregroundStyle(.primary)
             } icon: {
                 Image(systemName: "arrow.down.right.and.arrow.up.left")
                     .foregroundStyle(AuroraBrand.accentViola)

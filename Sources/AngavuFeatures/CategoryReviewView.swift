@@ -81,7 +81,8 @@ public struct CategoryReviewView: View {
             Label {
                 Text(category.title)
                     .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(AuroraBrand.gradient)
+                    // R-09 parsimonia: la cifra-hero vince, il titolo va a `.primary`.
+                    .foregroundStyle(.primary)
             } icon: {
                 Image(systemName: category.symbol)
                     .foregroundStyle(AuroraBrand.accentViola)
@@ -256,11 +257,11 @@ public struct CategoryReviewView: View {
                 Text(presentation.removableCount == 1
                     ? "Elimina 1 elemento"
                     : "Elimina \(presentation.removableCount) elementi")
-                    .font(.headline)
+                    .font(.headline.weight(.bold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(AuroraBrand.gradient, in: .capsule)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AuroraBrand.onGradient)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 12)
