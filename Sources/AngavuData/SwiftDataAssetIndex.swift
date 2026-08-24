@@ -115,7 +115,7 @@ public final class SwiftDataAssetIndex: AssetIndexReading, AssetIndexWriting {
         // memoria + un solo `save()`. Sul primo scan lo store è vuoto → il fetch è
         // immediato e restano solo gli insert.
         let existing = try context.fetch(FetchDescriptor<AssetRecord>())
-        var byId = Dictionary<String, AssetRecord>(minimumCapacity: existing.count)
+        var byId = [String: AssetRecord](minimumCapacity: existing.count)
         for record in existing { byId[record.id] = record }
 
         for asset in assets {
