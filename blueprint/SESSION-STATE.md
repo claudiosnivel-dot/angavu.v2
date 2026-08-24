@@ -8,8 +8,8 @@
 |---|---|
 | **Progetto** | Angavu iOS |
 | **Ecosistema** | swift-ios (SwiftUI + SwiftData + PhotoKit/Vision/AVFoundation) |
-| **Ultimo aggiornamento** | 2026-08-23 (**sessione di BUILD rifinitura HIG — R-06**: micro-interazioni aptiche sui momenti-firma (vocabolario per rarità `FeedbackEvent`→`FeedbackLevel` puro) + toggle «Feedback aptico» + transizione onboarding→home gated su Reduce Motion. **CI Apple run #44 `success`** (`18892a9`, verde al primo colpo). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; rifinitura HIG **7/12** (R-00…R-06 chiusi)) |
-| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG — R-06).** **R-06 — micro-interazioni & haptics + Reduce Motion (trasversale)**: i momenti-firma non davano feedback e le transizioni di fase erano tagli netti. **Layer PURO (oracolo, target_tests)**: `FeedbackEvent` (actionAdvance/destructivePreview/success/failure) → `FeedbackLevel`, vocabolario per rarità (un evento = un livello, livelli distinti — `FeedbackTests`); `HapticsPreference` (default attivo). **Guardato SwiftUI**: `FeedbackLevel.sensoryFeedback` (mappa a `SensoryFeedback`) + modificatore `.hapticFeedback(on:)` che rispetta il toggle utente (nessun buzz se disattivato). **Wiring (un solo owner per evento)**: Home fine scan (success/failure), Compressione done/failed, ExtraPhotoDomains esito (applied→success, failed→error), CategoryReview apertura anteprima distruttiva (warning), Onboarding avanzamento (impact leggero). **Transizione di fase**: onboarding→home animata con `withAnimation` + `.transition(.opacity)` ma **SEMPRE gated su Reduce Motion** (`withAnimation(nil)` = equivalente statico, parità informativa). **Toggle** «Feedback aptico» in `ThemeSettingsView` (titolo → «Impostazioni»). **VERDE (comando, L-COL-002)**: **CI run #44 `success`** (`18892a9`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata (haptics = API di sistema, nessun permesso/rete). **Copertura (L-COL-006)**: il vocabolario puro è coperto dai target_tests; wiring/transizioni/haptics compilati dai due job CI ma **senza test di rendering** → resa a runtime (vibrazioni, animazioni) dichiarata non coperta. **Prossimo: R-07** (`ProgressView` sempre etichettata + avanzamento determinato). Storico dei task HIG precedenti (R-00…R-05) in §2 e §5. |
+| **Ultimo aggiornamento** | 2026-08-24 (**sessione di BUILD rifinitura HIG — R-07**: `ProgressView` degli stati idle/loading sempre etichettata con label oneste. **CI Apple run #45 `success`** (`01c0db7`, verde al primo colpo). Piano build 11/11 + `wiring` 8/8 + guscio UI 8/8 invariati; rifinitura HIG **8/12** (R-00…R-07 chiusi)) |
+| **Sessione corrente** | **Chiusa sul verde (BUILD rifinitura HIG — R-07).** **R-07 — `ProgressView` sempre etichettata + avanzamento determinato**: gli spinner nudi degli stati idle/loading non dicevano cosa stesse accadendo (né a schermo né a VoiceOver). Etichettati i **quattro spinner lone di intera-schermata** con label oneste (la label di `ProgressView` è anche la sua accessibility label): `HonestReportView` idle → «Calcolo del report…», `DashboardView` idle → «Calcolo dei numeri veri…», `CompressionView` loading-indice → «Lettura dei video…», `CategoryReviewView` loading → «Analisi della categoria…». **Non-nudi, invariati**: gli spinner di `HomeView` (`.working`/`.requestingPermission`) e del `workingCard` di `CompressionView+Sections` sono già dentro card etichettate (title header/adiacente). `HomeView.scanning` è già `ProgressView(value:)` **determinato**. `ExtraPhotoDomainsView` non ha più spinner (load sincrono, refactor R-05): il riferimento del piano `:84-88` era stale (commit `ee3b6d8`). **Nessuna frazione reale d'export** è instradata nel Domain state (`CompressionState .exporting/.replacing` non la portano) → il `workingCard` resta indeterminato ma etichettato: niente numeri fabbricati (numeri veri). **VERDE (comando, L-COL-002)**: **CI run #45 `success`** (`01c0db7`, verde al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests + regressione), `swiftlint lint --strict`, build app iOS. **Solo-View (`AngavuFeatures`), nessuna logica Domain/Data nuova**: altitudine invariata; baseline privacy invariata. **Copertura (L-COL-006)**: le View sono compilate dai due job CI ma **senza test di rendering** → resa a runtime non coperta (coerente con R-02/R-05); nessun target_test nuovo (R-07 è View-level per piano). **Prossimo: R-08** (layout categoria adattivo a Dynamic Type grande, `ViewThatFits`). Storico dei task HIG precedenti (R-00…R-06) in §2 e §5. |
 
 ---
 
@@ -36,7 +36,7 @@
 
 ## 2. Macrotask corrente
 
-> **⭐ IN CORSO = BUILD della rifinitura HIG (7/12).** Coda `R-00…R-11` del
+> **⭐ IN CORSO = BUILD della rifinitura HIG (8/12).** Coda `R-00…R-11` del
 > `blueprint/HIG-REFINEMENT-PLAN.md`, 1-2 task per sessione, ognuno **chiuso al
 > confine CI** (`swift build -warnings-as-errors` + `swift test` + `swiftlint
 > --strict` + build app iOS verdi). **Chiusi**: **R-00** (persistenza onboarding
@@ -59,8 +59,14 @@
 > `FeedbackEvent`→`FeedbackLevel` puro; toggle utente «Feedback aptico»; transizione
 > onboarding→home animata ma gated su Reduce Motion) a **run #44 `success`**
 > (`18892a9`, verde al primo colpo).
-> **Prossimo consigliato: R-07** (`ProgressView` sempre etichettata + avanzamento
-> determinato). Poi R-08/R-09, infine i bassi R-10/R-11. Nessuna logica
+> **R-07** (`ProgressView` idle/loading sempre etichettata: quattro spinner lone di
+> intera-schermata — HonestReport «Calcolo del report…», Dashboard «Calcolo dei
+> numeri veri…», Compression «Lettura dei video…», CategoryReview «Analisi della
+> categoria…»; Home/`workingCard` già etichettati, Home.scanning già determinato,
+> ExtraPhotoDomains senza spinner; nessuna frazione d'export fabbricata) a
+> **run #45 `success`** (`01c0db7`, verde al primo colpo).
+> **Prossimo consigliato: R-08** (layout categoria adattivo a Dynamic Type grande,
+> `ViewThatFits`). Poi R-09, infine i bassi R-10/R-11. Nessuna logica
 > nuova Domain/Data: solo `AngavuFeatures` + `App/`, guardato `#if
 > canImport(SwiftUI)`; le decisioni presentabili (helper hero, label di stima,
 > vocabolario haptic) nel layer PURO con `target_tests` in `AngavuFeaturesTests`,
@@ -381,7 +387,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `18892a9` feat(ui-shell) R-06 micro-interazioni aptiche + Reduce Motion — **CI verde run #44** (verde al primo colpo). Precedente: `9730b36` (R-05, run #43), `59616f0` (R-04, run #42), `57e919a` (R-03, run #41) |
+| Ultimo commit | `01c0db7` feat(ui-shell) R-07 ProgressView idle/loading sempre etichettate — **CI verde run #45** (verde al primo colpo). Precedente: `18892a9` (R-06, run #44), `9730b36` (R-05, run #43), `59616f0` (R-04, run #42) |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
@@ -392,8 +398,33 @@
 
 ## 5. Esiti dell'ultima sessione (framing onesto)
 
-- **Rifinitura HIG — R-06: micro-interazioni aptiche + Reduce Motion** (questa
-  sessione): i momenti-firma non davano feedback, le transizioni di fase erano tagli
+- **Rifinitura HIG — R-07: `ProgressView` idle/loading sempre etichettata** (questa
+  sessione): gli spinner nudi degli stati idle/loading non comunicavano nulla, né a
+  schermo né a VoiceOver. Etichettati i **quattro spinner lone di intera-schermata**
+  con label oneste (la label di `ProgressView` è anche la sua accessibility label):
+  `HonestReportView` idle → «Calcolo del report…», `DashboardView` idle → «Calcolo
+  dei numeri veri…», `CompressionView` loading-indice → «Lettura dei video…»,
+  `CategoryReviewView` loading → «Analisi della categoria…». **Non-nudi, lasciati
+  invariati**: gli spinner di `HomeView` (`.working`/`.requestingPermission`) e del
+  `workingCard` di `CompressionView+Sections` vivono già dentro card etichettate;
+  `HomeView.scanning` è già `ProgressView(value:)` **determinato**;
+  `ExtraPhotoDomainsView` non ha più spinner (load sincrono dopo il refactor R-05 —
+  il riferimento del piano `:84-88` era al commit stale `ee3b6d8`). **Onestà (numeri
+  veri)**: nessuna frazione d'export reale è instradata nel Domain state
+  (`CompressionState .exporting/.replacing` non la porta), quindi il `workingCard`
+  resta indeterminato ma etichettato — nessun avanzamento fabbricato. **Solo-View
+  (`AngavuFeatures`), nessuna logica Domain/Data nuova**: altitudine invariata;
+  baseline privacy invariata (nessun nuovo permesso/rete/framework).
+  - **VERDE (comando, L-COL-002)**: **CI Apple run #45 `success`** (`01c0db7`, verde
+    al primo colpo) — `swift build` (-warnings-as-errors), `swift test` (target_tests
+    + regressione), `swiftlint lint --strict`, build app iOS.
+  - **Copertura (L-COL-006)**: le View sono compilate dai due job CI ma **senza test
+    di rendering** → resa a runtime non coperta (coerente con R-02/R-05). Nessun
+    target_test nuovo: R-07 è View-level per il piano (label statiche, non decisioni
+    presentabili pure).
+
+- **Rifinitura HIG — R-06: micro-interazioni aptiche + Reduce Motion** (sessione
+  precedente): i momenti-firma non davano feedback, le transizioni di fase erano tagli
   netti. **Layer PURO (oracolo)**: `FeedbackEvent`→`FeedbackLevel`, vocabolario per
   rarità (un evento = un livello, livelli distinti — `FeedbackTests`); `HapticsPreference`
   (default attivo). **Guardato SwiftUI**: `FeedbackLevel.sensoryFeedback` + modificatore
