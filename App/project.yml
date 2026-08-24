@@ -21,6 +21,12 @@ targets:
       - path: .
         excludes:
           - project.yml
+          # L'Info.plist NON va tra le risorse: se copiato grezzo nel bundle
+          # scavalca il "Process Info.plist" (niente sostituzione di $(...) né
+          # iniezione di CFBundleExecutable/MinimumOSVersion/UIDeviceFamily) →
+          # .ipa senza eseguibile dichiarato = «formato non adatto» su AltStore.
+          # Deve restare SOLO come INFOPLIST_FILE (processato).
+          - Info.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.angavu.app
