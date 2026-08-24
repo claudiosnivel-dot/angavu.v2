@@ -73,6 +73,19 @@ Quasi sempre è uno di questi, in ordine di probabilità:
    formato .ipa"*): se quel passo è verde, il `.ipa` interno è ben formato — il
    problema è nel modo in cui lo passi al tool, non nel file.
 
+5. **«Encountered unknown tag html on line 1» / `kCFPropertyListOldStyleParsingError`.**
+   Questo è il caso più insidioso: il file che hai dato ad AltStore **è una pagina
+   HTML, non l'`.ipa`**. Succede perché la repo è **privata** e gli scaricamenti da
+   GitHub (artefatti E release) funzionano **solo da loggati**: se scarichi da un
+   browser non autenticato, GitHub restituisce una pagina di login/errore in HTML che
+   finisce salvata come `.zip`/`.ipa`. **Verifica la dimensione**: il file giusto pesa
+   **~700 KB**; se sono pochi KB è l'HTML. Rimedi:
+   - **Consigliato**: scarica l'artefatto da un **computer loggato su GitHub**, estrai
+     l'`.ipa`, e installalo sull'iPhone via cavo con **Sideloadly** (evita del tutto il
+     download da telefono).
+   - Da iPhone: apri `github.com` in **Safari**, **accedi**, poi vai al run e scarica;
+     controlla che lo zip sia ~700 KB prima di darlo ad AltStore.
+
 Se dopo l'estrazione l'errore persiste, apri il log del run e controlla lo step
 *"Verifica formato .ipa"*: elenca le chiavi `Info.plist` e la struttura reale.
 
