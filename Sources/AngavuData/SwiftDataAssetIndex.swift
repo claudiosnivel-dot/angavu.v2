@@ -105,16 +105,26 @@ public final class SwiftDataAssetIndex: AssetIndexReading, AssetIndexWriting {
     // MARK: Scrittura
 
     public func upsert(_ assets: [LibraryAsset]) throws {
+        guard !assets.isEmpty else { return }
+
+        // UN SOLO fetch di tutti i record esistenti, indicizzati per id, invece di
+        // una query per asset. La versione per-item faceva O(N) `FetchDescriptor`
+        // sequenziali: su una libreria reale (decine di migliaia di foto) sono
+        // minuti di store-round-trip col main thread bloccato → la scansione appare
+        // "ferma al 100%" dopo che il mapping è finito. Qui: O(1) query + O(N) in
+        // memoria + un solo `save()`. Sul primo scan lo store è vuoto → il fetch è
+        // immediato e restano solo gli insert.
+        let existing = try context.fetch(FetchDescriptor<AssetRecord>())
+        var byId = Dictionary<String, AssetRecord>(minimumCapacity: existing.count)
+        for record in existing { byId[record.id] = record }
+
         for asset in assets {
-            let targetId = asset.id
-            var descriptor = FetchDescriptor<AssetRecord>(
-                predicate: #Predicate { $0.id == targetId }
-            )
-            descriptor.fetchLimit = 1
-            if let existing = try context.fetch(descriptor).first {
-                existing.apply(asset)          // aggiornamento in place per id
+            if let record = byId[asset.id] {
+                record.apply(asset)            // aggiornamento in place per id
             } else {
-                context.insert(AssetRecord(asset: asset))
+                let record = AssetRecord(asset: asset)
+                context.insert(record)
+                byId[asset.id] = record        // dedup anche entro lo stesso batch
             }
         }
         try context.save()

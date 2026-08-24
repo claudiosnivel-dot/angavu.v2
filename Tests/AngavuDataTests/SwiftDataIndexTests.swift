@@ -39,6 +39,33 @@ final class SwiftDataIndexTests: XCTestCase {
         XCTAssertEqual(try index.count(), 2)
     }
 
+    // Dedup ENTRO lo stesso batch: due asset con lo stesso id in un'unica upsert
+    // → un solo record, senza violare il vincolo `.unique` su `id`. L'upsert batch
+    // (un fetch solo, mappa per id) deve collassarli come farebbe l'idempotenza fra
+    // chiamate separate.
+    func test_upsertDeduplicatesWithinASingleBatch() throws {
+        let index = try makeIndex()
+
+        try index.upsert([
+            asset("A", kind: .photo),
+            asset("A", kind: .photo), // stesso id nello stesso batch
+            asset("B", kind: .video)
+        ])
+
+        XCTAssertEqual(try index.count(), 2)
+    }
+
+    // Molti asset in un'unica upsert → esattamente quel numero di record (nessuna
+    // perdita né duplicazione col percorso batch a fetch singolo).
+    func test_upsertLargeBatchIndexesAll() throws {
+        let index = try makeIndex()
+        let many = (0..<2000).map { asset("id-\($0)", kind: .photo) }
+
+        try index.upsert(many)
+
+        XCTAssertEqual(try index.count(), 2000)
+    }
+
     // AC-012-2: query per soli video → solo i record di tipo video.
     func test_queryByKindReturnsOnlyVideos() throws {
         let index = try makeIndex()
