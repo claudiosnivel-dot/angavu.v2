@@ -23,6 +23,11 @@ public struct ExtraPhotoDomainsView: View {
     @State private var pendingContact: ContactMergeProposal?
     @State private var pendingCalendar: CalendarEntry?
     @State private var didLoad = false
+    // R-11: id della riga con un'azione (fusione/rimozione) in corso. Finché è
+    // valorizzato la riga è disabilitata e mostra uno spinner in coda — feedback
+    // d'avanzamento onesto durante il `Task` async, nessuna doppia invocazione.
+    @State private var applyingContactID: String?
+    @State private var applyingCalendarID: String?
 
     public init(ports: ExtraDomainsPorts) {
         _contactsVM = State(initialValue: ContactsReviewViewModel(
@@ -114,7 +119,10 @@ public struct ExtraPhotoDomainsView: View {
                 Text(presentation.contactsEmptyMessage).foregroundStyle(.secondary)
             } else {
                 ForEach(contactsVM.proposals, id: \.primary.id) { proposal in
-                    contactRow(ExtraPhotoDomainsPresentation.contactRow(for: proposal)) {
+                    contactRow(
+                        ExtraPhotoDomainsPresentation.contactRow(for: proposal),
+                        inProgress: applyingContactID == proposal.primary.id
+                    ) {
                         pendingContact = proposal
                     }
                 }
@@ -128,6 +136,7 @@ public struct ExtraPhotoDomainsView: View {
 
     private func contactRow(
         _ row: ExtraPhotoDomainsPresentation.ContactRow,
+        inProgress: Bool,
         action: @escaping () -> Void
     ) -> some View {
         HStack {
@@ -136,19 +145,31 @@ public struct ExtraPhotoDomainsView: View {
                 Text(row.detail).font(.footnote).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Fondi", action: action)
-                .buttonStyle(.borderless)
-                .foregroundStyle(AuroraBrand.accentViola)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-                .accessibilityLabel(row.actionLabel)
+            if inProgress {
+                // R-11: spinner in coda mentre la fusione è in corso.
+                ProgressView()
+                    .frame(minHeight: 44)
+                    .accessibilityLabel("Fusione in corso")
+            } else {
+                Button("Fondi", action: action)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(AuroraBrand.accentViola)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel(row.actionLabel)
+            }
         }
+        // R-11: riga disabilitata finché il `Task` non risolve (niente doppio tap).
+        .disabled(inProgress)
         // Affordance idiomatica in lista (R-04): lo swipe apre lo STESSO gate
-        // human-gated del bottone in coda — nessuna scorciatoia distruttiva.
+        // human-gated del bottone in coda — nessuna scorciatoia distruttiva. Soppresso
+        // mentre l'azione è in corso (coerente con la riga disabilitata).
         .swipeActions(edge: .trailing) {
-            Button("Fondi", action: action)
-                .tint(AuroraBrand.accentViola)
-                .accessibilityLabel(row.actionLabel)
+            if !inProgress {
+                Button("Fondi", action: action)
+                    .tint(AuroraBrand.accentViola)
+                    .accessibilityLabel(row.actionLabel)
+            }
         }
     }
 
@@ -160,7 +181,10 @@ public struct ExtraPhotoDomainsView: View {
                 Text(presentation.calendarsEmptyMessage).foregroundStyle(.secondary)
             } else {
                 ForEach(calendarsVM.proposal.removable, id: \.id) { calendar in
-                    calendarRow(ExtraPhotoDomainsPresentation.calendarRow(for: calendar)) {
+                    calendarRow(
+                        ExtraPhotoDomainsPresentation.calendarRow(for: calendar),
+                        inProgress: applyingCalendarID == calendar.id
+                    ) {
                         pendingCalendar = calendar
                     }
                 }
@@ -174,22 +198,34 @@ public struct ExtraPhotoDomainsView: View {
 
     private func calendarRow(
         _ row: ExtraPhotoDomainsPresentation.CalendarRow,
+        inProgress: Bool,
         action: @escaping () -> Void
     ) -> some View {
         HStack {
             Text(row.title).font(.body)
             Spacer()
-            Button("Rimuovi", role: .destructive, action: action)
-                .buttonStyle(.borderless)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-                .accessibilityLabel(row.actionLabel)
+            if inProgress {
+                // R-11: spinner in coda mentre la rimozione è in corso.
+                ProgressView()
+                    .frame(minHeight: 44)
+                    .accessibilityLabel("Rimozione in corso")
+            } else {
+                Button("Rimuovi", role: .destructive, action: action)
+                    .buttonStyle(.borderless)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel(row.actionLabel)
+            }
         }
+        // R-11: riga disabilitata finché il `Task` non risolve (niente doppio tap).
+        .disabled(inProgress)
         // Swipe distruttivo idiomatico (R-04): stesso gate human-gated del bottone,
-        // solo un'affordance più naturale in lista.
+        // solo un'affordance più naturale in lista. Soppresso durante l'azione.
         .swipeActions(edge: .trailing) {
-            Button("Rimuovi", role: .destructive, action: action)
-                .accessibilityLabel(row.actionLabel)
+            if !inProgress {
+                Button("Rimuovi", role: .destructive, action: action)
+                    .accessibilityLabel(row.actionLabel)
+            }
         }
     }
 
@@ -237,15 +273,24 @@ public struct ExtraPhotoDomainsView: View {
     }
 
     private func applyContact(_ proposal: ContactMergeProposal) {
+        // R-11: marca la riga «in corso» prima dell'await (spinner + disabilitata),
+        // la libera solo dopo l'esito reale e il ricarico. Il gate evita doppie
+        // invocazioni sullo stesso contatto.
+        guard applyingContactID == nil else { return }
+        applyingContactID = proposal.primary.id
         Task {
             lastOutcome = await contactsVM.applyMerge(proposal, confirmed: true)
+            applyingContactID = nil
             load()
         }
     }
 
     private func applyCalendar(_ calendar: CalendarEntry) {
+        guard applyingCalendarID == nil else { return }
+        applyingCalendarID = calendar.id
         Task {
             lastOutcome = await calendarsVM.applyRemoval(calendar, confirmed: true)
+            applyingCalendarID = nil
             load()
         }
     }

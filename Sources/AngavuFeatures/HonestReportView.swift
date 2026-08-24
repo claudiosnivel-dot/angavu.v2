@@ -23,6 +23,10 @@ private func formatReportBytes(_ bytes: Int64) -> String {
 /// Schermata del report onesto, cablata sui dati veri.
 public struct HonestReportView: View {
     @State private var vm: HonestReportViewModel
+    // R-11: la transizione di fase idle→ready→failed è animata (dissolvenza) ma
+    // SEMPRE gated su Reduce Motion, con equivalente statico (parità informativa:
+    // cambia solo il crossfade, mai il contenuto). Stesso idioma di R-06/ContentView.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(environment: AppEnvironment) {
         _vm = State(initialValue: HonestReportViewModel(environment: environment))
@@ -37,6 +41,7 @@ public struct HonestReportView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 content
+                    .animation(reduceMotion ? nil : .easeInOut, value: presentation.kind)
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -79,14 +84,20 @@ public struct HonestReportView: View {
         let pres = presentation
         switch pres.kind {
         case .idle:
-            ProgressView("Calcolo del report…").progressViewStyle(.circular)
+            ProgressView("Calcolo del report…")
+                .progressViewStyle(.circular)
+                .transition(.opacity)
         case .ready:
-            if let hero = pres.hero { heroHeader(hero) }
-            if pres.showsPartialBanner { partialBanner(invitesFullAccess: pres.invitesFullAccess) }
-            categoriesList(pres.categoryRows)
-            if let reclaimable = pres.reclaimable { reclaimableCard(reclaimable) }
+            // I sottoblocchi condividono la stessa dissolvenza: entrano/escono come
+            // un gruppo quando lo stato cambia (gated su Reduce Motion a monte).
+            if let hero = pres.hero { heroHeader(hero).transition(.opacity) }
+            if pres.showsPartialBanner {
+                partialBanner(invitesFullAccess: pres.invitesFullAccess).transition(.opacity)
+            }
+            categoriesList(pres.categoryRows).transition(.opacity)
+            if let reclaimable = pres.reclaimable { reclaimableCard(reclaimable).transition(.opacity) }
         case .failed:
-            failedCard(pres)
+            failedCard(pres).transition(.opacity)
         }
     }
 

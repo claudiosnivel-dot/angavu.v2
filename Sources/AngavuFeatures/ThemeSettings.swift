@@ -51,6 +51,10 @@ public struct ThemeSettingsView: View {
 
     public var body: some View {
         Form {
+            // R-11: prima l'header di sezione «Aspetto» duplicava la label del
+            // Picker, tenuta nascosta con `.labelsHidden()`. Una sola «Aspetto»: la
+            // label del Picker inline (che resta l'accessibility label per VoiceOver),
+            // niente header duplicato né `.labelsHidden()` da compensare.
             Section {
                 Picker("Aspetto", selection: $choice) {
                     ForEach(ThemeChoice.allCases, id: \.self) { option in
@@ -58,9 +62,6 @@ public struct ThemeSettingsView: View {
                     }
                 }
                 .pickerStyle(.inline)
-                .labelsHidden()
-            } header: {
-                Text("Aspetto")
             } footer: {
                 Text("«Sistema» segue l'impostazione di iOS. Il tema Aurora si adatta a "
                     + "chiaro e scuro con gli stessi colori d'identità.")
