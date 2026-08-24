@@ -19,11 +19,19 @@ Nessun Mac fisico, nessun abbonamento.
 ## Passo 1 — Genera l'`.ipa` non firmato (in cloud)
 
 Su GitHub → **Actions** → workflow **"Build unsigned IPA"** → **Run workflow**.
-Al termine (~pochi minuti) scarica l'artefatto **`Angavu-unsigned-ipa`**: dentro
-c'è `Angavu-unsigned.ipa`.
+Al termine (~pochi minuti) scarica l'artefatto **`Angavu-unsigned-ipa`**.
+
+> ⚠️ **IMPORTANTISSIMO — estrai lo zip prima di sideloadare.** GitHub consegna
+> l'artefatto come **`Angavu-unsigned-ipa.zip`** (un contenitore). **Dentro** c'è il
+> vero file da installare: **`Angavu-unsigned.ipa`**. **Estrai** lo zip e dai a
+> Sideloadly/AltStore **il `.ipa` interno**, MAI lo zip esterno. Se passi lo zip (o
+> lo rinomini in `.ipa`), AltStore risponde **«non è nel formato adatto»**: sta
+> guardando uno zip che contiene un `.ipa`, non un `.ipa` con dentro `Payload/`.
 
 > È generato da `.github/workflows/ipa.yml` (build `-sdk iphoneos` senza firma,
-> impacchettato in `Payload/Angavu.app` → `.ipa`).
+> impacchettato in `Payload/Angavu.app` → `.ipa`) e **verificato in CI** (struttura
+> `Payload/`, eseguibile Mach-O, chiavi `Info.plist`, build device): se l'artefatto
+> esiste, l'`.ipa` è ben formato.
 
 ## Passo 2 — Firma e installa sull'iPhone (dal tuo PC)
 
@@ -48,6 +56,25 @@ Passi tipici (Sideloadly):
 Sull'iPhone: **Impostazioni → Privacy e sicurezza → Modalità sviluppatore →
 ON**, poi riavvia e conferma. La prima volta, se richiesto, "Fidati" del
 certificato in **Impostazioni → Generali → VPN e gestione dispositivo**.
+
+## Se AltStore/Sideloadly dice «non è nel formato adatto»
+
+Quasi sempre è uno di questi, in ordine di probabilità:
+
+1. **Hai passato lo zip esterno, non l'`.ipa` interno.** L'artefatto scaricato è
+   `Angavu-unsigned-ipa.zip`. **Estrailo** e sideloada `Angavu-unsigned.ipa` che
+   trovi dentro. (Su iPhone: File → tocca lo zip per estrarlo; su PC: click destro →
+   Estrai.) Questo è il caso n.1.
+2. **Doppia compressione / rinomina.** Non rinominare uno `.zip` in `.ipa`: un `.ipa`
+   valido ha `Payload/NomeApp.app/…` alla radice, non un `.ipa` annidato.
+3. **Artefatto scaduto o build vecchia.** Gli artefatti durano 14 giorni; se è
+   vecchio, ri-lancia **"Build unsigned IPA"** e riscarica.
+4. **Dubbi sul file?** La CI ora verifica il formato dell'`.ipa` (step *"Verifica
+   formato .ipa"*): se quel passo è verde, il `.ipa` interno è ben formato — il
+   problema è nel modo in cui lo passi al tool, non nel file.
+
+Se dopo l'estrazione l'errore persiste, apri il log del run e controlla lo step
+*"Verifica formato .ipa"*: elenca le chiavi `Info.plist` e la struttura reale.
 
 ## Limiti onesti del free provisioning (senza i 99 $)
 

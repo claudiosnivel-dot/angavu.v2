@@ -52,6 +52,33 @@ jobs:
           zip -r -q Angavu-unsigned.ipa Payload
           echo "IPA creato:"; ls -lh Angavu-unsigned.ipa
 
+      - name: Verifica formato .ipa (oracolo per sideload/AltStore)
+        run: |
+          set -euo pipefail
+          rm -rf _verify && mkdir _verify
+          unzip -q Angavu-unsigned.ipa -d _verify
+          APP="_verify/Payload/Angavu.app"
+          [ -d "$APP" ] || { echo "::error::Payload/Angavu.app assente nell'.ipa"; exit 1; }
+          PLIST="$APP/Info.plist"
+          [ -f "$PLIST" ] || { echo "::error::Info.plist assente nell'app"; exit 1; }
+          pb() { /usr/libexec/PlistBuddy -c "Print :$1" "$PLIST" 2>/dev/null || true; }
+          # L'eseguibile dev'esserci ed essere un Mach-O (non uno stub).
+          EXE="$(pb CFBundleExecutable)"
+          [ -n "$EXE" ] && [ -f "$APP/$EXE" ] || { echo "::error::eseguibile '$EXE' assente"; exit 1; }
+          file "$APP/$EXE" | grep -q "Mach-O" || { echo "::error::'$EXE' non è un Mach-O"; exit 1; }
+          # Chiavi che iOS/AltStore pretendono in un'app device ben formata.
+          for K in MinimumOSVersion CFBundleIdentifier CFBundleExecutable UIDeviceFamily \
+                   CFBundleSupportedPlatforms DTPlatformName; do
+            V="$(pb "$K")"
+            [ -n "$V" ] || { echo "::error::Info.plist manca la chiave '$K' (richiesta da iOS/AltStore)"; exit 1; }
+            echo "  $K = $V"
+          done
+          # Deve essere un build DEVICE (iPhoneOS), non simulatore.
+          pb CFBundleSupportedPlatforms | grep -q "iPhoneOS" \
+            || { echo "::error::non è un build device: manca iPhoneOS in CFBundleSupportedPlatforms"; exit 1; }
+          echo "Struttura .ipa:"; unzip -l Angavu-unsigned.ipa | sed -n '1,25p'
+          echo "OK: .ipa ben formato per il sideload."
+
       - name: Carica l'artefatto .ipa
         uses: actions/upload-artifact@v4
         with:
