@@ -168,17 +168,46 @@ public struct HonestReportView: View {
     // MARK: Spazio recuperabile (libreria vs device ORA) + caveat iCloud
 
     private func reclaimableCard(_ summary: HonestReportPresentation.ReclaimableSummary) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(formatReportBytes(summary.deviceBytesNow))
-                .font(.title2.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.primary)
-            Text("liberabili sul telefono ora")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            // Cifra device SOLO se la residenza è determinabile; altrimenti caveat,
+            // mai un numero fabbricato (P0-3, manifesto).
+            if summary.deviceSpaceIsIndeterminate {
+                Text("Spazio sul telefono: non determinabile ora")
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(formatReportBytes(summary.deviceBytesNow))
+                        .font(.title2.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.primary)
+                    Text("liberabili sul telefono ora")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(formatReportBytes(summary.deviceBytesNow)) liberabili sul telefono ora")
+            }
+
+            // P0-4: lo "spazio in libreria" (include iCloud) come riga separata ed
+            // etichettata, mai spacciato per spazio-telefono.
+            HStack(alignment: .firstTextBaseline) {
+                Text("Spazio in libreria (include iCloud)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Text(formatReportBytes(summary.libraryBytes))
+                    .font(.footnote.monospacedDigit())
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Spazio in libreria, include iCloud")
+            .accessibilityValue(formatReportBytes(summary.libraryBytes))
+
             if summary.iCloudCaveat {
                 Label {
-                    Text("In libreria \(formatReportBytes(summary.libraryBytes)): parte è in iCloud. "
-                        + "Eliminando liberi la libreria, non subito lo spazio sul telefono.")
+                    Text("Parte degli originali è in iCloud. Eliminando liberi la libreria, "
+                        + "non subito lo spazio sul telefono.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -187,7 +216,6 @@ public struct HonestReportView: View {
                         .foregroundStyle(AuroraBrand.accentBlu)
                         .accessibilityHidden(true)
                 }
-                .padding(.top, 4)
             }
         }
         .padding(16)

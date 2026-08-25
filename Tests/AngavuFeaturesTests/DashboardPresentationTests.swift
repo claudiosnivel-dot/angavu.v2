@@ -74,6 +74,21 @@ final class DashboardPresentationTests: XCTestCase {
         let pres = DashboardPresentation(state: .ready(screen(categories: [], reclaimable: reclaimable)))
 
         XCTAssertEqual(pres.reclaimable?.iCloudCaveat, false)
+        XCTAssertEqual(pres.reclaimable?.deviceSpaceIsIndeterminate, false)
+    }
+
+    // P0-4: residenza indeterminata → la presentazione la propaga (la View mostra un
+    // caveat, non un numero device fabbricato) e il caveat iCloud è comunque esposto.
+    func test_ready_propagatesIndeterminateDeviceResidency() {
+        let reclaimable = ReclaimableSpace(
+            reclaimableLibrarySpace: 139_000, reclaimableDeviceSpaceNow: 0, deviceSpaceIsDeterminate: false
+        )
+        let pres = DashboardPresentation(state: .ready(screen(categories: [], reclaimable: reclaimable)))
+
+        XCTAssertEqual(pres.reclaimable?.deviceSpaceIsIndeterminate, true)
+        XCTAssertEqual(pres.reclaimable?.iCloudCaveat, true, "residenza indeterminata ⇒ caveat")
+        // Lo spazio in libreria resta un numero vero, mostrato nella riga separata.
+        XCTAssertEqual(pres.reclaimable?.libraryBytes, 139_000)
     }
 
     // Accesso limited → banner presente e totale dichiarato PARZIALE, mai totale.

@@ -86,17 +86,28 @@ public struct HonestReportPresentation: Equatable, Sendable {
 
     /// Riepilogo onesto dello spazio recuperabile: libreria vs device ORA.
     public struct ReclaimableSummary: Equatable, Sendable {
-        /// Byte liberabili nella libreria (sorgente piena).
+        /// Byte liberabili nella libreria (sorgente piena, «include iCloud»).
         public let libraryBytes: Int64
-        /// Byte realmente liberabili sul device ORA (mai promessi oltre il reale).
+        /// Byte realmente liberabili sul device ORA (mai promessi oltre il reale). Da
+        /// mostrare come cifra SOLO se `deviceSpaceIsIndeterminate == false`.
         public let deviceBytesNow: Int64
-        /// Vero quando parte dello spazio non si libera sul device ora (iCloud).
+        /// Vero quando parte dello spazio non si libera sul device ora (iCloud) o la
+        /// residenza è indeterminata.
         public let iCloudCaveat: Bool
+        /// P0-3: vero quando la residenza sul device non è determinabile → niente
+        /// cifra device, solo caveat (manifesto: mai un numero fabbricato).
+        public let deviceSpaceIsIndeterminate: Bool
 
-        public init(libraryBytes: Int64, deviceBytesNow: Int64, iCloudCaveat: Bool) {
+        public init(
+            libraryBytes: Int64,
+            deviceBytesNow: Int64,
+            iCloudCaveat: Bool,
+            deviceSpaceIsIndeterminate: Bool = false
+        ) {
             self.libraryBytes = libraryBytes
             self.deviceBytesNow = deviceBytesNow
             self.iCloudCaveat = iCloudCaveat
+            self.deviceSpaceIsIndeterminate = deviceSpaceIsIndeterminate
         }
     }
 
@@ -167,7 +178,8 @@ public struct HonestReportPresentation: Equatable, Sendable {
                 reclaimable: ReclaimableSummary(
                     libraryBytes: screen.libraryReclaimable,
                     deviceBytesNow: screen.deviceReclaimableNow,
-                    iCloudCaveat: screen.iCloudCaveat
+                    iCloudCaveat: screen.iCloudCaveat,
+                    deviceSpaceIsIndeterminate: screen.report.reclaimable.deviceSpaceIsIndeterminate
                 ),
                 showsPartialBanner: report.countsArePartial,
                 invitesFullAccess: report.invitesFullAccess,

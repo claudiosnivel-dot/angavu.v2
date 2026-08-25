@@ -133,25 +133,63 @@ public enum ICloudOptimizeStorage: String, Sendable, Equatable, Codable {
     case disabled
 }
 
+/// Capacità e spazio libero del volume del device, in byte. Tipo di dominio PURO
+/// (nessun `URL`/piattaforma): il tetto di realtà (P0-3) lo consuma per non
+/// stampare mai un "liberabile sul telefono" più grande di quanto il telefono
+/// possa fisicamente contenere o liberare. L'adapter reale (`DeviceCapacityReading`,
+/// Data) lo riempie via API pubbliche.
+public struct DeviceStorageCapacity: Equatable, Sendable {
+    /// Capacità totale del volume (byte).
+    public let totalCapacityBytes: Int64
+    /// Spazio libero utile ORA (byte), es. `volumeAvailableCapacityForImportantUsage`.
+    public let availableBytes: Int64
+
+    public init(totalCapacityBytes: Int64, availableBytes: Int64) {
+        self.totalCapacityBytes = max(0, totalCapacityBytes)
+        self.availableBytes = max(0, availableBytes)
+    }
+}
+
 /// Spazio recuperabile, con la distinzione onesta fra libreria e device ORA.
 /// Quando `reclaimableDeviceSpaceNow < reclaimableLibrarySpace` va segnalato il
 /// caveat iCloud: eliminare libererà iCloud, non subito lo spazio locale.
+///
+/// P0-3: quando la residenza per-asset non è determinabile (`deviceSpaceIsDeterminate
+/// == false`), `reclaimableDeviceSpaceNow` NON è un numero affidabile — la
+/// presentazione mostra un caveat, mai la cifra. Il manifesto vieta di fabbricare
+/// un numero device: meglio "non determinabile" che un valore inventato.
 public struct ReclaimableSpace: Equatable, Sendable {
     /// Byte liberabili nella libreria (sorgente piena).
     public let reclaimableLibrarySpace: Int64
-    /// Byte realmente liberabili sul device ORA.
+    /// Byte realmente liberabili sul device ORA. Affidabile solo se
+    /// `deviceSpaceIsDeterminate`; altrimenti va trattato come non disponibile.
     public let reclaimableDeviceSpaceNow: Int64
+    /// Vero quando la residenza sul device è stata determinata: allora
+    /// `reclaimableDeviceSpaceNow` è un numero onesto. Falso ⇒ caveat, nessun numero.
+    public let deviceSpaceIsDeterminate: Bool
 
-    public init(reclaimableLibrarySpace: Int64, reclaimableDeviceSpaceNow: Int64) {
+    public init(
+        reclaimableLibrarySpace: Int64,
+        reclaimableDeviceSpaceNow: Int64,
+        deviceSpaceIsDeterminate: Bool = true
+    ) {
         let library = max(0, reclaimableLibrarySpace)
         self.reclaimableLibrarySpace = library
         // Invariante di onestà: il device non può liberare più della libreria.
         self.reclaimableDeviceSpaceNow = min(library, max(0, reclaimableDeviceSpaceNow))
+        self.deviceSpaceIsDeterminate = deviceSpaceIsDeterminate
     }
 
+    /// Vero quando la residenza sul device NON è determinabile: la cifra device va
+    /// sostituita da un caveat, mai mostrata come numero (manifesto: no numeri finti).
+    public var deviceSpaceIsIndeterminate: Bool { !deviceSpaceIsDeterminate }
+
     /// Vero quando parte dello spazio libreria non si libera sul device ora
-    /// (originali in iCloud): mai da nascondere.
-    public var iCloudCaveat: Bool { reclaimableDeviceSpaceNow < reclaimableLibrarySpace }
+    /// (originali in iCloud) OPPURE la residenza è indeterminata: mai da nascondere.
+    /// In entrambi i casi "elimini la libreria, non subito lo spazio sul telefono".
+    public var iCloudCaveat: Bool {
+        deviceSpaceIsIndeterminate || reclaimableDeviceSpaceNow < reclaimableLibrarySpace
+    }
 }
 
 /// Calcolo puro dello spazio recuperabile a partire dai byte per-asset.
@@ -165,24 +203,62 @@ public enum ReclaimableSpaceCalculator {
     ///  • `disabled` → nessuna quota bloccata in cloud: device == libreria (AC-021-2);
     ///  • `enabled`  → device = somma dei byte residenti, che può essere inferiore
     ///    quando alcuni originali sono nel cloud → caveat (AC-021-1).
+    ///
+    /// **P0-3 — tetto di realtà.** Il "liberabile sul telefono ora" non può superare
+    /// né la libreria, né lo spazio libero del device, né la sua capacità: quando
+    /// `deviceCapacity` è noto, il device-now è limitato a
+    /// `min(residente, liberoDevice, capacità)`. È un tetto **conservativo** — guarda
+    /// contro la sovrastima (il bug "139 GB su un telefono da 128"): con la residenza
+    /// per-asset corretta il tetto raramente vincola; se una grande quota fosse
+    /// residente su un device quasi pieno può sotto-stimare, ma il manifesto preferisce
+    /// sotto-stimare che gonfiare.
+    ///
+    /// **P0-3 — residenza indeterminata.** Se il chiamante non ha potuto determinare la
+    /// residenza (`residencyDeterminate == false`), lo spazio device non è un numero
+    /// affidabile: si restituisce uno `ReclaimableSpace` marcato indeterminato (la
+    /// presentazione mostra un caveat, non una cifra fabbricata).
     public static func reclaimable(
         from items: [DeletedAssetSize],
-        optimizeStorage: ICloudOptimizeStorage
+        optimizeStorage: ICloudOptimizeStorage,
+        deviceCapacity: DeviceStorageCapacity? = nil,
+        residencyDeterminate: Bool = true
     ) -> ReclaimableSpace {
         let library = items.reduce(Int64(0)) { $0 + $1.libraryBytes }
-        switch optimizeStorage {
-        case .disabled:
+
+        // Residenza non determinabile: nessun numero device, solo caveat.
+        guard residencyDeterminate else {
             return ReclaimableSpace(
                 reclaimableLibrarySpace: library,
-                reclaimableDeviceSpaceNow: library
-            )
-        case .enabled:
-            let device = items.reduce(Int64(0)) { $0 + $1.deviceResidentBytes }
-            return ReclaimableSpace(
-                reclaimableLibrarySpace: library,
-                reclaimableDeviceSpaceNow: device
+                reclaimableDeviceSpaceNow: 0,
+                deviceSpaceIsDeterminate: false
             )
         }
+
+        let deviceRaw: Int64
+        switch optimizeStorage {
+        case .disabled:
+            // Nessuna quota in cloud: ogni originale è residente → device == libreria.
+            deviceRaw = library
+        case .enabled:
+            // Somma dei byte residenti; può essere inferiore (originali nel cloud).
+            deviceRaw = items.reduce(Int64(0)) { $0 + $1.deviceResidentBytes }
+        }
+
+        // Tetto di realtà: mai oltre lo spazio libero né la capacità del device.
+        let deviceCapped = capToReality(deviceRaw, within: deviceCapacity)
+
+        return ReclaimableSpace(
+            reclaimableLibrarySpace: library,
+            reclaimableDeviceSpaceNow: deviceCapped
+        )
+    }
+
+    /// Applica il tetto di realtà `min(value, liberoDevice, capacità)` quando la
+    /// capacità è nota; altrimenti lascia il valore invariato (nessun tetto ⇒
+    /// comportamento storico). Il cap `<= libreria` resta a carico di `ReclaimableSpace`.
+    private static func capToReality(_ value: Int64, within capacity: DeviceStorageCapacity?) -> Int64 {
+        guard let capacity else { return value }
+        return min(value, min(capacity.availableBytes, capacity.totalCapacityBytes))
     }
 }
 

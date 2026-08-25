@@ -123,17 +123,43 @@ public struct DashboardView: View {
     // MARK: Spazio recuperabile (libreria vs device ORA)
 
     private func reclaimableCard(_ summary: DashboardPresentation.ReclaimableSummary) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(formatDashboardBytes(summary.deviceBytesNow))
-                .auroraHeroNumber()
-                .foregroundStyle(AuroraBrand.gradient)
-            Text("liberabili sul telefono ora")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            // Hero onesto: la cifra SOLO se la residenza è determinabile; altrimenti
+            // un caveat, mai un numero fabbricato (P0-3, manifesto).
+            if summary.deviceSpaceIsIndeterminate {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Spazio sul telefono: non determinabile ora")
+                        .font(.title3.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Angavu non può stimare con onestà quanto si libera subito sul telefono. "
+                        + "Vedi lo spazio in libreria qui sotto.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(formatDashboardBytes(summary.deviceBytesNow))
+                        .auroraHeroNumber()
+                        .foregroundStyle(AuroraBrand.gradient)
+                    Text("liberabili sul telefono ora")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityLabel("\(formatDashboardBytes(summary.deviceBytesNow)) liberabili sul telefono ora")
+            }
+
+            // P0-4: lo "spazio in libreria" (il grande numero che include iCloud) è
+            // una riga SEPARATA ed etichettata, non spacciata per spazio-telefono.
+            libraryRow(summary)
+
             if summary.iCloudCaveat {
                 Label {
-                    Text("In libreria \(formatDashboardBytes(summary.libraryBytes)): parte è in iCloud. "
-                        + "Eliminando liberi la libreria, non subito lo spazio sul telefono.")
+                    Text("Parte degli originali è in iCloud. Eliminando liberi la libreria, "
+                        + "non subito lo spazio sul telefono.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -142,12 +168,26 @@ public struct DashboardView: View {
                         .foregroundStyle(AuroraBrand.accentBlu)
                         .accessibilityHidden(true)
                 }
-                .padding(.top, 4)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial, in: .rect(cornerRadius: 16))
+    }
+
+    private func libraryRow(_ summary: DashboardPresentation.ReclaimableSummary) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Spazio in libreria (include iCloud)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Text(formatDashboardBytes(summary.libraryBytes))
+                .font(.subheadline.monospacedDigit())
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Spazio in libreria, include iCloud")
+        .accessibilityValue(formatDashboardBytes(summary.libraryBytes))
     }
 
     // MARK: Righe per categoria

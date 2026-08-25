@@ -106,7 +106,23 @@ final class HonestReportPresentationTests: XCTestCase {
         let pres = HonestReportPresentation(state: ready(categories: [], reclaimable: reclaimable))
 
         XCTAssertEqual(pres.reclaimable?.iCloudCaveat, false)
+        XCTAssertEqual(pres.reclaimable?.deviceSpaceIsIndeterminate, false)
         XCTAssertFalse(pres.iCloudCaveat)
+    }
+
+    // P0-4: residenza indeterminata → propagata alla presentazione (la View mostra un
+    // caveat, non un numero device) e il caveat iCloud è comunque esposto; lo spazio
+    // in libreria resta un numero vero (riga separata «include iCloud»).
+    func test_ready_propagatesIndeterminateDeviceResidency() {
+        let reclaimable = ReclaimableSpace(
+            reclaimableLibrarySpace: 139_000, reclaimableDeviceSpaceNow: 0, deviceSpaceIsDeterminate: false
+        )
+        let pres = HonestReportPresentation(state: ready(categories: [], reclaimable: reclaimable))
+
+        XCTAssertEqual(pres.reclaimable?.deviceSpaceIsIndeterminate, true)
+        XCTAssertEqual(pres.reclaimable?.iCloudCaveat, true)
+        XCTAssertEqual(pres.reclaimable?.libraryBytes, 139_000)
+        XCTAssertTrue(pres.iCloudCaveat)
     }
 
     // AC-102-2: accesso limited → banner parziale e invito all'accesso completo.

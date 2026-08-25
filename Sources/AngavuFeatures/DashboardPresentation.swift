@@ -62,17 +62,28 @@ public struct DashboardPresentation: Equatable, Sendable {
 
     /// Riepilogo onesto dello spazio recuperabile: libreria vs device ORA.
     public struct ReclaimableSummary: Equatable, Sendable {
-        /// Byte liberabili nella libreria (sorgente piena).
+        /// Byte liberabili nella libreria (sorgente piena, «include iCloud»).
         public let libraryBytes: Int64
-        /// Byte realmente liberabili sul device ORA.
+        /// Byte realmente liberabili sul device ORA. Da mostrare come cifra SOLO se
+        /// `deviceSpaceIsIndeterminate == false`; altrimenti la View mostra un caveat.
         public let deviceBytesNow: Int64
-        /// Vero quando parte dello spazio non si libera sul device ora (iCloud).
+        /// Vero quando parte dello spazio non si libera sul device ora (iCloud) o la
+        /// residenza è indeterminata.
         public let iCloudCaveat: Bool
+        /// P0-3: vero quando la residenza sul device non è determinabile → niente
+        /// cifra device, solo caveat (manifesto: mai un numero fabbricato).
+        public let deviceSpaceIsIndeterminate: Bool
 
-        public init(libraryBytes: Int64, deviceBytesNow: Int64, iCloudCaveat: Bool) {
+        public init(
+            libraryBytes: Int64,
+            deviceBytesNow: Int64,
+            iCloudCaveat: Bool,
+            deviceSpaceIsIndeterminate: Bool = false
+        ) {
             self.libraryBytes = libraryBytes
             self.deviceBytesNow = deviceBytesNow
             self.iCloudCaveat = iCloudCaveat
+            self.deviceSpaceIsIndeterminate = deviceSpaceIsIndeterminate
         }
     }
 
@@ -133,7 +144,8 @@ public struct DashboardPresentation: Equatable, Sendable {
                 reclaimable: ReclaimableSummary(
                     libraryBytes: screen.reclaimable.reclaimableLibrarySpace,
                     deviceBytesNow: screen.reclaimable.reclaimableDeviceSpaceNow,
-                    iCloudCaveat: screen.reclaimable.iCloudCaveat
+                    iCloudCaveat: screen.reclaimable.iCloudCaveat,
+                    deviceSpaceIsIndeterminate: screen.reclaimable.deviceSpaceIsIndeterminate
                 ),
                 showsLimitedBanner: screen.banner.showLimitedAccessBanner,
                 isTotalPartial: screen.isTotalPartial
