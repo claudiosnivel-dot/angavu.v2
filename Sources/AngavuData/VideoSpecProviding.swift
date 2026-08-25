@@ -22,15 +22,17 @@ public protocol VideoSpecProviding {
     func videoSpec(forLocalIdentifier id: String, originalBytes: Int64) async -> VideoSpec?
 }
 
-#if canImport(AVFoundation) && canImport(Photos)
-import AVFoundation
+#if canImport(Photos)
 import Photos
-import CoreMedia
 
-/// Adapter reale: risolve il `PHAsset`, ne carica l'`AVAsset` senza rete
-/// (`isNetworkAccessAllowed = false`), e legge durata + bitrate stimato dalla
-/// traccia video con le API async moderne. Se qualcosa manca (non è un video, non
-/// c'è traccia, dati non leggibili), restituisce `nil` — mai una stima finta.
+/// Adapter reale (B-1). **Non dipende più dall'`AVAsset`**: caricarlo con
+/// `requestAVAsset` FALLISCE sugli originali in iCloud (iCloud "Ottimizza spazio"
+/// attivo) — il difetto «Non riesco a leggere durata/bitrate» del device-test. La
+/// durata si legge da `PHAsset.duration`, un **metadato locale** presente anche
+/// quando l'originale è nel cloud (nessun download). Il bitrate è quello **medio**
+/// dai byte VERI (già noti dall'indice): `byte * 8 / durata`. Restituisce `nil` solo
+/// se non è un video o la durata è assente/non valida — mai un numero inventato.
+/// Copertura (L-COL-006): adapter Apple-only, compilato in CI, runtime device-only.
 public struct AVFoundationVideoSpecProvider: VideoSpecProviding {
     public init() {}
 
@@ -38,35 +40,18 @@ public struct AVFoundationVideoSpecProvider: VideoSpecProviding {
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil)
         guard let asset = fetch.firstObject, asset.mediaType == .video else { return nil }
 
-        let options = PHVideoRequestOptions()
-        options.isNetworkAccessAllowed = false
-        options.deliveryMode = .highQualityFormat
+        // Durata da PHAsset (locale, nessuna rete): funziona anche in iCloud.
+        let seconds = asset.duration
+        guard seconds.isFinite, seconds > 0 else { return nil }
 
-        let avAsset: AVAsset? = await withCheckedContinuation { continuation in
-            PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, _ in
-                continuation.resume(returning: avAsset)
-            }
-        }
-        guard let sourceAsset = avAsset else { return nil }
+        // Bitrate MEDIO dai byte reali dell'indice e la durata locale.
+        let bitrate = Int64((Double(originalBytes) * 8.0 / seconds).rounded())
 
-        do {
-            let duration = try await sourceAsset.load(.duration)
-            let seconds = CMTimeGetSeconds(duration)
-            guard seconds.isFinite, seconds >= 0 else { return nil }
-
-            let videoTracks = try await sourceAsset.loadTracks(withMediaType: .video)
-            guard let track = videoTracks.first else { return nil }
-            let dataRate = try await track.load(.estimatedDataRate) // bit/sec (Float)
-            guard dataRate.isFinite, dataRate >= 0 else { return nil }
-
-            return VideoSpec(
-                originalBytes: originalBytes,
-                durationSeconds: seconds,
-                sourceBitrateBitsPerSec: Int64(dataRate)
-            )
-        } catch {
-            return nil
-        }
+        return VideoSpec(
+            originalBytes: originalBytes,
+            durationSeconds: seconds,
+            sourceBitrateBitsPerSec: max(0, bitrate)
+        )
     }
 }
 #endif
