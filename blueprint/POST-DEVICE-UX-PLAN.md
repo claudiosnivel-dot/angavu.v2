@@ -262,6 +262,19 @@ stati `ScanState` esiste già (idle/requestingPermission/scanning/completed/fail
   8. Due copie **identiche** = doppio spazio, zero valore in più.
   9. Le **Live Photo** = foto + breve video → pesano di più.
   10. **1 GB** ≈ 500–1000 foto compresse, o pochi minuti di 4K.
+  11. Le **raffiche (burst)** creano decine di scatti quasi identici in un secondo.
+  12. **HEIC** pesa circa metà di un vecchio JPEG, a parità di qualità.
+  13. Una **panoramica** può pesare quanto 5–10 foto normali.
+  14. I video **slo-mo** girano a 120/240 fps: molti più fotogrammi = più spazio.
+  15. Con **Ottimizza iCloud** gli originali stanno nel cloud: "sul telefono" ≠ "in libreria" (noi le distinguiamo).
+  16. Eliminare non è per sempre: gli elementi restano in **"Eliminati di recente"** ~30 giorni.
+  17. **ProRAW/ProRes** (iPhone Pro): una foto ProRAW può superare i 25 MB, un minuto di ProRes 4K vari GB.
+  18. I **duplicati** nascono da condivisioni, salvataggi e backup: la stessa immagine, molte volte.
+  19. La foto **più pesante** non è la più bella: spesso è solo la meno compressa.
+  20. **Cancellare 10 video 4K** può liberare più spazio di 5.000 foto.
+  21. Lo **screenshot** è utile una volta, poi dimenticato: la cartella cresce in silenzio.
+  22. Piccoli gesti, grande effetto: qualche minuto di pulizia può valere gigabyte.
+  (Slide 1–4 = manifesto; 5–22 = curiosità, tutte "circa/può", da fact-check leggero in build.)
 - **Accessibilità/HIG**: swipe manuale di default (i caroselli auto-avanzanti sono
   ostili a VoiceOver e a Reduce Motion); page indicator; ogni slide un elemento
   VoiceOver. Eventuale auto-avanzamento LENTO solo opzionale e **gated su Reduce
