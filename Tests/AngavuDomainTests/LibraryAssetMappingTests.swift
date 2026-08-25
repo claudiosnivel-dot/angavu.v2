@@ -84,17 +84,17 @@ final class LibraryAssetMappingTests: XCTestCase {
     // vecchia piega per valore questo sarebbe lentissimo (copia dell'intero array a
     // ogni elemento), ma la correttezza deve restare identica.
     func test_batchMapping_largeBatchPreservesOrderAndCount() {
-        let n = 10_000
-        let items = (0..<n).map { raw("id\($0)", media: $0 % 2 == 0 ? 1 : 2) }
+        let total = 10_000
+        let items = (0..<total).map { raw("id\($0)", media: $0 % 2 == 0 ? 1 : 2) }
 
         let outcome = LibraryAssetMapper.mapBatch(items, chunkSize: 256, cancellation: CancellationToken())
 
         guard case .completed(let assets) = outcome else {
             return XCTFail("atteso completed, ottenuto \(outcome)")
         }
-        XCTAssertEqual(assets.count, n)
+        XCTAssertEqual(assets.count, total)
         XCTAssertEqual(assets.first?.id, "id0")
-        XCTAssertEqual(assets.last?.id, "id\(n - 1)")
+        XCTAssertEqual(assets.last?.id, "id\(total - 1)")
         XCTAssertEqual(assets[1].kind, .video)   // dispari → video
         XCTAssertEqual(assets[2].kind, .photo)   // pari → foto
     }
