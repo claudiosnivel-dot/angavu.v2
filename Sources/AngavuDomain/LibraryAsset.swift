@@ -127,14 +127,38 @@ public enum LibraryAssetMapper {
         cancellation: CancellationToken,
         progress: (AnalysisProgress) -> Void = { _ in }
     ) -> AnalysisOutcome<[LibraryAsset]> {
-        let engine = ChunkedAnalysis<RawEnumeratedAsset, [LibraryAsset]>(
+        // Accumulatore a RIFERIMENTO (non un array per valore). Con un array la
+        // piega `var next = acc; next.append(...)` innescava, a OGNI elemento, una
+        // copia copy-on-write dell'intero accumulatore (l'array è ancora
+        // referenziato dal chiamante del `fold`) → O(N²). Su una libreria reale
+        // (25k+ foto) sono centinaia di milioni di copie di elementi + allocazioni
+        // a valanga: CPU al 100% e pressione di memoria che fa apparire l'app
+        // "bloccata al 100%" (fin oltre il jetsam). Col box a riferimento la piega
+        // è O(1) per elemento e l'append muta in place → O(N) totale.
+        let sink = MappedAssetSink()
+        sink.reserveCapacity(raws.count)
+        let engine = ChunkedAnalysis<RawEnumeratedAsset, MappedAssetSink>(
             chunkSize: chunkSize,
-            initial: []
-        ) { acc, raw in
-            var next = acc
-            if let asset = map(raw) { next.append(asset) }
-            return next
+            initial: sink
+        ) { box, raw in
+            if let asset = map(raw) { box.append(asset) }
+            return box
         }
-        return engine.run(over: raws, cancellation: cancellation, progress: progress)
+        switch engine.run(over: raws, cancellation: cancellation, progress: progress) {
+        case .completed(let box): return .completed(box.assets)
+        case .cancelled(let at): return .cancelled(at: at)
+        case .failed(let reason, let at): return .failed(reason: reason, at: at)
+        }
     }
+}
+
+/// Accumulatore a riferimento per `mapBatch`: evita la copia copy-on-write
+/// dell'array che un fold per valore farebbe a ogni elemento (O(N²)). `ChunkedAnalysis`
+/// richiede `Result: Equatable` ma non confronta MAI i risultati durante `run`,
+/// quindi l'uguaglianza per identità è sufficiente e onesta.
+private final class MappedAssetSink: Equatable {
+    private(set) var assets: [LibraryAsset] = []
+    func reserveCapacity(_ minimumCapacity: Int) { assets.reserveCapacity(minimumCapacity) }
+    func append(_ asset: LibraryAsset) { assets.append(asset) }
+    static func == (lhs: MappedAssetSink, rhs: MappedAssetSink) -> Bool { lhs === rhs }
 }
