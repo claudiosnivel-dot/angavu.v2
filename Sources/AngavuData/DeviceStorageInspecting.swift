@@ -15,6 +15,18 @@ public protocol DeviceStorageInspecting {
     /// Byte residenti sul device ORA per l'asset. Contratto d'onestà: `<= libraryBytes`
     /// (il device non può liberare più di quanto occupa in libreria).
     func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64
+    /// P0-2: vero quando `deviceResidentBytes` è una misura REALE della residenza sul
+    /// device; falso quando è solo un best-effort non affidabile (es. iCloud
+    /// "ottimizza spazio" attivo senza un probe per-asset reale). Falso ⇒ la
+    /// presentazione mostra un caveat "non determinabile", mai un numero fabbricato.
+    func residencyIsDeterminate() -> Bool
+}
+
+public extension DeviceStorageInspecting {
+    /// Default: si assume la residenza determinata. Le sorgenti che NON possono
+    /// misurare la residenza (adapter reale con optimize-storage attivo) fanno
+    /// l'override a `false`. Mantiene invariati i fake dei test (residenza nota).
+    func residencyIsDeterminate() -> Bool { true }
 }
 
 #if canImport(Photos)
@@ -38,6 +50,20 @@ public struct SystemDeviceStorageInspector: DeviceStorageInspecting {
 
     public func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 {
         libraryBytes
+    }
+
+    /// P0-2 — Onestà sulla residenza. PhotoKit non espone una residenza per-asset
+    /// affidabile e leggera via API pubblica (un probe reale caricherebbe dati per
+    /// ogni asset: proibitivo su decine di migliaia, riporterebbe il freeze appena
+    /// risolto). Quindi:
+    ///   • optimize-storage DISATTIVO → ogni originale è residente: la residenza è
+    ///     nota e coincide coi byte libreria → `true`;
+    ///   • optimize-storage ATTIVO → alcuni originali sono nel cloud e non possiamo
+    ///     misurarlo a buon mercato → residenza NON determinabile → `false`, così la
+    ///     UI mostra un caveat onesto invece di un numero device gonfiato.
+    /// Copertura dichiarata (L-COL-006): runtime sul device NON coperto da unit test.
+    public func residencyIsDeterminate() -> Bool {
+        optimizeStorageStatus() == .disabled
     }
 }
 #endif

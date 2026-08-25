@@ -45,9 +45,14 @@ enum LibraryFiguresReader {
                 )
             )
         }
+        // P0-2/P0-3: il device-now è limitato dal tetto di realtà (capacità/spazio
+        // libero del device) e, se la residenza non è determinabile, sostituito da un
+        // caveat — mai un numero device gonfiato (il bug "139 GB su un 128 GB").
         let reclaimable = ReclaimableSpaceCalculator.reclaimable(
             from: deleted,
-            optimizeStorage: environment.deviceStorage.optimizeStorageStatus()
+            optimizeStorage: environment.deviceStorage.optimizeStorageStatus(),
+            deviceCapacity: environment.deviceCapacity.deviceCapacity(),
+            residencyDeterminate: environment.deviceStorage.residencyIsDeterminate()
         )
 
         return LibraryFigures(

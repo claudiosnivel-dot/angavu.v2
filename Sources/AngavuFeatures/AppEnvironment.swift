@@ -20,6 +20,9 @@ public struct AppEnvironment {
     public let indexWriter: any AssetIndexWriting
     public let byteResolver: any AssetByteSizeResolving
     public let deviceStorage: any DeviceStorageInspecting
+    /// P0-2: capacità/spazio libero del device per il tetto di realtà (P0-3). Default
+    /// `UnknownDeviceCapacity` (nessun tetto) finché il grafo reale non lo cabla.
+    public let deviceCapacity: any DeviceCapacityReading
     public let videoExporter: any VideoExporting
     public let videoSpecProvider: any VideoSpecProviding
     /// Porte dei domini extra-foto (contatti, calendari). `nil` finché non cablate
@@ -33,6 +36,7 @@ public struct AppEnvironment {
         indexWriter: any AssetIndexWriting,
         byteResolver: any AssetByteSizeResolving,
         deviceStorage: any DeviceStorageInspecting,
+        deviceCapacity: any DeviceCapacityReading = UnknownDeviceCapacity(),
         videoExporter: any VideoExporting,
         videoSpecProvider: any VideoSpecProviding,
         extraDomains: ExtraDomainsPorts? = nil
@@ -43,6 +47,7 @@ public struct AppEnvironment {
         self.indexWriter = indexWriter
         self.byteResolver = byteResolver
         self.deviceStorage = deviceStorage
+        self.deviceCapacity = deviceCapacity
         self.videoExporter = videoExporter
         self.videoSpecProvider = videoSpecProvider
         self.extraDomains = extraDomains
@@ -90,6 +95,7 @@ extension AppEnvironment {
             indexWriter: index,
             byteResolver: PHAssetByteSizeResolver(),
             deviceStorage: SystemDeviceStorageInspector(),
+            deviceCapacity: SystemDeviceCapacityReader(),
             videoExporter: AVFoundationVideoExporter(),
             videoSpecProvider: AVFoundationVideoSpecProvider(),
             extraDomains: liveExtraDomains()

@@ -46,6 +46,20 @@ private struct StubDeviceStorage: DeviceStorageInspecting {
     func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 { libraryBytes }
 }
 
+/// Come l'adapter reale (P0-2): la residenza è determinabile SOLO con optimize-storage
+/// disattivo; con optimize attivo → indeterminata (caveat, non un numero).
+private struct HonestStubDeviceStorage: DeviceStorageInspecting {
+    let optimize: ICloudOptimizeStorage
+    func optimizeStorageStatus() -> ICloudOptimizeStorage { optimize }
+    func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 { libraryBytes }
+    func residencyIsDeterminate() -> Bool { optimize == .disabled }
+}
+
+private struct FixedCapacity: DeviceCapacityReading {
+    let capacity: DeviceStorageCapacity?
+    func deviceCapacity() -> DeviceStorageCapacity? { capacity }
+}
+
 private func photo(_ id: String, screenshot: Bool = false) -> LibraryAsset {
     LibraryAsset(
         id: id,
@@ -70,7 +84,9 @@ private func makeEnv(
     access: PhotoAccess,
     index: any AssetIndexReading & AssetIndexWriting,
     sizes: [String: ByteSize],
-    optimize: ICloudOptimizeStorage = .disabled
+    optimize: ICloudOptimizeStorage = .disabled,
+    deviceStorage: (any DeviceStorageInspecting)? = nil,
+    deviceCapacity: any DeviceCapacityReading = UnknownDeviceCapacity()
 ) -> AppEnvironment {
     AppEnvironment(
         authorizer: StubAuthorizer(access: access),
@@ -78,7 +94,8 @@ private func makeEnv(
         indexReader: index,
         indexWriter: index,
         byteResolver: MapByteResolver(sizes: sizes),
-        deviceStorage: StubDeviceStorage(optimize: optimize),
+        deviceStorage: deviceStorage ?? StubDeviceStorage(optimize: optimize),
+        deviceCapacity: deviceCapacity,
         videoExporter: NoopVideoExporter(),
         videoSpecProvider: NoopVideoSpecProvider()
     )
@@ -170,6 +187,44 @@ final class DashboardScreenTests: XCTestCase {
         XCTAssertEqual(screen.reclaimable.reclaimableLibrarySpace, 1000)
         XCTAssertEqual(screen.reclaimable.reclaimableDeviceSpaceNow, 1000)
         XCTAssertFalse(screen.reclaimable.iCloudCaveat)
+    }
+
+    // P0-2 (wiring): optimize-storage attivo con l'adapter onesto → residenza
+    // indeterminata propagata allo screen (la View mostra un caveat, non un numero).
+    func test_optimizeEnabled_honestStorage_yieldsIndeterminateDeviceSpace() async {
+        let index = FixedIndex(stored: [photo("P1"), video("V1")])
+        let sizes: [String: ByteSize] = ["P1": .exact(bytes: 100), "V1": .exact(bytes: 900)]
+        let vm = DashboardViewModel(
+            environment: makeEnv(
+                access: .full, index: index, sizes: sizes,
+                deviceStorage: HonestStubDeviceStorage(optimize: .enabled)
+            )
+        )
+
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
+
+        XCTAssertTrue(screen.reclaimable.deviceSpaceIsIndeterminate, "optimize attivo ⇒ residenza indeterminata")
+        XCTAssertTrue(screen.reclaimable.iCloudCaveat)
+        XCTAssertEqual(screen.reclaimable.reclaimableLibrarySpace, 1000, "la libreria resta un numero vero")
+    }
+
+    // P0-2/P0-3 (wiring): il tetto di realtà (capacità/spazio libero) è cablato nel
+    // reader → il device-now non supera lo spazio libero del device.
+    func test_deviceCapacityCeiling_isWiredThroughReader() async {
+        let index = FixedIndex(stored: [photo("P1"), video("V1")])
+        let sizes: [String: ByteSize] = ["P1": .exact(bytes: 100), "V1": .exact(bytes: 900)]
+        // Optimize disabled → device grezzo = libreria (1000), ma spazio libero = 300.
+        let capacity = FixedCapacity(capacity: DeviceStorageCapacity(totalCapacityBytes: 5000, availableBytes: 300))
+        let vm = DashboardViewModel(
+            environment: makeEnv(
+                access: .full, index: index, sizes: sizes, optimize: .disabled, deviceCapacity: capacity
+            )
+        )
+
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
+
+        XCTAssertEqual(screen.reclaimable.reclaimableDeviceSpaceNow, 300, "tetto di realtà: ≤ spazio libero")
+        XCTAssertEqual(screen.reclaimable.reclaimableLibrarySpace, 1000)
     }
 
     // La lettura dell'indice può fallire: stato failed, mai un verde finto.
