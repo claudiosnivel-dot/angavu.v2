@@ -96,24 +96,36 @@ extension AssetRecord {
 /// Repository SwiftData dell'indice.
 @available(macOS 14, iOS 17, *)
 public final class SwiftDataAssetIndex: AssetIndexReading, AssetIndexWriting {
-    private let context: ModelContext
+    private let container: ModelContainer
 
-    public init(context: ModelContext) {
-        self.context = context
+    public init(container: ModelContainer) {
+        self.container = container
     }
+
+    // Ogni operazione crea il PROPRIO `ModelContext` dal container, legato al thread
+    // che la esegue. Motivo: la scrittura della scansione gira FUORI dal main actor
+    // (T-111); se usasse il `ModelContext` PRINCIPALE (main-actor, iniettato via
+    // `@Environment(\.modelContext)`) lo toccherebbe da un thread sbagliato →
+    // contesa/serializzazione sulla coda main col save di decine di migliaia di
+    // record → l'INTERA app si blocca ("freeze" dopo il 100%). Un contesto dedicato
+    // per operazione è isolato dal main; i contesti dello stesso container
+    // condividono lo store, quindi ciò che la scansione salva è visibile alle
+    // letture successive (dashboard/report).
+    private func makeContext() -> ModelContext { ModelContext(container) }
 
     // MARK: Scrittura
 
     public func upsert(_ assets: [LibraryAsset]) throws {
         guard !assets.isEmpty else { return }
+        let context = makeContext()
 
         // UN SOLO fetch di tutti i record esistenti, indicizzati per id, invece di
         // una query per asset. La versione per-item faceva O(N) `FetchDescriptor`
         // sequenziali: su una libreria reale (decine di migliaia di foto) sono
-        // minuti di store-round-trip col main thread bloccato → la scansione appare
-        // "ferma al 100%" dopo che il mapping è finito. Qui: O(1) query + O(N) in
-        // memoria + un solo `save()`. Sul primo scan lo store è vuoto → il fetch è
-        // immediato e restano solo gli insert.
+        // minuti di store-round-trip → la scansione appariva "ferma al 100%" dopo
+        // che il mapping era finito. Qui: O(1) query + O(N) in memoria + un solo
+        // `save()`. Sul primo scan lo store è vuoto → il fetch è immediato e restano
+        // solo gli insert.
         let existing = try context.fetch(FetchDescriptor<AssetRecord>())
         var byId = [String: AssetRecord](minimumCapacity: existing.count)
         for record in existing { byId[record.id] = record }
@@ -131,6 +143,7 @@ public final class SwiftDataAssetIndex: AssetIndexReading, AssetIndexWriting {
     }
 
     public func remove(ids: [String]) throws {
+        let context = makeContext()
         for targetId in ids {
             var descriptor = FetchDescriptor<AssetRecord>(
                 predicate: #Predicate { $0.id == targetId }
@@ -146,6 +159,7 @@ public final class SwiftDataAssetIndex: AssetIndexReading, AssetIndexWriting {
     // MARK: Lettura
 
     public func assets(matching query: AssetQuery) throws -> [LibraryAsset] {
+        let context = makeContext()
         var descriptor = FetchDescriptor<AssetRecord>()
         // Filtro per tipo direttamente nel fetch (indicizzabile da SwiftData).
         if let kind = query.kind {
@@ -171,7 +185,7 @@ public final class SwiftDataAssetIndex: AssetIndexReading, AssetIndexWriting {
     }
 
     public func count() throws -> Int {
-        try context.fetchCount(FetchDescriptor<AssetRecord>())
+        try makeContext().fetchCount(FetchDescriptor<AssetRecord>())
     }
 }
 #endif

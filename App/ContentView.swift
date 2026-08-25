@@ -32,7 +32,7 @@ struct ContentView: View {
             OnboardingManifestoView(onContinue: finishOnboarding)
                 .transition(.opacity)
         } else {
-            HomeView(environment: .live(context: modelContext))
+            HomeView(environment: .live(container: modelContext.container))
                 .transition(.opacity)
         }
     }

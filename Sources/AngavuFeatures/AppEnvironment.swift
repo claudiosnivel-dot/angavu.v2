@@ -78,9 +78,11 @@ import SwiftData
 @available(macOS 14, iOS 17, *)
 extension AppEnvironment {
     /// Grafo di produzione: adapter reali dietro i port + indice SwiftData.
-    /// Il `ModelContext` è creato dall'app (WindowGroup) e passato qui.
-    public static func live(context: ModelContext) -> AppEnvironment {
-        let index = SwiftDataAssetIndex(context: context)
+    /// Riceve il `ModelContainer` (creato dall'app in `.modelContainer`), NON il
+    /// contesto principale: l'indice crea un proprio `ModelContext` per operazione,
+    /// così la scrittura della scansione (fuori dal main actor) non blocca la UI.
+    public static func live(container: ModelContainer) -> AppEnvironment {
+        let index = SwiftDataAssetIndex(container: container)
         return AppEnvironment(
             authorizer: SystemPhotoLibraryAuthorizer(),
             enumerator: SystemPhotoAssetEnumerator(),

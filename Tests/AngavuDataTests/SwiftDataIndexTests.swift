@@ -25,7 +25,7 @@ final class SwiftDataIndexTests: XCTestCase {
     private func makeIndex() throws -> SwiftDataAssetIndex {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: AssetRecord.self, configurations: configuration)
-        return SwiftDataAssetIndex(context: ModelContext(container))
+        return SwiftDataAssetIndex(container: container)
     }
 
     // AC-012-1: upsert dei 2 asset due volte → esattamente 2 record (idempotente).
