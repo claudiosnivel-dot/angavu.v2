@@ -98,4 +98,59 @@ final class CategoryReviewTests: XCTestCase {
         XCTAssertTrue(review.keepIds.isEmpty)
         XCTAssertEqual(review.removableIds, ["P1", "P2"])
     }
+
+    // MARK: - A-2 Selezione per-elemento
+
+    // Preselezione (policy pura): tutti i removable, mai i keep.
+    func test_initialSelection_isAllRemovableNeverKeep() {
+        let review = CategoryReview(keepIds: ["K1"], removableIds: ["R1", "R2"])
+        XCTAssertEqual(CategorySelectionPolicy.initialSelection(for: review), ["R1", "R2"])
+        let vm = CategoryReviewViewModel(review: review)
+        XCTAssertTrue(vm.isSelected("R1"))
+        XCTAssertTrue(vm.isSelected("R2"))
+        XCTAssertFalse(vm.isSelected("K1"))
+        XCTAssertEqual(Set(vm.selectedRemovableIds), ["R1", "R2"])
+    }
+
+    // Toggle: deseleziona/riseleziona un removable.
+    func test_toggle_removable_flipsSelection() {
+        let vm = CategoryReviewViewModel(review: CategoryReview(keepIds: [], removableIds: ["R1", "R2"]))
+        vm.toggleSelection("R1")
+        XCTAssertFalse(vm.isSelected("R1"))
+        XCTAssertEqual(vm.selectedRemovableIds, ["R2"])
+        vm.toggleSelection("R1")
+        XCTAssertTrue(vm.isSelected("R1"))
+        XCTAssertEqual(vm.selectedRemovableIds, ["R1", "R2"], "ordine stabile della review")
+    }
+
+    // Toggle su un keep è un no-op: i keep sono protetti, mai selezionabili.
+    func test_toggle_keep_isNoOp() {
+        let vm = CategoryReviewViewModel(review: CategoryReview(keepIds: ["K1"], removableIds: ["R1"]))
+        vm.toggleSelection("K1")
+        XCTAssertFalse(vm.isSelected("K1"))
+    }
+
+    func test_selectAllAndNone() {
+        let vm = CategoryReviewViewModel(review: CategoryReview(keepIds: [], removableIds: ["R1", "R2"]))
+        vm.selectNone()
+        XCTAssertTrue(vm.selectedRemovableIds.isEmpty)
+        vm.selectAllRemovable()
+        XCTAssertEqual(vm.selectedRemovableIds, ["R1", "R2"])
+    }
+
+    // La CTA di selezione instrada al gate solo i selezionati (mai i keep, mai vuoto).
+    func test_previewForSelection_usesSelectedOnly() {
+        let vm = CategoryReviewViewModel(review: CategoryReview(keepIds: ["K1"], removableIds: ["R1", "R2"]))
+        vm.toggleSelection("R2") // deseleziona R2 → resta R1
+        XCTAssertTrue(vm.presentDeletionPreviewForSelection())
+        XCTAssertEqual(vm.flow.state, .previewing(assets: ["R1"], accepted: false))
+    }
+
+    // Selezione vuota ⇒ nessuna anteprima (gate invariato, mai anteprima vuota).
+    func test_previewForSelection_emptyIsRejected() {
+        let vm = CategoryReviewViewModel(review: CategoryReview(keepIds: [], removableIds: ["R1"]))
+        vm.selectNone()
+        XCTAssertFalse(vm.presentDeletionPreviewForSelection())
+        XCTAssertEqual(vm.flow.state, .idle)
+    }
 }

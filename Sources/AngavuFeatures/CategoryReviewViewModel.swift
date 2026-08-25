@@ -78,20 +78,68 @@ public struct CategoryReview: Equatable, Sendable {
     }
 }
 
+/// A-2 — Policy PURA della preselezione. La selezione iniziale è **tutti i
+/// removable**: per screenshot e video grandi/vecchi è "tutto preselezionato,
+/// deselezioni ciò che tieni" (opt-out); per duplicati e simili è "solo la peggiore",
+/// perché la migliore vive nei `keepIds` e non compare mai fra i removable. In
+/// entrambi i casi `Set(removableIds)` è la preselezione giusta; i keep non sono mai
+/// selezionabili (protetti per costruzione).
+public enum CategorySelectionPolicy {
+    public static func initialSelection(for review: CategoryReview) -> Set<String> {
+        Set(review.removableIds)
+    }
+}
+
 @Observable
 public final class CategoryReviewViewModel {
     public private(set) var review: CategoryReview
+    /// A-3 — Metadati per-id (kind/data) per le etichette umane, dal `CategoryReviewSource`.
+    /// Vuoto quando non forniti (i vecchi test costruiscono col solo `review`).
+    public private(set) var assets: [String: LibraryAsset]
+    /// A-2 — Selezione per-elemento (solo id removable). Preselezionata via policy.
+    public private(set) var selection: Set<String>
     /// Rete di sicurezza condivisa (T-050). Esposta: la View avvia poi
     /// `beginDeleting()` a valle della conferma. Il delete reale (adapter) è fuori
     /// scope qui.
     public private(set) var flow: DeletionFlow = DeletionFlow()
 
-    public init(review: CategoryReview) {
+    public init(review: CategoryReview, assets: [String: LibraryAsset] = [:]) {
         self.review = review
+        self.assets = assets
+        self.selection = CategorySelectionPolicy.initialSelection(for: review)
     }
 
     /// Righe presentabili (keep vs removable).
     public var rows: [CategoryReviewRow] { review.rows }
+
+    // MARK: - A-2 Selezione per-elemento
+
+    /// Vero se l'id è selezionato per l'eliminazione.
+    public func isSelected(_ id: String) -> Bool { selection.contains(id) }
+
+    /// Inverte la selezione di un id **removable** (i keep sono protetti: no-op).
+    public func toggleSelection(_ id: String) {
+        guard review.removableIds.contains(id) else { return }
+        if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+    }
+
+    /// Seleziona tutti i removable.
+    public func selectAllRemovable() { selection = Set(review.removableIds) }
+
+    /// Deseleziona tutto.
+    public func selectNone() { selection = [] }
+
+    /// Id removable attualmente selezionati, in ordine stabile (ordine della review).
+    public var selectedRemovableIds: [String] {
+        review.removableIds.filter { selection.contains($0) }
+    }
+
+    /// Apre l'anteprima sull'insieme SELEZIONATO (mai i keep, mai vuoto): alimenta il
+    /// percorso subset già esistente senza aggirare il gate (T-050).
+    @discardableResult
+    public func presentDeletionPreviewForSelection() -> Bool {
+        presentDeletionPreview(of: selectedRemovableIds)
+    }
 
     /// Richiede l'eliminazione degli id dati instradandoli al `DeletionFlow`:
     /// preview → accept → confirm. Invarianti:

@@ -17,6 +17,12 @@
 import AngavuDomain
 import SwiftUI
 
+/// Formatta una data di creazione in stile abbreviato locale (es. «14 mar 2024»),
+/// o `nil` se la data è sconosciuta. Unica fonte del formato locale (come i byte).
+private func formatReviewDate(_ date: Date?) -> String? {
+    date?.formatted(date: .abbreviated, time: .omitted)
+}
+
 public struct CategoryReviewView: View {
     private let environment: AppEnvironment
     private let category: CleanupCategory
@@ -42,7 +48,9 @@ public struct CategoryReviewView: View {
             review: vm.review,
             flowState: vm.flow.state,
             title: category.title,
-            subtitle: category.subtitle
+            subtitle: category.subtitle,
+            assets: vm.assets,
+            selection: vm.selection
         )
     }
 
@@ -161,12 +169,24 @@ public struct CategoryReviewView: View {
 
     private func rowsSection(_ title: String, _ rows: [CategoryReviewPresentation.Row]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
+            HStack {
+                Text(title)
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                // A-2: «seleziona tutto/niente» solo per la sezione dei removable
+                // (i keep non sono selezionabili). Presente solo mentre si rivede.
+                if presentation.phase == .reviewing, rows.contains(where: \.isSelectable) {
+                    selectAllControl
+                }
+            }
             VStack(spacing: 0) {
                 ForEach(rows, id: \.id) { row in
-                    CategoryReviewRowView(row: row)
+                    CategoryReviewRowView(
+                        row: row,
+                        formattedDate: formatReviewDate(row.creationDate),
+                        onToggle: row.isSelectable ? { vm.toggleSelection(row.id) } : nil
+                    )
                     if row.id != rows.last?.id { Divider() }
                 }
             }
@@ -174,6 +194,17 @@ public struct CategoryReviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.thinMaterial, in: .rect(cornerRadius: 12))
         }
+    }
+
+    private var selectAllControl: some View {
+        let allSelected = presentation.selectedRemovableCount == presentation.removableCount
+        return Button {
+            if allSelected { vm.selectNone() } else { vm.selectAllRemovable() }
+        } label: {
+            Text(allSelected ? "Deseleziona tutto" : "Seleziona tutto")
+                .font(.subheadline.weight(.semibold))
+        }
+        .buttonStyle(.borderless)
     }
 
     // MARK: Stato vuoto (niente da eliminare)
@@ -251,21 +282,29 @@ public struct CategoryReviewView: View {
     @ViewBuilder
     private var actionBar: some View {
         if presentation.canRequestDeletion {
+            // A-2: la CTA elimina i SELEZIONATI (non più tutto-o-niente), instradati
+            // allo stesso gate d'anteprima. Disabilitata se non c'è selezione.
             Button {
-                vm.presentDeletionPreviewForAllRemovable()
+                vm.presentDeletionPreviewForSelection()
             } label: {
-                Text(presentation.removableCount == 1
-                    ? "Elimina 1 elemento"
-                    : "Elimina \(presentation.removableCount) elementi")
+                Text(deletionCTATitle)
                     .font(.headline.weight(.bold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(AuroraBrand.gradient, in: .capsule)
                     .foregroundStyle(AuroraBrand.onGradient)
+                    .opacity(presentation.hasSelection ? 1 : 0.5)
             }
+            .disabled(!presentation.hasSelection)
             .padding(.horizontal, 24)
             .padding(.bottom, 12)
         }
+    }
+
+    private var deletionCTATitle: String {
+        let count = presentation.selectedRemovableCount
+        if count == 0 { return "Seleziona elementi da eliminare" }
+        return count == 1 ? "Elimina 1 selezionato" : "Elimina \(count) selezionati"
     }
 
     // MARK: Anteprima come alert (gate obbligatorio)
@@ -297,8 +336,8 @@ public struct CategoryReviewView: View {
     private func loadIfNeeded(force: Bool = false) async {
         if !force, loadPhase == .loaded { return }
         do {
-            let review = try await CategoryReviewView.composeReview(for: category, from: environment)
-            vm = CategoryReviewViewModel(review: review)
+            let data = try await CategoryReviewView.composeReviewData(for: category, from: environment)
+            vm = CategoryReviewViewModel(review: data.review, assets: data.assets)
             loadPhase = .loaded
         } catch {
             loadPhase = .failed(String(describing: error))
@@ -307,80 +346,100 @@ public struct CategoryReviewView: View {
 
     /// Calcolo pesante della categoria, ESPLICITAMENTE non isolato al main: awaitandola
     /// da `.task` (main) il corpo gira sul generic executor, così PhotoKit/Vision non
-    /// bloccano la UI.
-    nonisolated static func composeReview(
+    /// bloccano la UI. Restituisce review + metadati degli asset (A-3).
+    nonisolated static func composeReviewData(
         for category: CleanupCategory,
         from environment: AppEnvironment
-    ) async throws -> CategoryReview {
-        try CategoryReviewSource.review(for: category, from: environment)
+    ) async throws -> CategoryReviewData {
+        try CategoryReviewSource.reviewData(for: category, from: environment)
     }
 }
 
-/// Riga di review: id dell'asset e badge di disposizione (tenere / eliminabile).
+/// Riga di review: etichetta UMANA (tipo · data, A-3) + controllo di selezione per i
+/// removable (A-2) o badge «TIENI» per i keep. Il `localIdentifier` grezzo non è più
+/// mostrato: resta solo nel modello per la logica/accessibilità.
 private struct CategoryReviewRowView: View {
     let row: CategoryReviewPresentation.Row
+    /// Data già formattata (dalla View, unica fonte del formato locale), o `nil`.
+    let formattedDate: String?
+    /// Azione di toggle selezione; `nil` per i keep (non selezionabili, protetti).
+    let onToggle: (() -> Void)?
 
     var body: some View {
-        // R-08: alle accessibility sizes il badge di disposizione verrebbe
-        // compresso contro l'id; ViewThatFits lo porta sotto (icona+id, poi badge)
-        // prima di comprimere. Stessi accessibility modifier in entrambi i branch.
+        // R-08: alle accessibility sizes il controllo di coda verrebbe compresso
+        // contro il titolo; ViewThatFits lo porta sotto prima di comprimere. Stessi
+        // accessibility modifier in entrambi i branch.
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) {
                 identity
                 Spacer(minLength: 12)
-                badge
+                trailing
             }
             VStack(alignment: .leading, spacing: 6) {
                 identity
-                badge
+                trailing
             }
         }
         .padding(.vertical, 8)
-        // VoiceOver: un solo elemento con etichetta UMANA — mai il `localIdentifier`
-        // grezzo (che resta visibile a schermo), la disposizione come valore.
+        // VoiceOver: un solo elemento con etichetta UMANA (tipo + data) — mai il
+        // `localIdentifier` grezzo. Valore = disposizione + stato di selezione.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(row.accessibilityLabel)
-        .accessibilityValue(row.accessibilityValue)
+        .accessibilityLabel(row.accessibilityLabel(formattedDate: formattedDate))
+        .accessibilityValue(accessibilityValue)
+        .accessibilityAddTraits(row.isSelected ? .isSelected : [])
+        .contentShape(Rectangle())
+        .onTapGesture { onToggle?() }
     }
 
     private var identity: some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
+                .imageScale(.large)
                 .accessibilityHidden(true)
-            Text(row.id)
-                .font(.body.monospaced())
+            Text(row.displayTitle(formattedDate: formattedDate))
+                .font(.body)
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(.tail)
         }
     }
 
-    private var badge: some View {
-        Text(label)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(tint)
-            .lineLimit(1)
+    @ViewBuilder
+    private var trailing: some View {
+        if row.isSelectable {
+            // Indicatore visivo; il toggle è gestito dal tap sull'intera riga (un solo
+            // owner del gesto → niente doppio-toggle). Nascosto a VoiceOver: lo stato è
+            // già nel trait/valore della riga.
+            Image(systemName: row.isSelected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(row.isSelected ? AuroraBrand.accentFucsia : .secondary)
+                .imageScale(.large)
+                .accessibilityHidden(true)
+        } else {
+            Text("TIENI")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AuroraBrand.accentAzzurro)
+                .lineLimit(1)
+        }
+    }
+
+    /// Valore VoiceOver: disposizione + (per i selezionabili) stato di selezione.
+    private var accessibilityValue: String {
+        guard row.isSelectable else { return row.accessibilityValue }
+        return row.isSelected
+            ? "\(row.accessibilityValue), selezionato"
+            : "\(row.accessibilityValue), non selezionato"
     }
 
     private var symbol: String {
-        switch row.disposition {
-        case .keep: return "lock"
-        case .removable: return "trash"
-        }
-    }
-
-    private var label: String {
-        switch row.disposition {
-        case .keep: return "TIENI"
-        case .removable: return "ELIMINABILE"
+        switch row.category {
+        case .video?: return "video"
+        case .screenshot?: return "camera.viewfinder"
+        case .photo?, nil: return "photo"
         }
     }
 
     private var tint: Color {
-        switch row.disposition {
-        case .keep: return AuroraBrand.accentAzzurro
-        case .removable: return AuroraBrand.accentFucsia
-        }
+        row.disposition == .keep ? AuroraBrand.accentAzzurro : AuroraBrand.accentFucsia
     }
 }
 #endif

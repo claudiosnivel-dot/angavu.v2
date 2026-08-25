@@ -29,20 +29,63 @@ public struct CategoryReviewPresentation: Equatable, Sendable {
     }
 
     /// Riga presentabile: un asset e la sua disposizione (tenere / eliminabile).
+    ///
+    /// A-3: porta i metadati umani (categoria + data) quando disponibili, così la
+    /// riga mostra «Screenshot · 14 mar 2024» invece del `localIdentifier` grezzo.
+    /// A-2: porta lo stato di selezione (solo i removable sono selezionabili).
     public struct Row: Equatable, Sendable {
         public let id: String
         public let disposition: CategoryDisposition
+        /// Categoria dell'asset (Foto/Video/Screenshot) per l'etichetta umana; `nil`
+        /// quando i metadati non sono forniti (riga costruita dal solo id).
+        public let category: DashboardCategory?
+        /// Data di creazione, per l'etichetta umana. `nil` = sconosciuta.
+        public let creationDate: Date?
+        /// A-2: vero se selezionata per l'eliminazione (mai i keep).
+        public let isSelected: Bool
 
-        public init(id: String, disposition: CategoryDisposition) {
+        public init(
+            id: String,
+            disposition: CategoryDisposition,
+            category: DashboardCategory? = nil,
+            creationDate: Date? = nil,
+            isSelected: Bool = false
+        ) {
             self.id = id
             self.disposition = disposition
+            self.category = category
+            self.creationDate = creationDate
+            self.isSelected = isSelected
+        }
+
+        /// A-2: solo i removable sono selezionabili; i keep sono protetti.
+        public var isSelectable: Bool { disposition == .removable }
+
+        /// Nome umano del tipo (Foto/Video/Screenshot), o `nil` senza metadati.
+        /// Riusa l'unica fonte del titolo localizzato (dalla dashboard).
+        public var kindLabel: String? {
+            category.map { DashboardPresentation.title(for: $0) }
+        }
+
+        /// Titolo VISIBILE della riga: «Screenshot · <data>» quando i metadati ci
+        /// sono, altrimenti solo il tipo, altrimenti «Elemento». La View passa la
+        /// data già formattata (unica fonte del formato locale).
+        public func displayTitle(formattedDate: String?) -> String {
+            let base = kindLabel ?? "Elemento"
+            if let formattedDate { return "\(base) · \(formattedDate)" }
+            return base
         }
 
         /// Etichetta VoiceOver UMANA della riga. L'`id` è un `localIdentifier`
         /// PhotoKit (rumore per chi ascolta): resta visibile a schermo ma NON va
-        /// mai letto ad alta voce. VoiceOver annuncia la natura dell'elemento e,
-        /// come valore, la sua disposizione.
-        public var accessibilityLabel: String { "Elemento" }
+        /// mai letto ad alta voce. Con i metadati annuncia il tipo (e la data via
+        /// `accessibilityLabel(formattedDate:)`); senza, un generico «Elemento».
+        public var accessibilityLabel: String { kindLabel ?? "Elemento" }
+
+        /// Etichetta VoiceOver col tipo e la data (quando disponibile), mai l'id grezzo.
+        public func accessibilityLabel(formattedDate: String?) -> String {
+            displayTitle(formattedDate: formattedDate)
+        }
 
         /// Valore VoiceOver: la disposizione in parole umane.
         public var accessibilityValue: String {
@@ -80,6 +123,10 @@ public struct CategoryReviewPresentation: Equatable, Sendable {
     public var keepCount: Int { keepRows.count }
     /// Numero di elementi eliminabili.
     public var removableCount: Int { removableRows.count }
+    /// A-2: numero di eliminabili SELEZIONATI (alimenta la CTA «Elimina N selezionati»).
+    public var selectedRemovableCount: Int { removableRows.reduce(0) { $0 + ($1.isSelected ? 1 : 0) } }
+    /// A-2: vero se c'è almeno un eliminabile selezionato (la CTA è azionabile).
+    public var hasSelection: Bool { selectedRemovableCount > 0 }
     /// Numero di elementi in anteprima.
     public var previewCount: Int { previewAssetIds.count }
     /// Numero di elementi la cui eliminazione è autorizzata.
@@ -109,9 +156,24 @@ public struct CategoryReviewPresentation: Equatable, Sendable {
 
     /// Deriva la presentazione da una review e dallo stato del gate. Deterministica
     /// e totale: ogni combinazione ha una e una sola presentazione.
-    public init(review: CategoryReview, flowState: DeletionFlow.State, title: String, subtitle: String) {
-        let keep = review.keepIds.map { Row(id: $0, disposition: .keep) }
-        let removable = review.removableIds.map { Row(id: $0, disposition: .removable) }
+    ///
+    /// `assets`/`selection` sono opzionali (default vuoti) per retro-compatibilità:
+    /// senza metadati le righe restano generiche («Elemento»); con essi mostrano il
+    /// tipo + data (A-3) e lo stato di selezione (A-2).
+    public init(
+        review: CategoryReview,
+        flowState: DeletionFlow.State,
+        title: String,
+        subtitle: String,
+        assets: [String: LibraryAsset] = [:],
+        selection: Set<String> = []
+    ) {
+        let keep = review.keepIds.map {
+            Self.enrichedRow(id: $0, disposition: .keep, assets: assets, selection: selection)
+        }
+        let removable = review.removableIds.map {
+            Self.enrichedRow(id: $0, disposition: .removable, assets: assets, selection: selection)
+        }
 
         switch flowState {
         case .idle:
@@ -135,5 +197,24 @@ public struct CategoryReviewPresentation: Equatable, Sendable {
                 previewAssetIds: [], confirmedAssetIds: ids
             )
         }
+    }
+
+    /// Costruisce una `Row` arricchita coi metadati (A-3) e lo stato di selezione
+    /// (A-2). Senza metadati (`assets[id] == nil`) la riga resta generica; solo i
+    /// removable possono risultare selezionati (i keep sono protetti).
+    private static func enrichedRow(
+        id: String,
+        disposition: CategoryDisposition,
+        assets: [String: LibraryAsset],
+        selection: Set<String>
+    ) -> Row {
+        let asset = assets[id]
+        return Row(
+            id: id,
+            disposition: disposition,
+            category: asset.map(DashboardCategory.of),
+            creationDate: asset?.creationDate,
+            isSelected: disposition == .removable && selection.contains(id)
+        )
     }
 }

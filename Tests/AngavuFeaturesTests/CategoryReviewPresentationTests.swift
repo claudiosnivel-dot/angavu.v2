@@ -126,4 +126,69 @@ final class CategoryReviewPresentationTests: XCTestCase {
         XCTAssertEqual(keep.accessibilityValue, "da tenere")
         XCTAssertFalse(keep.accessibilityValue.contains(keep.id))
     }
+
+    // MARK: - A-3 Etichette umane (tipo · data)
+
+    private func screenshot(_ id: String) -> LibraryAsset {
+        LibraryAsset(id: id, kind: .photo, pixelSize: PixelSize(width: 10, height: 10),
+                     creationDate: Date(timeIntervalSince1970: 1_700_000_000), subtypes: [.screenshot])
+    }
+
+    // Con i metadati la riga porta la categoria e le etichette umane; senza, resta
+    // generica. La View passa la data già formattata (qui una stringa fissa).
+    func test_row_humanLabel_fromMetadata() {
+        let review = CategoryReview(keepIds: [], removableIds: ["R1"])
+        let pres = CategoryReviewPresentation(
+            review: review, flowState: .idle, title: "Screenshot", subtitle: "sub",
+            assets: ["R1": screenshot("R1")]
+        )
+        let row = pres.removableRows.first
+        XCTAssertEqual(row?.category, .screenshot)
+        XCTAssertEqual(row?.kindLabel, "Screenshot")
+        XCTAssertEqual(row?.displayTitle(formattedDate: "14 mar 2024"), "Screenshot · 14 mar 2024")
+        XCTAssertEqual(row?.accessibilityLabel(formattedDate: "14 mar 2024"), "Screenshot · 14 mar 2024")
+        // Onestà: l'id grezzo non compare mai nell'etichetta.
+        XCTAssertFalse(row?.accessibilityLabel(formattedDate: "14 mar 2024").contains("R1") ?? true)
+    }
+
+    // Senza data la riga mostra il solo tipo; senza metadati resta «Elemento».
+    func test_row_humanLabel_fallbacks() {
+        let withKind = CategoryReviewPresentation.Row(id: "R1", disposition: .removable, category: .photo)
+        XCTAssertEqual(withKind.displayTitle(formattedDate: nil), "Foto")
+
+        let bare = CategoryReviewPresentation.Row(id: "R1", disposition: .removable)
+        XCTAssertNil(bare.kindLabel)
+        XCTAssertEqual(bare.displayTitle(formattedDate: nil), "Elemento")
+        XCTAssertEqual(bare.accessibilityLabel, "Elemento")
+    }
+
+    // MARK: - A-2 Selezione propagata alla presentazione
+
+    func test_selection_marksRemovableRowsAndCounts() {
+        let review = CategoryReview(keepIds: ["K1"], removableIds: ["R1", "R2"])
+        let pres = CategoryReviewPresentation(
+            review: review, flowState: .idle, title: "t", subtitle: "s",
+            selection: ["R1"]
+        )
+        XCTAssertEqual(pres.removableRows.first { $0.id == "R1" }?.isSelected, true)
+        XCTAssertEqual(pres.removableRows.first { $0.id == "R2" }?.isSelected, false)
+        // I keep non sono mai selezionati, nemmeno se l'id fosse nella selezione.
+        XCTAssertEqual(pres.keepRows.first?.isSelected, false)
+        XCTAssertEqual(pres.selectedRemovableCount, 1)
+        XCTAssertTrue(pres.hasSelection)
+        // R1 e R2 restano selezionabili; K1 no.
+        XCTAssertEqual(pres.removableRows.allSatisfy(\.isSelectable), true)
+        XCTAssertEqual(pres.keepRows.allSatisfy { !$0.isSelectable }, true)
+    }
+
+    // Onestà del gate: un id keep nella selezione NON rende selezionato un keep.
+    func test_selection_neverMarksKeepEvenIfIdPresent() {
+        let review = CategoryReview(keepIds: ["K1"], removableIds: ["R1"])
+        let pres = CategoryReviewPresentation(
+            review: review, flowState: .idle, title: "t", subtitle: "s",
+            selection: ["K1", "R1"]
+        )
+        XCTAssertEqual(pres.keepRows.first?.isSelected, false)
+        XCTAssertEqual(pres.selectedRemovableCount, 1)
+    }
 }

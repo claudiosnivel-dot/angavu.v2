@@ -46,21 +46,38 @@ public enum CleanupCategory: String, CaseIterable, Sendable {
     }
 }
 
+/// Review reale + i metadati per-id degli asset coinvolti (A-3), per etichette umane
+/// e miniature. `assets` mappa id→`LibraryAsset` per keep e removable della review.
+struct CategoryReviewData {
+    let review: CategoryReview
+    let assets: [String: LibraryAsset]
+}
+
 /// Produttore delle review reali dall'indice. `throws`: la lettura dell'indice non
 /// va mai mascherata con un verde finto (un errore è uno stato d'errore esplicito
 /// nella schermata, mai una lista vuota spacciata per «pulito»).
 enum CategoryReviewSource {
-    /// Compone la `CategoryReview` reale per la categoria data leggendo i dati veri
-    /// dell'ambiente. Per gli screenshot: legge tutti gli asset indicizzati, filtra
-    /// quelli col sottotipo `.screenshot`, ne compone una proposta in blocco (tutti
-    /// removable, nessun keep) e la normalizza in `CategoryReview`.
-    static func review(for category: CleanupCategory, from environment: AppEnvironment) throws -> CategoryReview {
+    /// Compone la review reale + i metadati degli asset per la categoria. Per gli
+    /// screenshot: legge tutti gli asset indicizzati, filtra quelli col sottotipo
+    /// `.screenshot`, ne compone una proposta in blocco (tutti removable, nessun keep),
+    /// la normalizza in `CategoryReview` e ne indicizza i metadati per-id.
+    static func reviewData(
+        for category: CleanupCategory,
+        from environment: AppEnvironment
+    ) throws -> CategoryReviewData {
         switch category {
         case .screenshots:
             let assets = try environment.indexReader.assets(matching: .all)
             let screenshots = ScreenshotCategory.screenshots(assets)
             let proposal = BulkDeletionProposalComposer.compose(from: screenshots)
-            return .from(bulk: proposal)
+            let review = CategoryReview.from(bulk: proposal)
+            let byId = Dictionary(screenshots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            return CategoryReviewData(review: review, assets: byId)
         }
+    }
+
+    /// Comodità (retro-compatibile): la sola `CategoryReview`, senza metadati.
+    static func review(for category: CleanupCategory, from environment: AppEnvironment) throws -> CategoryReview {
+        try reviewData(for: category, from: environment).review
     }
 }
