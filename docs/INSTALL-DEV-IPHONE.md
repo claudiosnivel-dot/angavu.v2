@@ -103,13 +103,23 @@ Se dopo l'estrazione l'errore persiste, apri il log del run e controlla lo step
 
 ## Stato attuale dell'app
 
-`ui_shell` è costruito: l'`.ipa` installa il **guscio reale** — onboarding col
-**manifesto**, home, e la schermata **"cosa NON facciamo"**, con il tema nativo
-**Aurora** (brand token ripresi dall'Android, ricostruiti per HIG).
+L'app è **cablata end-to-end** (macrotask `wiring` completo, 8/8, verde in CI):
+onboarding col **manifesto** → **home** con la scansione reale della libreria
+(PhotoKit → indice SwiftData) → e, **a scansione completata**, il link **"Vedi i
+numeri veri"** che apre la **Dashboard**. Tema nativo **Aurora** (brand token
+ripresi dall'Android, ricostruiti per HIG).
 
-Resta il **cablaggio dati**: le schermate del cuore-foto (duplicati, foto simili,
-video, ecc.) e il **report onesto** (`HonestReportView`) devono ancora essere
-collegate ai dati veri della libreria (PhotoKit → dashboard/library_index). La
-logica di tutte queste feature è già completa e verificata in CI; manca la loro
-resa in schermate navigabili. Quindi oggi l'`.ipa` mostra il guscio + manifesto,
-non ancora la pulizia foto interattiva.
+Dalla **Dashboard** si raggiungono, via `NavigationLink`, tutte le schermate del
+cuore-foto coi dati veri della libreria:
+
+- **cancellazione per categoria** (`CategoryReviewView`) — duplicati, foto simili,
+  screenshot, video grandi/vecchi, ecc. — sempre dietro il **gate di anteprima**
+  (niente si cancella senza preview accettata);
+- **compressione video** (`CompressionView`);
+- **contatti/calendari extra-foto** (`ExtraPhotoDomainsView`);
+- **report onesto** (`HonestReportView`).
+
+> ⚠️ Il menu delle categorie **compare solo dopo** che la scansione passa a
+> "Analisi completata": prima di allora l'unico link visibile è "Cosa NON
+> facciamo". Se la scansione non completa, non vedi la Dashboard — non perché
+> manchi, ma perché il flusso non ci è ancora arrivato.
