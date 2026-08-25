@@ -217,6 +217,46 @@ Dipende da D (troppo costoso senza cache/progresso).
 
 ---
 
+## FASE E — Primo avvio "Shazam" (rifà l'esperienza di scansione) · 🟠 UX
+
+Rimuove il passaggio ridondante "idle → tap Analizza → attesa → tap Vedi i numeri
+veri" e lo trasforma in **un solo tap magico** che porta al risultato. Idea utente
+(2026-08-25). Prevalentemente View-level (`AngavuFeatures` + `App/`); la macchina a
+stati `ScanState` esiste già (idle/requestingPermission/scanning/completed/failed).
+
+### E-1 — Un solo tasto centrale + progresso unico
+- **Output**: la Home apre con un **tasto gigante centrale** (stile Shazam). Al tap:
+  richiesta permesso → scansione, con **una sola barra di avanzamento**. Nessuno stato
+  "idle" separato con bottone da modulo.
+- **DoD**: dall'apertura al risultato con un solo tap; il progresso copre in modo
+  onesto le 3 fasi (permesso indeterminato → enumerazione/mappatura determinate).
+
+### E-2 — Animazioni gated (battito + riempimento "acqua") · device-only rendering
+- **Output**: il tasto scende gradualmente; durante lo scan fa un **battito cardiaco**
+  (fase permesso, indeterminata) e poi si riempie come un **livello d'acqua** (fase
+  determinata: la frazione reale `AnalysisProgress` guida il fill + cambio colore).
+- **Disciplina**: TUTTE le animazioni **gated su Reduce Motion** (equivalente statico:
+  barra semplice, nessun particellare) — coerente con R-06. SwiftUI puro (Canvas/
+  TimelineView + Shape animabile), zero dipendenze, offline.
+- **Skill**: `apple-skills:design` (game-feel: haptics/celebrations) in fase di build.
+
+### E-3 — Schermata di successo (coriandoli) → dashboard · 🟠
+- **Output**: a **successo vero** una piccola schermata celebrativa (coriandoli gated
+  + haptic `.success` già esistente) col **conteggio reale**, e un tasto "È ora di fare
+  pulizia!" → dashboard.
+- **Onestà (manifesto)**: niente festa se accesso **negato/limitato** o scansione
+  **fallita** → ramo onesto (messaggio esplicito, "Apri Impostazioni"), mai coriandoli
+  su un mezzo successo. Il conteggio parziale (limited) resta dichiarato tale.
+- **Copertura**: la decisione "quale esito → quale schermata (festa vs onesto)" va nel
+  layer di presentazione PURO (estende `HomeScanPresentation`) con target_test; le
+  animazioni restano View-level (compilate, resa non coperta, L-COL-006).
+
+> **Priorità**: alta per la prima impressione, ma **dopo P0** (l'onestà dei numeri è
+> più urgente della delight del primo avvio). Relativamente indipendente dalle altre
+> fasi (tocca la Home/scan, non il percorso di lettura dashboard).
+
+---
+
 ## 4. Note trasversali
 
 - **Rete di sicurezza sempre**: ogni eliminazione passa dal gate anteprima
@@ -226,7 +266,9 @@ Dipende da D (troppo costoso senza cache/progresso).
 - **Perf/altitudine**: le letture pesanti restano off-main (già fatto in `8a383b0`);
   i nuovi adapter async non toccano il main; il Domain resta puro.
 - **Ordine**: P0 (🔴 onestà) → A (fiducia) → B (video, GB) → D (cache/progresso) → C
-  (categorie). A-1 (miniature) è infrastruttura riusata da B-2 e C-1.
+  (categorie). A-1 (miniature) è infrastruttura riusata da B-2 e C-1. **Fase E** (primo
+  avvio "Shazam") è indipendente e va inserita **dopo P0**, presto (prima impressione) —
+  posizione esatta a scelta dell'utente.
 
 ## 5. Fuori scope (per ora)
 
