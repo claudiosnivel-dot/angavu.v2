@@ -105,16 +105,36 @@ diventa l'intera libreria (139 GB).
 - **Copertura**: il comportamento SwiftUI (sopravvivenza a background) è View-level →
   compilato, runtime dichiarato non coperto; validato sul device.
 
-### P0-2 — Residenza per-asset reale dietro il port · 🟠 · device-only
-- **Output**: `SystemDeviceStorageInspector.deviceResidentBytes` non restituisce più
-  `libraryBytes` cieco. Residenza via **API pubbliche async** (`PHAssetResourceManager`
-  /`PHImageManager` con `isNetworkAccessAllowed=false`: se l'originale non è servibile
-  senza rete → non residente → 0 byte device per quell'asset). Risultato cachato in
-  P0-1 (costoso su 25k → una volta sola).
-- **DoD**: la somma dei device-resident bytes sul device di test è nell'ordine di ~8 GB,
-  non 139. Mai > libreria per-asset.
-- **Copertura**: adapter Apple-only → **compilato in CI, runtime NON coperto**,
-  validato sul telefono. Nuovo eventuale port async dichiarato onesto.
+### P0-2 — Residenza onesta dietro il port · 🟠 · device-only — ✅ COSTRUITO (con revisione)
+- **Costruito (2026-08-25)**: cablato il **tetto di realtà** (P0-3) e l'onestà sulla
+  residenza nel percorso reale. `DeviceStorageInspecting.residencyIsDeterminate()`
+  (default extension `true`, i fake restano intatti); `SystemDeviceStorageInspector`
+  fa l'override: residenza **determinata SOLO con optimize-storage disattivo** (tutto
+  residente); con optimize attivo → **indeterminata ⇒ caveat, mai un numero**. Nuovo
+  port `DeviceCapacityReading` + `SystemDeviceCapacityReader`
+  (`volumeAvailableCapacityForImportantUsage`/`volumeTotalCapacity`, API pubbliche,
+  App Store-safe). Cablati in `AppEnvironment.live` e nel `LibraryFiguresReader`.
+- **Revisione dichiarata (decisione utente 2026-08-25 — "Preciso, ma dopo P0")**: la
+  misura **per-asset reale** della residenza (per mostrare ~8 GB precisi) richiede di
+  caricare dati per ogni asset via `PHAssetResourceManager`/`PHImageManager`:
+  proibitiva su ~25k → **rischia di riportare il freeze appena risolto**. Perciò v1 di
+  P0 chiude con il **caveat onesto** (numero non fabbricato); il numero preciso ~8 GB
+  è un **task successivo dedicato** (vedi **P0-2b**), progettato per la perf.
+- **Copertura**: adapter Apple-only → compilato in CI, runtime NON coperto; il tetto e
+  la determinatezza sono coperti dall'oracolo di dominio (`RealityCeilingTests`) e dal
+  wiring (`DashboardScreenTests`).
+
+### P0-2b — Residenza per-asset reale (numero device preciso) · 🟠 · device-only · FOLLOW-UP
+- **Perché separato**: misurare la residenza reale su ~25k asset con API pubbliche è
+  costoso (caricamento dati per-asset) e va progettato per NON rifreezare — off-main,
+  a blocchi cancellabili (motore `ChunkedAnalysis`), cachato in `AnalysisResultsStore`
+  (P0-1), possibilmente campionato/progressivo. Deciso con l'utente di farlo **dopo P0**.
+- **Output**: un probe di residenza per-asset (`isNetworkAccessAllowed=false`: se
+  l'originale non è servibile senza rete → 0 byte device) dietro il port, con
+  `residencyIsDeterminate()` che diventa `true` quando il probe ha risposte reali → la
+  dashboard mostra ~8 GB invece del caveat.
+- **DoD**: sul device di test la somma device-resident è ~8 GB, senza freeze; mai >
+  libreria per-asset. **Copertura**: adapter Apple-only, runtime NON coperto (device).
 
 ### P0-3 — Tetto di realtà + caveat nel calcolo (dominio puro) · 🔴
 - **Output**: `ReclaimableSpaceCalculator` (T-021) riceve anche **capacità/spazio libero
