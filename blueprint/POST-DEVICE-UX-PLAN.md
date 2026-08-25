@@ -275,14 +275,16 @@ stati `ScanState` esiste già (idle/requestingPermission/scanning/completed/fail
   21. Lo **screenshot** è utile una volta, poi dimenticato: la cartella cresce in silenzio.
   22. Piccoli gesti, grande effetto: qualche minuto di pulizia può valere gigabyte.
   (Slide 1–4 = manifesto; 5–22 = curiosità, tutte "circa/può", da fact-check leggero in build.)
-- **Accessibilità/HIG**: swipe manuale di default (i caroselli auto-avanzanti sono
-  ostili a VoiceOver e a Reduce Motion); page indicator; ogni slide un elemento
-  VoiceOver. Eventuale auto-avanzamento LENTO solo opzionale e **gated su Reduce
-  Motion**.
+- **Accessibilità/HIG** (deciso utente 2026-08-25): **swipe manuale = default**;
+  page indicator; ogni slide un elemento VoiceOver. **Auto-avanzamento LENTO** desiderato
+  ma solo se **leggero**: `TimelineView(.periodic)` o un timer che avanza l'indice ogni
+  N s (zero librerie, costo trascurabile), **disattivato** con Reduce Motion o VoiceOver
+  attivi, e **in pausa** appena l'utente scorre a mano (poi riprende). Mai un peso.
 - **Copertura**: contenuto e ordinamento nel Domain puro con target_test; layout
   carosello View-level (compilato, resa non coperta).
-- **Opzione futura**: sulla schermata di successo (E-3) una curiosità
-  **personalizzata** coi numeri veri appena calcolati ("Hai 2503 video: ~X GB").
+- **Confermato (utente 2026-08-25)**: la schermata di successo (E-3) mostra una
+  curiosità **personalizzata** coi numeri veri appena calcolati ("Hai 2503 video:
+  ~X GB") — onesta perché usa il dato reale della scansione.
 
 ### E-3 — Schermata di successo (coriandoli) → dashboard · 🟠
 - **Output**: a **successo vero** una piccola schermata celebrativa (coriandoli gated
