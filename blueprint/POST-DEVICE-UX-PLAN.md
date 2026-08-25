@@ -240,6 +240,37 @@ stati `ScanState` esiste già (idle/requestingPermission/scanning/completed/fail
   TimelineView + Shape animabile), zero dipendenze, offline.
 - **Skill**: `apple-skills:design` (game-feel: haptics/celebrations) in fase di build.
 
+### E-4 — Carosello "leggi mentre aspetti" (metà superiore) · 🟠
+- **Output**: mentre lo scan è in corso e il tasto è sceso in basso, la **metà
+  superiore** ospita un **carosello scrollabile lateralmente** (`TabView .page` o
+  `ScrollView` orizzontale con paging) — manifesto Angavu + curiosità sullo spazio.
+  Trasforma l'attesa in mini-onboarding.
+- **Contenuto come DATI** (coerente con `ManifestContent`, T-100): un
+  `ScanCarouselContent` nel Domain puro (slide: `id`, titolo, corpo, `symbol`),
+  testabile; niente stringhe sparse nella View.
+- **Onestà**: le curiosità sono **approssimative e dichiarate tali** ("circa", "può"),
+  mai numeri esatti inventati (manifesto: numeri veri). Fact-check leggero in fase di
+  build.
+- **Slide iniziali proposte** (rivedibili):
+  1. *Tutto sul tuo telefono* — niente cloud/server, i dati non escono.
+  2. *Zero pubblicità, zero tracciamento* — Pro a pagamento unico, opzionale.
+  3. *Numeri veri, coi caveat* — se un dato è stimato, lo dichiariamo.
+  4. *Rete di sicurezza* — niente sparisce senza conferma e anteprima.
+  5. Un minuto di 4K@60 può pesare **oltre 400 MB**.
+  6. **HEVC** comprime un video fino a **~50%** vs H.264, a parità di qualità.
+  7. Uno **screenshot PNG** spesso pesa più di una foto compressa.
+  8. Due copie **identiche** = doppio spazio, zero valore in più.
+  9. Le **Live Photo** = foto + breve video → pesano di più.
+  10. **1 GB** ≈ 500–1000 foto compresse, o pochi minuti di 4K.
+- **Accessibilità/HIG**: swipe manuale di default (i caroselli auto-avanzanti sono
+  ostili a VoiceOver e a Reduce Motion); page indicator; ogni slide un elemento
+  VoiceOver. Eventuale auto-avanzamento LENTO solo opzionale e **gated su Reduce
+  Motion**.
+- **Copertura**: contenuto e ordinamento nel Domain puro con target_test; layout
+  carosello View-level (compilato, resa non coperta).
+- **Opzione futura**: sulla schermata di successo (E-3) una curiosità
+  **personalizzata** coi numeri veri appena calcolati ("Hai 2503 video: ~X GB").
+
 ### E-3 — Schermata di successo (coriandoli) → dashboard · 🟠
 - **Output**: a **successo vero** una piccola schermata celebrativa (coriandoli gated
   + haptic `.success` già esistente) col **conteggio reale**, e un tasto "È ora di fare
