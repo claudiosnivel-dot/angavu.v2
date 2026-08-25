@@ -14,6 +14,7 @@
 // (adapter della safety_net) è fuori scope qui: la conferma AUTORIZZA, la rete di
 // sicurezza esegue.
 #if canImport(SwiftUI)
+import AngavuData
 import AngavuDomain
 import SwiftUI
 
@@ -185,7 +186,8 @@ public struct CategoryReviewView: View {
                     CategoryReviewRowView(
                         row: row,
                         formattedDate: formatReviewDate(row.creationDate),
-                        onToggle: row.isSelectable ? { vm.toggleSelection(row.id) } : nil
+                        onToggle: row.isSelectable ? { vm.toggleSelection(row.id) } : nil,
+                        thumbnailProvider: environment.thumbnailProvider
                     )
                     if row.id != rows.last?.id { Divider() }
                 }
@@ -364,6 +366,8 @@ private struct CategoryReviewRowView: View {
     let formattedDate: String?
     /// Azione di toggle selezione; `nil` per i keep (non selezionabili, protetti).
     let onToggle: (() -> Void)?
+    /// A-1: provider di miniature reali (device-only); placeholder se non residente.
+    let thumbnailProvider: any AssetThumbnailProviding
 
     var body: some View {
         // R-08: alle accessibility sizes il controllo di coda verrebbe compresso
@@ -393,10 +397,12 @@ private struct CategoryReviewRowView: View {
 
     private var identity: some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .foregroundStyle(tint)
-                .imageScale(.large)
-                .accessibilityHidden(true)
+            RowThumbnailView(
+                provider: thumbnailProvider,
+                id: row.id,
+                placeholderSymbol: symbol,
+                tint: tint
+            )
             Text(row.displayTitle(formattedDate: formattedDate))
                 .font(.body)
                 .lineLimit(1)
@@ -440,6 +446,42 @@ private struct CategoryReviewRowView: View {
 
     private var tint: Color {
         row.disposition == .keep ? AuroraBrand.accentAzzurro : AuroraBrand.accentFucsia
+    }
+}
+
+/// A-1 — Miniatura reale di una riga, caricata async off-main. Placeholder (glifo di
+/// categoria) finché non è pronta o quando l'originale è solo in iCloud (nil). Nessun
+/// download di rete (il provider usa `isNetworkAccessAllowed=false`).
+private struct RowThumbnailView: View {
+    let provider: any AssetThumbnailProviding
+    let id: String
+    let placeholderSymbol: String
+    let tint: Color
+
+    private static let side: CGFloat = 44
+    @State private var image: CGImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Image(systemName: placeholderSymbol)
+                    .foregroundStyle(tint)
+                    .imageScale(.large)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(width: Self.side, height: Self.side)
+        .background(.quaternary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        // `.task(id:)` ricarica se la riga viene riusata per un altro asset (scroll).
+        .task(id: id) {
+            image = await provider.thumbnail(forLocalIdentifier: id, maxPixel: 120)
+        }
+        .accessibilityHidden(true)
     }
 }
 #endif

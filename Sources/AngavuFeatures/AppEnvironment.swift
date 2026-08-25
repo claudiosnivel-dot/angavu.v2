@@ -23,6 +23,9 @@ public struct AppEnvironment {
     /// P0-2: capacità/spazio libero del device per il tetto di realtà (P0-3). Default
     /// `UnknownDeviceCapacity` (nessun tetto) finché il grafo reale non lo cabla.
     public let deviceCapacity: any DeviceCapacityReading
+    /// A-1: miniature reali degli asset. Default `NoThumbnailProvider` (placeholder)
+    /// finché il grafo reale non inietta l'adapter PhotoKit.
+    public let thumbnailProvider: any AssetThumbnailProviding
     public let videoExporter: any VideoExporting
     public let videoSpecProvider: any VideoSpecProviding
     /// Porte dei domini extra-foto (contatti, calendari). `nil` finché non cablate
@@ -37,6 +40,7 @@ public struct AppEnvironment {
         byteResolver: any AssetByteSizeResolving,
         deviceStorage: any DeviceStorageInspecting,
         deviceCapacity: any DeviceCapacityReading = UnknownDeviceCapacity(),
+        thumbnailProvider: any AssetThumbnailProviding = NoThumbnailProvider(),
         videoExporter: any VideoExporting,
         videoSpecProvider: any VideoSpecProviding,
         extraDomains: ExtraDomainsPorts? = nil
@@ -48,6 +52,7 @@ public struct AppEnvironment {
         self.byteResolver = byteResolver
         self.deviceStorage = deviceStorage
         self.deviceCapacity = deviceCapacity
+        self.thumbnailProvider = thumbnailProvider
         self.videoExporter = videoExporter
         self.videoSpecProvider = videoSpecProvider
         self.extraDomains = extraDomains
@@ -96,10 +101,21 @@ extension AppEnvironment {
             byteResolver: PHAssetByteSizeResolver(),
             deviceStorage: SystemDeviceStorageInspector(),
             deviceCapacity: SystemDeviceCapacityReader(),
+            thumbnailProvider: liveThumbnailProvider(),
             videoExporter: AVFoundationVideoExporter(),
             videoSpecProvider: AVFoundationVideoSpecProvider(),
             extraDomains: liveExtraDomains()
         )
+    }
+
+    /// Miniature reali quando PhotoKit+UIKit sono disponibili (iOS); altrimenti il
+    /// null-object (build macOS della CI: placeholder, nessuna miniatura).
+    private static func liveThumbnailProvider() -> any AssetThumbnailProviding {
+        #if canImport(Photos) && canImport(UIKit)
+        return PHCachingThumbnailProvider()
+        #else
+        return NoThumbnailProvider()
+        #endif
     }
 
     /// Costruisce le porte extra-foto reali quando i framework sono disponibili
