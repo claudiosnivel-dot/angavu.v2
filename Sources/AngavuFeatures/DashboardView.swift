@@ -25,9 +25,13 @@ public struct DashboardView: View {
     // stesso grafo di dipendenze iniettato: nessun singleton nascosto. Interno
     // (non private) così le sezioni in `DashboardView+Sections.swift` vi accedono.
     let environment: AppEnvironment
+    // P0-1: cache dei risultati posseduta SOPRA la view (da `App/`). Interna così le
+    // sezioni (report) possono propagarla alle schermate a valle.
+    let store: AnalysisResultsStore
 
-    public init(environment: AppEnvironment) {
+    public init(environment: AppEnvironment, store: AnalysisResultsStore) {
         self.environment = environment
+        self.store = store
         _vm = State(initialValue: DashboardViewModel(environment: environment))
     }
 
@@ -50,10 +54,18 @@ public struct DashboardView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
-            // Carica una sola volta alla comparsa, FUORI dal main thread (`.task`):
-            // la risoluzione byte per-asset su una libreria grande non deve bloccare
-            // la UI. Il pull di «Riprova» ricarica.
-            if case .idle = vm.state { await vm.load() }
+            // P0-1: cache SOPRA la view. Se il risultato è già stato calcolato
+            // (navigazione/back o ritorno dal background), lo si applica senza
+            // ricalcolare; altrimenti si legge FUORI dal main thread e si memorizza.
+            // «Riprova»/ricalcolo espliciti invalidano la cache a monte.
+            if case .ready = vm.state { return }
+            if let cached: DashboardScreen = store.value(for: .dashboard) {
+                vm.present(cached)
+            } else if case .idle = vm.state {
+                if case .ready(let screen) = await vm.load() {
+                    store.set(screen, for: .dashboard)
+                }
+            }
         }
     }
 

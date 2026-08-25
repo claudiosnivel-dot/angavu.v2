@@ -19,6 +19,10 @@ struct ContentView: View {
     // R-06: la transizione di fase è animata ma SEMPRE gated su Reduce Motion, con
     // equivalente statico (parità informativa: cambia solo la dissolvenza).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // P0-1: la cache dei risultati d'analisi vive QUI, sopra le view: sopravvive alla
+    // navigazione e al ciclo background→foreground (non è `@State` di una schermata,
+    // che verrebbe azzerato a ogni ricomparsa). Iniettata nella Home e a valle.
+    @State private var resultsStore = AnalysisResultsStore()
 
     var body: some View {
         NavigationStack {
@@ -32,7 +36,7 @@ struct ContentView: View {
             OnboardingManifestoView(onContinue: finishOnboarding)
                 .transition(.opacity)
         } else {
-            HomeView(environment: .live(container: modelContext.container))
+            HomeView(environment: .live(container: modelContext.container), store: resultsStore)
                 .transition(.opacity)
         }
     }

@@ -23,12 +23,16 @@ private func formatReportBytes(_ bytes: Int64) -> String {
 /// Schermata del report onesto, cablata sui dati veri.
 public struct HonestReportView: View {
     @State private var vm: HonestReportViewModel
+    // P0-1: cache dei risultati posseduta SOPRA la view (da `App/`), condivisa con la
+    // dashboard: rientrare sul report non ricompone la lettura pesante.
+    private let store: AnalysisResultsStore
     // R-11: la transizione di fase idle→ready→failed è animata (dissolvenza) ma
     // SEMPRE gated su Reduce Motion, con equivalente statico (parità informativa:
     // cambia solo il crossfade, mai il contenuto). Stesso idioma di R-06/ContentView.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(environment: AppEnvironment) {
+    public init(environment: AppEnvironment, store: AnalysisResultsStore) {
+        self.store = store
         _vm = State(initialValue: HonestReportViewModel(environment: environment))
     }
 
@@ -52,9 +56,16 @@ public struct HonestReportView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
-            // Carica una sola volta alla comparsa, FUORI dal main thread (`.task`):
-            // la risoluzione byte per-asset non deve bloccare la UI. «Riprova» ricompone.
-            if case .idle = vm.state { await vm.load() }
+            // P0-1: cache SOPRA la view. Risultato già calcolato → applicato senza
+            // ricomporre; altrimenti letto FUORI dal main thread e memorizzato.
+            if case .ready = vm.state { return }
+            if let cached: HonestReportScreen = store.value(for: .honestReport) {
+                vm.present(cached)
+            } else if case .idle = vm.state {
+                if case .ready(let screen) = await vm.load() {
+                    store.set(screen, for: .honestReport)
+                }
+            }
         }
     }
 

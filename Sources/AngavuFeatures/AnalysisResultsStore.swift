@@ -1,0 +1,61 @@
+import Observation
+
+// P0-1 — Store dei risultati d'analisi a livello app (fondazione cache).
+//
+// Vive SOPRA le view (posseduto da `App/`, iniettato via environment), non nello
+// `@State` di una schermata: così i risultati calcolati (numeri dashboard, report,
+// review per categoria) sopravvivono alla navigazione avanti-indietro e al ciclo
+// background→foreground, invece di essere ricalcolati a ogni comparsa (secondo
+// difetto del device-test: rientrando in una categoria si rianalizzava da capo).
+//
+// È un cache in memoria, non persistenza tra riavvii (fuori scope, §5 del piano).
+// La logica pura (set/get/invalidate) è l'ORACOLO testabile; la sopravvivenza al
+// background è comportamento SwiftUI (View-level, dichiarato non coperto, L-COL-006).
+//
+// Invalidazione (onestà: mai un numero stantìo spacciato per fresco): il chiamante
+// invalida dopo un'eliminazione eseguita o quando la libreria cambia
+// (`LibraryChangeObserver`, T-013). Senza invalidazione il valore resta valido.
+
+/// Chiave di un risultato cachato. Tipizza cosa è memorizzato, così get/set non si
+/// confondono tra schermate.
+public enum AnalysisResultKey: Hashable, Sendable {
+    /// Numeri veri della dashboard (`DashboardScreen`).
+    case dashboard
+    /// Report onesto (`HonestReportScreen`).
+    case honestReport
+    /// Review di una categoria, per identificatore di categoria.
+    case category(String)
+}
+
+/// Cache osservabile dei risultati d'analisi, chiave→valore. Il valore è opaco
+/// (`Any`): ogni schermata sa quale tipo si aspetta per la propria chiave.
+@Observable
+public final class AnalysisResultsStore {
+    private var storage: [AnalysisResultKey: Any] = [:]
+
+    public init() {}
+
+    /// Valore cachato per la chiave, se presente e del tipo atteso; altrimenti `nil`.
+    public func value<Value>(for key: AnalysisResultKey) -> Value? {
+        storage[key] as? Value
+    }
+
+    /// Memorizza (o rimpiazza) il valore per la chiave.
+    public func set<Value>(_ value: Value, for key: AnalysisResultKey) {
+        storage[key] = value
+    }
+
+    /// Invalida una singola chiave: la prossima lettura ricalcolerà.
+    public func invalidate(_ key: AnalysisResultKey) {
+        storage.removeValue(forKey: key)
+    }
+
+    /// Invalida tutto: usato dopo un'eliminazione o un cambio di libreria, così
+    /// nessun numero stantìo resta a schermo (manifesto: numeri veri).
+    public func invalidateAll() {
+        storage.removeAll()
+    }
+
+    /// Vero quando non c'è nulla in cache (utile ai test e come guardia).
+    public var isEmpty: Bool { storage.isEmpty }
+}

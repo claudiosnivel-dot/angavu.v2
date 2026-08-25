@@ -65,4 +65,10 @@ public final class HonestReportViewModel {
         }
         return state
     }
+
+    /// P0-1: applica un report già calcolato (dalla cache sopra la view,
+    /// `AnalysisResultsStore`) senza ricomporlo — sopravvive a navigazione e background.
+    public func present(_ screen: HonestReportScreen) {
+        state = .ready(screen)
+    }
 }

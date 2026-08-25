@@ -120,7 +120,7 @@ extension DashboardView {
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
             NavigationLink {
-                HonestReportView(environment: environment)
+                HonestReportView(environment: environment, store: store)
             } label: {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {

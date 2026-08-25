@@ -26,9 +26,13 @@ public struct HomeView: View {
     // Conservato per costruire le schermate a valle (Dashboard) con lo stesso grafo
     // di dipendenze iniettato: nessun singleton nascosto.
     private let environment: AppEnvironment
+    // P0-1: cache dei risultati posseduta SOPRA le view (da `App/`), propagata alla
+    // dashboard e al report così sopravvive a navigazione e background.
+    private let store: AnalysisResultsStore
 
-    public init(environment: AppEnvironment) {
+    public init(environment: AppEnvironment, store: AnalysisResultsStore) {
         self.environment = environment
+        self.store = store
         _vm = State(initialValue: ScanViewModel(environment: environment))
     }
 
@@ -136,7 +140,7 @@ public struct HomeView: View {
 
     private var dashboardLink: some View {
         NavigationLink {
-            DashboardView(environment: environment)
+            DashboardView(environment: environment, store: store)
         } label: {
             Label("Vedi i numeri veri", systemImage: "chart.bar.doc.horizontal")
                 .font(.headline)
@@ -220,6 +224,9 @@ public struct HomeView: View {
     // MARK: Azioni
 
     private func startScan() {
+        // P0-1: una nuova scansione ricostruisce l'indice → i numeri cambiano.
+        // Invalidare la cache evita di mostrare cifre stantìe (manifesto: numeri veri).
+        store.invalidateAll()
         let token = CancellationToken()
         cancellation = token
         scanTask?.cancel()

@@ -71,4 +71,11 @@ public final class DashboardViewModel {
         }
         return state
     }
+
+    /// P0-1: applica un risultato già calcolato (dalla cache sopra la view,
+    /// `AnalysisResultsStore`) senza ricalcolare — così tornare sulla dashboard o
+    /// riemergere dal background non rifà la lettura pesante dell'indice.
+    public func present(_ screen: DashboardScreen) {
+        state = .ready(screen)
+    }
 }
