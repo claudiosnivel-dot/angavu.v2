@@ -51,8 +51,14 @@ public final class DashboardViewModel {
     /// Costruisce la dashboard dai dati veri dell'indice (lettore condiviso
     /// `LibraryFiguresReader`) e restituisce lo stato finale. La lettura
     /// dell'indice può fallire: in tal caso lo stato è `failed`, mai un verde finto.
+    ///
+    /// `async` e NON isolata al main: la View la invoca con `.task`, così la lettura
+    /// pesante (risoluzione byte per-asset via PhotoKit su 25k elementi) gira FUORI
+    /// dal main thread — altrimenti la Dashboard si bloccherebbe come faceva la
+    /// scansione. Lo stato passa a `.ready`/`.failed` solo alla fine; nel frattempo
+    /// resta `.idle` e la View mostra lo spinner etichettato «Calcolo dei numeri veri…».
     @discardableResult
-    public func load() -> DashboardState {
+    public func load() async -> DashboardState {
         do {
             let figures = try LibraryFiguresReader.read(from: environment)
             state = .ready(DashboardScreen(

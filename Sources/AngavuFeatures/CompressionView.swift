@@ -72,7 +72,7 @@ public struct CompressionView: View {
         } message: {
             Text(CompressionPresentation.safetyNetText)
         }
-        .onAppear { loadIfNeeded() }
+        .task { await loadIfNeeded() }
         .hapticFeedback(on: vm.state) { _, new in
             switch new {
             case .done: return .success
@@ -157,14 +157,25 @@ public struct CompressionView: View {
 
     // MARK: Azioni
 
-    func loadIfNeeded(force: Bool = false) {
+    // La raccolta dei candidati (lettura indice video + risoluzione byte per-asset via
+    // PhotoKit) è pesante: gira FUORI dal main thread per non bloccare la schermata.
+    // `loadIfNeeded` è @MainActor (metodo di View) e delega il calcolo a `loadCandidates`
+    // (nonisolata → generic executor), tornando sul main solo per aggiornare `loadPhase`.
+    @MainActor
+    func loadIfNeeded(force: Bool = false) async {
         if !force, case .loaded = loadPhase { return }
         do {
-            let candidates = try CompressionCandidateSource.candidates(from: environment)
+            let candidates = try await CompressionView.loadCandidates(from: environment)
             loadPhase = .loaded(candidates)
         } catch {
             loadPhase = .failed(String(describing: error))
         }
+    }
+
+    /// Calcolo pesante dei candidati, ESPLICITAMENTE non isolato al main: awaitandola da
+    /// `.task` il corpo gira sul generic executor (PhotoKit non blocca la UI).
+    nonisolated static func loadCandidates(from environment: AppEnvironment) async throws -> [CompressionCandidate] {
+        try CompressionCandidateSource.candidates(from: environment)
     }
 
     /// Legge la spec on-device (durata/bitrate) e calcola la stima. Se la spec non è

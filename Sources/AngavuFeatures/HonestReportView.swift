@@ -51,9 +51,10 @@ public struct HonestReportView: View {
         #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .onAppear {
-            // Carica una sola volta alla comparsa; «Riprova» ricompone.
-            if case .idle = vm.state { vm.load() }
+        .task {
+            // Carica una sola volta alla comparsa, FUORI dal main thread (`.task`):
+            // la risoluzione byte per-asset non deve bloccare la UI. «Riprova» ricompone.
+            if case .idle = vm.state { await vm.load() }
         }
     }
 
@@ -210,7 +211,7 @@ public struct HonestReportView: View {
             }
             if pres.showsRetry {
                 Button {
-                    vm.load()
+                    Task { await vm.load() }
                 } label: {
                     Label("Riprova", systemImage: "arrow.clockwise")
                         .font(.subheadline.weight(.semibold))

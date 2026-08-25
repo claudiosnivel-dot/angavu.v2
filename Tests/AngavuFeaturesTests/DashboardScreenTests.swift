@@ -88,7 +88,7 @@ final class DashboardScreenTests: XCTestCase {
 
     // AC-112-1: indice con foto e video e byte noti → righe per categoria coi byte
     // reali, exact ed estimated tenuti SEPARATI (mai fusi in un unico "esatto").
-    func test_categoryRowsReportRealBytesExactSeparatedFromEstimated() {
+    func test_categoryRowsReportRealBytesExactSeparatedFromEstimated() async {
         let index = FixedIndex(stored: [photo("P1"), photo("P2"), video("V1"), video("V2")])
         let sizes: [String: ByteSize] = [
             "P1": .exact(bytes: 100),
@@ -98,7 +98,7 @@ final class DashboardScreenTests: XCTestCase {
         ]
         let vm = DashboardViewModel(environment: makeEnv(access: .full, index: index, sizes: sizes))
 
-        guard case .ready(let screen) = vm.load() else {
+        guard case .ready(let screen) = await vm.load() else {
             return XCTFail("atteso stato ready")
         }
 
@@ -115,7 +115,7 @@ final class DashboardScreenTests: XCTestCase {
     }
 
     // Le categorie sono disgiunte: uno screenshot conta come screenshot, non foto.
-    func test_screenshotIsItsOwnCategory() {
+    func test_screenshotIsItsOwnCategory() async {
         let index = FixedIndex(stored: [photo("P1"), photo("S1", screenshot: true)])
         let sizes: [String: ByteSize] = [
             "P1": .exact(bytes: 10),
@@ -123,20 +123,20 @@ final class DashboardScreenTests: XCTestCase {
         ]
         let vm = DashboardViewModel(environment: makeEnv(access: .full, index: index, sizes: sizes))
 
-        guard case .ready(let screen) = vm.load() else { return XCTFail("atteso ready") }
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
 
         XCTAssertEqual(screen.categories.first { $0.category == .photo }?.count, 1)
         XCTAssertEqual(screen.categories.first { $0.category == .screenshot }?.count, 1)
     }
 
     // AC-112-2: accesso limited → banner limited presente e totale marcato parziale.
-    func test_limitedAccessShowsBannerAndMarksTotalPartial() {
+    func test_limitedAccessShowsBannerAndMarksTotalPartial() async {
         let index = FixedIndex(stored: [photo("P1")])
         let vm = DashboardViewModel(
             environment: makeEnv(access: .limited, index: index, sizes: ["P1": .exact(bytes: 10)])
         )
 
-        guard case .ready(let screen) = vm.load() else { return XCTFail("atteso ready") }
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
 
         XCTAssertTrue(screen.banner.showLimitedAccessBanner, "accesso limited: banner presente")
         XCTAssertTrue(screen.banner.isTotalPartial, "il totale limited è parziale")
@@ -144,13 +144,13 @@ final class DashboardScreenTests: XCTestCase {
     }
 
     // Accesso pieno → nessun banner, totale non parziale (contro-prova AC-112-2).
-    func test_fullAccessHasNoLimitedBannerAndTotalNotPartial() {
+    func test_fullAccessHasNoLimitedBannerAndTotalNotPartial() async {
         let index = FixedIndex(stored: [photo("P1")])
         let vm = DashboardViewModel(
             environment: makeEnv(access: .full, index: index, sizes: ["P1": .exact(bytes: 10)])
         )
 
-        guard case .ready(let screen) = vm.load() else { return XCTFail("atteso ready") }
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
 
         XCTAssertFalse(screen.banner.showLimitedAccessBanner)
         XCTAssertFalse(screen.isTotalPartial)
@@ -158,14 +158,14 @@ final class DashboardScreenTests: XCTestCase {
 
     // Spazio recuperabile: riuso di ReclaimableSpaceCalculator. Con optimize disabled
     // i byte device eguagliano quelli libreria → nessun caveat (coerenza col Domain).
-    func test_reclaimableSpaceReusesCalculatorNoCaveatWhenOptimizeDisabled() {
+    func test_reclaimableSpaceReusesCalculatorNoCaveatWhenOptimizeDisabled() async {
         let index = FixedIndex(stored: [photo("P1"), video("V1")])
         let sizes: [String: ByteSize] = ["P1": .exact(bytes: 100), "V1": .exact(bytes: 900)]
         let vm = DashboardViewModel(
             environment: makeEnv(access: .full, index: index, sizes: sizes, optimize: .disabled)
         )
 
-        guard case .ready(let screen) = vm.load() else { return XCTFail("atteso ready") }
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
 
         XCTAssertEqual(screen.reclaimable.reclaimableLibrarySpace, 1000)
         XCTAssertEqual(screen.reclaimable.reclaimableDeviceSpaceNow, 1000)
@@ -173,11 +173,11 @@ final class DashboardScreenTests: XCTestCase {
     }
 
     // La lettura dell'indice può fallire: stato failed, mai un verde finto.
-    func test_indexReadFailureYieldsFailedState() {
+    func test_indexReadFailureYieldsFailedState() async {
         let vm = DashboardViewModel(
             environment: makeEnv(access: .full, index: ThrowingIndex(), sizes: [:])
         )
-        if case .failed = vm.load() {
+        if case .failed = await vm.load() {
             // atteso
         } else {
             XCTFail("atteso stato failed alla lettura dell'indice")

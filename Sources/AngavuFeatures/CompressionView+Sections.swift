@@ -275,7 +275,7 @@ extension CompressionView {
         } actions: {
             Button {
                 loadPhase = .loading
-                loadIfNeeded(force: true)
+                Task { await loadIfNeeded(force: true) }
             } label: {
                 Label("Riprova", systemImage: "arrow.clockwise")
             }

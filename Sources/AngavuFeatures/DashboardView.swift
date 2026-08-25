@@ -49,9 +49,11 @@ public struct DashboardView: View {
         #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .onAppear {
-            // Carica una sola volta alla comparsa; il pull di «Riprova» ricarica.
-            if case .idle = vm.state { vm.load() }
+        .task {
+            // Carica una sola volta alla comparsa, FUORI dal main thread (`.task`):
+            // la risoluzione byte per-asset su una libreria grande non deve bloccare
+            // la UI. Il pull di «Riprova» ricarica.
+            if case .idle = vm.state { await vm.load() }
         }
     }
 
@@ -168,7 +170,7 @@ public struct DashboardView: View {
         } actions: {
             if pres.showsRetry {
                 Button {
-                    vm.load()
+                    Task { await vm.load() }
                 } label: {
                     Label("Riprova", systemImage: "arrow.clockwise")
                 }

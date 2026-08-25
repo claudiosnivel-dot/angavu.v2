@@ -70,7 +70,7 @@ final class HonestReportViewModelTests: XCTestCase {
 
     // AC-114-1: byte device < byte libreria → deviceReclaimableNow < libraryFreed
     // e iCloudCaveat vero.
-    func test_deviceLessThanLibraryYieldsCaveat() {
+    func test_deviceLessThanLibraryYieldsCaveat() async {
         let vm = HonestReportViewModel(environment: makeEnv(
             access: .full,
             stored: [photo("P1")],
@@ -79,7 +79,7 @@ final class HonestReportViewModelTests: XCTestCase {
             residentFraction: 0.4
         ))
 
-        guard case .ready(let screen) = vm.load() else { return XCTFail("atteso ready") }
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
 
         XCTAssertEqual(screen.libraryReclaimable, 1000)
         XCTAssertEqual(screen.deviceReclaimableNow, 400)
@@ -88,7 +88,7 @@ final class HonestReportViewModelTests: XCTestCase {
     }
 
     // AC-114-2: byte device pari ai byte libreria → iCloudCaveat falso.
-    func test_deviceEqualsLibraryNoCaveat() {
+    func test_deviceEqualsLibraryNoCaveat() async {
         let vm = HonestReportViewModel(environment: makeEnv(
             access: .full,
             stored: [photo("P1")],
@@ -97,7 +97,7 @@ final class HonestReportViewModelTests: XCTestCase {
             residentFraction: 1.0
         ))
 
-        guard case .ready(let screen) = vm.load() else { return XCTFail("atteso ready") }
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
 
         XCTAssertEqual(screen.deviceReclaimableNow, screen.libraryReclaimable)
         XCTAssertFalse(screen.iCloudCaveat)
@@ -105,7 +105,7 @@ final class HonestReportViewModelTests: XCTestCase {
 
     // Con accesso limited il report marca i conteggi parziali e invita all'accesso
     // completo (onestà dei numeri, riuso di HonestReport).
-    func test_limitedAccessMarksPartialAndInvitesFullAccess() {
+    func test_limitedAccessMarksPartialAndInvitesFullAccess() async {
         let vm = HonestReportViewModel(environment: makeEnv(
             access: .limited,
             stored: [photo("P1")],
@@ -114,7 +114,7 @@ final class HonestReportViewModelTests: XCTestCase {
             residentFraction: 1.0
         ))
 
-        guard case .ready(let screen) = vm.load() else { return XCTFail("atteso ready") }
+        guard case .ready(let screen) = await vm.load() else { return XCTFail("atteso ready") }
 
         XCTAssertTrue(screen.report.countsArePartial)
         XCTAssertTrue(screen.report.invitesFullAccess)

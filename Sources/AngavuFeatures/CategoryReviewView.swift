@@ -67,7 +67,7 @@ public struct CategoryReviewView: View {
         } message: {
             Text(presentation.safetyNote)
         }
-        .onAppear { loadIfNeeded() }
+        .task { await loadIfNeeded() }
         .hapticFeedback(on: presentation.phase) { old, new in
             // Allerta tenue all'apertura dell'anteprima distruttiva (un solo owner).
             (old != .previewing && new == .previewing) ? .destructivePreview : nil
@@ -234,7 +234,7 @@ public struct CategoryReviewView: View {
             }
             Button {
                 loadPhase = .loading
-                loadIfNeeded(force: true)
+                Task { await loadIfNeeded(force: true) }
             } label: {
                 Label("Riprova", systemImage: "arrow.clockwise")
                     .font(.subheadline.weight(.semibold))
@@ -287,15 +287,32 @@ public struct CategoryReviewView: View {
 
     // MARK: Caricamento della sorgente reale
 
-    private func loadIfNeeded(force: Bool = false) {
+    // La composizione della categoria è la parte pesante (fetch dell'indice + per i
+    // duplicati/simili hashing SHA-256 / feature print Vision per asset): DEVE girare
+    // fuori dal main thread, altrimenti la schermata si blocca come faceva lo scan.
+    // `loadIfNeeded` è @MainActor (metodo di View), quindi delega il calcolo a
+    // `composeReview` (nonisolata → gira sul generic executor) e torna sul main solo
+    // per aggiornare `vm`/`loadPhase`. Durante l'attesa `loadPhase` resta `.loading`.
+    @MainActor
+    private func loadIfNeeded(force: Bool = false) async {
         if !force, loadPhase == .loaded { return }
         do {
-            let review = try CategoryReviewSource.review(for: category, from: environment)
+            let review = try await CategoryReviewView.composeReview(for: category, from: environment)
             vm = CategoryReviewViewModel(review: review)
             loadPhase = .loaded
         } catch {
             loadPhase = .failed(String(describing: error))
         }
+    }
+
+    /// Calcolo pesante della categoria, ESPLICITAMENTE non isolato al main: awaitandola
+    /// da `.task` (main) il corpo gira sul generic executor, così PhotoKit/Vision non
+    /// bloccano la UI.
+    nonisolated static func composeReview(
+        for category: CleanupCategory,
+        from environment: AppEnvironment
+    ) async throws -> CategoryReview {
+        try CategoryReviewSource.review(for: category, from: environment)
     }
 }
 

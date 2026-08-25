@@ -46,8 +46,12 @@ public final class HonestReportViewModel {
     /// Compone il report onesto dai dati veri e restituisce lo stato finale. La
     /// lettura dell'indice può fallire: in tal caso lo stato è `failed`, mai un
     /// verde finto.
+    ///
+    /// `async` e NON isolata al main: la View la invoca con `.task`, così la lettura
+    /// pesante (risoluzione byte per-asset via PhotoKit) gira FUORI dal main thread e
+    /// non blocca la schermata. Stato `.ready`/`.failed` solo alla fine.
     @discardableResult
-    public func load() -> HonestReportState {
+    public func load() async -> HonestReportState {
         do {
             let figures = try LibraryFiguresReader.read(from: environment)
             let report = HonestReportComposer.compose(
