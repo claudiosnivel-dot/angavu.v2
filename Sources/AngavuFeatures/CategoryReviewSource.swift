@@ -1,40 +1,75 @@
+import Foundation
 import AngavuDomain
 
 // Guscio UI — Sorgente delle review di categoria: produce una `CategoryReview`
 // REALE dai dati veri dell'indice, dietro i port dell'AppEnvironment.
 //
-// ONESTÀ (L-COL-006): qui si cabla SOLO la categoria che si può calcolare
-// off-device senza soglie arbitrarie — gli **Screenshot**, un filtro puro sul
-// sottotipo `.screenshot` già indicizzato (library_index, T-011). Le altre
-// categorie del piano (duplicati esatti, foto simili, video grandi/vecchi, foto
-// sfocate) richiedono hashing/Vision sul dispositivo o decisioni di soglia
-// (grande/vecchio): NON sono qui, per non fabbricare numeri. Verranno cablate
-// quando la loro sorgente reale sarà disponibile.
+// C-1 (POST-DEVICE) — Cablate le categorie del cuore-foto oltre agli Screenshot:
+// **duplicati esatti** (T-030/31/32), **foto simili** (T-040…43), **foto sfocate**
+// (T-070/71) e **video grandi/vecchi** (T-060/62). Il motore di dominio è già verde:
+// qui si aggancia soltanto — nessuna logica di dominio nuova. I rilevatori pesanti
+// (hashing SHA-256, feature print Vision, nitidezza Core Image) vivono dietro i port
+// dell'AppEnvironment (`contentHasher`/`featurePrinter`/`qualityScorer`/
+// `sharpnessScorer`), così questa mappa categoria→sorgente è testabile con dei fake
+// senza device (oracolo puro). Gli adapter reali restano compilati-non-testati sul
+// device (L-COL-006).
 //
-// Nessuna logica di dominio nuova: si riusano `ScreenshotCategory` (T-061),
-// `BulkDeletionProposalComposer` (T-062) e la normalizzazione `CategoryReview`
-// (T-113). Altitudine invariata: si legge dietro il port `AssetIndexReading`.
+// ONESTÀ: la selezione "tieni la migliore" è protetta per costruzione — duplicati e
+// simili mettono il keep nei `keepIds`, mai fra i removable, e la preselezione
+// (`CategorySelectionPolicy`) è `Set(removableIds)`. Ogni eliminazione passa sempre
+// dal gate d'anteprima obbligatorio della rete di sicurezza (`DeletionFlow`, T-050):
+// qui si compone solo la proposta, mai si elimina.
+//
+// Altitudine invariata: si legge dietro i port del Data; il Domain resta puro.
 
-/// Categoria di pulizia presentabile in una schermata di review. Ogni caso porta
-/// i propri testi (platform-puri, testabili) e sa produrre la propria review dai
-/// dati veri quando questo è possibile off-device.
+/// Categoria di pulizia presentabile in una schermata di review. Ogni caso porta i
+/// propri testi (platform-puri, testabili) e sa produrre la propria review dai dati
+/// veri dietro i port dell'AppEnvironment.
 public enum CleanupCategory: String, CaseIterable, Sendable {
     /// Screenshot: eliminazione diretta, dal sottotipo indicizzato. Nessun keep.
     case screenshots
+    /// Duplicati esatti (byte identici): SHA-256 sui candidati per dimensione, si
+    /// tiene una copia, il resto è eliminabile.
+    case exactDuplicates
+    /// Foto simili: cluster per distanza semantica (Vision), si tiene la migliore.
+    case similarPhotos
+    /// Foto sfocate: nitidezza sotto soglia, eliminazione diretta (nessun keep).
+    case blurryPhotos
+    /// Video grandi e vecchi: oltre le soglie congiunte, eliminazione diretta.
+    case largeOldVideos
 
     /// Titolo della categoria.
     public var title: String {
         switch self {
         case .screenshots: return "Screenshot"
+        case .exactDuplicates: return "Duplicati esatti"
+        case .similarPhotos: return "Foto simili"
+        case .blurryPhotos: return "Foto sfocate"
+        case .largeOldVideos: return "Video grandi e vecchi"
         }
     }
 
-    /// Sottotitolo onesto: cosa contiene e come viene proposta.
+    /// Sottotitolo onesto: cosa contiene e come viene proposta. Dichiara le soglie e
+    /// le euristiche invece di nasconderle (manifesto: numeri veri, coi caveat).
     public var subtitle: String {
         switch self {
         case .screenshots:
             return "Le catture di schermo della tua libreria: eliminazione diretta, "
                 + "nessuna «migliore» da tenere."
+        case .exactDuplicates:
+            return "Copie identiche byte-per-byte (verificate con SHA-256): si tiene "
+                + "una copia, le altre sono eliminabili. Solo ciò che è leggibile sul "
+                + "telefono — un originale in iCloud non viene mai dichiarato duplicato."
+        case .similarPhotos:
+            return "Scatti quasi uguali, raggruppati per somiglianza: si propone di "
+                + "tenere il migliore del gruppo. È una stima di somiglianza, non una "
+                + "certezza: rivedi prima di eliminare."
+        case .blurryPhotos:
+            return "Foto con nitidezza sotto soglia. È un suggerimento: ciò che non è "
+                + "misurabile sul telefono non viene mai segnato come sfocato."
+        case .largeOldVideos:
+            return "Video oltre 100 MB e più vecchi di un anno, dal più grande. "
+                + "Eliminazione diretta: nessuna «migliore» da tenere."
         }
     }
 
@@ -42,8 +77,29 @@ public enum CleanupCategory: String, CaseIterable, Sendable {
     public var symbol: String {
         switch self {
         case .screenshots: return "camera.viewfinder"
+        case .exactDuplicates: return "square.on.square"
+        case .similarPhotos: return "photo.stack"
+        case .blurryPhotos: return "camera.filters"
+        case .largeOldVideos: return "film.stack"
         }
     }
+}
+
+/// Soglie e parametri **dichiarati** dei rilevatori di categoria. Sono default
+/// conservativi (decisione utente 2026-08-26: grandi/vecchi = ≥100 MB e >1 anno);
+/// renderli regolabili dall'utente (slider) è una fase successiva pianificata.
+enum CategoryDetectionDefaults {
+    /// "Grande" per i video: ≥ 100 MB.
+    static let largeVideoMinBytes: Int64 = 100 * 1024 * 1024
+    /// "Vecchio" per i video: creato più di 365 giorni fa.
+    static let largeVideoMaxAgeDays: Double = 365
+    /// Soglie di similarità (scale separate: semantica Vision vs Hamming del dHash).
+    /// Valori dichiarati e conservativi, affinabili in seguito.
+    static let similarity = SimilarityThresholds(semantic: 0.5, hamming: 10)
+    /// Soglia di sfocatura: nitidezza normalizzata 0…1, sfocato se strettamente sotto.
+    static let blur = BlurThreshold(minimumSharpness: 0.3)
+    /// Blocco d'analisi cancellabile (motore T-004).
+    static let chunkSize = 64
 }
 
 /// Review reale + i metadati per-id degli asset coinvolti (A-3), per etichette umane
@@ -53,31 +109,171 @@ struct CategoryReviewData {
     let assets: [String: LibraryAsset]
 }
 
-/// Produttore delle review reali dall'indice. `throws`: la lettura dell'indice non
-/// va mai mascherata con un verde finto (un errore è uno stato d'errore esplicito
-/// nella schermata, mai una lista vuota spacciata per «pulito»).
+/// Produttore delle review reali dall'indice. `throws`: la lettura dell'indice o il
+/// fallimento di un rilevatore non vanno mai mascherati con un verde finto (un errore
+/// è uno stato d'errore esplicito nella schermata, mai una lista vuota spacciata per
+/// «pulito»).
 enum CategoryReviewSource {
-    /// Compone la review reale + i metadati degli asset per la categoria. Per gli
-    /// screenshot: legge tutti gli asset indicizzati, filtra quelli col sottotipo
-    /// `.screenshot`, ne compone una proposta in blocco (tutti removable, nessun keep),
-    /// la normalizza in `CategoryReview` e ne indicizza i metadati per-id.
+    /// Compone la review reale + i metadati degli asset per la categoria, dietro i
+    /// port dell'ambiente.
+    ///
+    /// - Parameter progress: callback d'avanzamento (X/N) per le categorie che girano
+    ///   il motore a blocchi (duplicati/simili/sfocate). Le categorie a filtro puro
+    ///   (screenshot, grandi/vecchi) non lo invocano: sono immediate e restano
+    ///   onestamente indeterminate. Default no-op (usato dall'oracolo).
     static func reviewData(
         for category: CleanupCategory,
-        from environment: AppEnvironment
+        from environment: AppEnvironment,
+        progress: (AnalysisProgress) -> Void = { _ in }
     ) throws -> CategoryReviewData {
         switch category {
         case .screenshots:
-            let assets = try environment.indexReader.assets(matching: .all)
-            let screenshots = ScreenshotCategory.screenshots(assets)
-            let proposal = BulkDeletionProposalComposer.compose(from: screenshots)
-            let review = CategoryReview.from(bulk: proposal)
-            let byId = Dictionary(screenshots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            return CategoryReviewData(review: review, assets: byId)
+            return try screenshotsReview(from: environment)
+        case .exactDuplicates:
+            return try exactDuplicatesReview(from: environment, progress: progress)
+        case .similarPhotos:
+            return try similarPhotosReview(from: environment, progress: progress)
+        case .blurryPhotos:
+            return try blurryPhotosReview(from: environment, progress: progress)
+        case .largeOldVideos:
+            return try largeOldVideosReview(from: environment)
         }
     }
 
     /// Comodità (retro-compatibile): la sola `CategoryReview`, senza metadati.
     static func review(for category: CleanupCategory, from environment: AppEnvironment) throws -> CategoryReview {
         try reviewData(for: category, from: environment).review
+    }
+
+    // MARK: - Screenshot (filtro puro sul sottotipo indicizzato)
+
+    private static func screenshotsReview(from environment: AppEnvironment) throws -> CategoryReviewData {
+        let assets = try environment.indexReader.assets(matching: .all)
+        let screenshots = ScreenshotCategory.screenshots(assets)
+        let proposal = BulkDeletionProposalComposer.compose(from: screenshots)
+        let review = CategoryReview.from(bulk: proposal)
+        return CategoryReviewData(review: review, assets: indexed(screenshots))
+    }
+
+    // MARK: - Duplicati esatti (SHA-256 sui candidati per dimensione)
+
+    private static func exactDuplicatesReview(
+        from environment: AppEnvironment,
+        progress: (AnalysisProgress) -> Void
+    ) throws -> CategoryReviewData {
+        let sized = try sizedAssets(from: environment)
+        let groups = SizeCandidateGrouping.candidateGroups(sized)
+        let clusters = try completed(ExactDuplicateClustering.clusters(
+            from: groups,
+            hasher: environment.contentHasher,
+            chunkSize: CategoryDetectionDefaults.chunkSize,
+            cancellation: CancellationToken(),
+            progress: progress
+        ))
+        let proposals = KeepOneSelection.proposals(for: clusters)
+        let review = CategoryReview(
+            keepIds: proposals.map(\.keep.asset.id),
+            removableIds: proposals.flatMap { $0.removable.map(\.asset.id) }
+        )
+        let involved = proposals.flatMap { [$0.keep] + $0.removable }.map(\.asset)
+        return CategoryReviewData(review: review, assets: indexed(involved))
+    }
+
+    // MARK: - Foto simili (cluster per distanza semantica, "tieni la migliore")
+
+    private static func similarPhotosReview(
+        from environment: AppEnvironment,
+        progress: (AnalysisProgress) -> Void
+    ) throws -> CategoryReviewData {
+        let photos = try environment.indexReader.assets(matching: .all).filter { $0.kind == .photo }
+        // Il dHash percettivo (fallback) non è ancora cablato in C-1: il clustering usa
+        // la distanza semantica del feature print reale (Vision) sul device; un asset
+        // non confrontabile resta nel proprio cluster (mai un falso "simile").
+        let candidates = photos.map { SimilarityCandidate(asset: $0, dHash: nil) }
+        let allClusters = try completed(SimilarClustering.clusters(
+            of: candidates,
+            provider: environment.featurePrinter,
+            thresholds: CategoryDetectionDefaults.similarity,
+            chunkSize: CategoryDetectionDefaults.chunkSize,
+            cancellation: CancellationToken(),
+            progress: progress
+        ))
+        // Solo i gruppi REALI di simili (≥ 2): un singleton non ha nulla da proporre e
+        // non deve comparire come "da tenere" (eviterebbe di elencare tutta la libreria).
+        let realClusters = allClusters.filter { $0.members.count > 1 }
+        let proposals = try SimilarDeletionProposal.proposals(for: realClusters, scoring: environment.qualityScorer)
+        let review = CategoryReview(
+            keepIds: proposals.map(\.keep.asset.id),
+            removableIds: proposals.flatMap { $0.removable.map(\.asset.id) }
+        )
+        let involved = proposals.flatMap { [$0.keep] + $0.removable }.map(\.asset)
+        return CategoryReviewData(review: review, assets: indexed(involved))
+    }
+
+    // MARK: - Foto sfocate (nitidezza sotto soglia)
+
+    private static func blurryPhotosReview(
+        from environment: AppEnvironment,
+        progress: (AnalysisProgress) -> Void
+    ) throws -> CategoryReviewData {
+        let assets = try environment.indexReader.assets(matching: .all)
+        let blurry = try completed(BlurClassification.blurry(
+            among: assets,
+            scoring: environment.sharpnessScorer,
+            threshold: CategoryDetectionDefaults.blur,
+            chunkSize: CategoryDetectionDefaults.chunkSize,
+            cancellation: CancellationToken(),
+            progress: progress
+        ))
+        return CategoryReviewData(review: CategoryReview.fromBlurry(blurry), assets: indexed(blurry))
+    }
+
+    // MARK: - Video grandi e vecchi (filtro puro per soglie congiunte)
+
+    private static func largeOldVideosReview(from environment: AppEnvironment) throws -> CategoryReviewData {
+        let sized = try sizedAssets(from: environment)
+        let thresholds = LargeOldThresholds(
+            minBytes: CategoryDetectionDefaults.largeVideoMinBytes,
+            olderThanOrEqualTo: Date(timeIntervalSinceNow: -CategoryDetectionDefaults.largeVideoMaxAgeDays * 24 * 3600)
+        )
+        let selected = LargeOldVideoSelection.select(sized, thresholds: thresholds)
+        let assets = selected.map(\.asset)
+        let proposal = BulkDeletionProposalComposer.compose(from: assets)
+        return CategoryReviewData(review: CategoryReview.from(bulk: proposal), assets: indexed(assets))
+    }
+
+    // MARK: - Helper condivisi
+
+    /// Byte reali per ogni asset dell'indice, dietro il port (exact se disponibile,
+    /// altrimenti stima esplicita marcata). Stesso cablaggio di `LibraryFiguresReader`.
+    private static func sizedAssets(from environment: AppEnvironment) throws -> [SizedAsset] {
+        try environment.indexReader.assets(matching: .all).map { asset in
+            SizedAsset(
+                asset: asset,
+                size: environment.byteResolver.byteSize(
+                    forLocalIdentifier: asset.id,
+                    fallbackEstimate: LibraryFiguresReader.fallbackEstimate(for: asset)
+                )
+            )
+        }
+    }
+
+    /// Estrae il risultato di un'analisi cancellabile o **lancia** un errore esplicito:
+    /// un'interruzione o un fallimento non diventano mai una lista vuota spacciata per
+    /// «pulito» (L-COL-006). L'esito porta con sé il progresso raggiunto.
+    private static func completed<Result: Equatable>(_ outcome: AnalysisOutcome<Result>) throws -> Result {
+        switch outcome {
+        case .completed(let value):
+            return value
+        case .cancelled(let at):
+            throw AnalysisFailure("Analisi interrotta a \(at.processed)/\(at.total)")
+        case .failed(let reason, _):
+            throw reason
+        }
+    }
+
+    /// Mappa id→asset (primo vince a parità di id), per etichette umane e miniature (A-3).
+    private static func indexed(_ assets: [LibraryAsset]) -> [String: LibraryAsset] {
+        Dictionary(assets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 }

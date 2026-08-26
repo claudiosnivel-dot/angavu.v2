@@ -26,6 +26,13 @@ public struct AppEnvironment {
     /// A-1: miniature reali degli asset. Default `NoThumbnailProvider` (placeholder)
     /// finché il grafo reale non inietta l'adapter PhotoKit.
     public let thumbnailProvider: any AssetThumbnailProviding
+    /// C-1: port dei rilevatori delle categorie foto (duplicati esatti, foto simili,
+    /// sfocate). Default null-object — una categoria senza il rilevatore reale resta
+    /// vuota, mai numeri finti — finché `live()` non cabla gli adapter reali.
+    public let contentHasher: any AssetContentHashing
+    public let featurePrinter: any FeaturePrinting
+    public let qualityScorer: any QualityScoring
+    public let sharpnessScorer: any SharpnessScoring
     public let videoExporter: any VideoExporting
     public let videoSpecProvider: any VideoSpecProviding
     /// Porte dei domini extra-foto (contatti, calendari). `nil` finché non cablate
@@ -41,6 +48,10 @@ public struct AppEnvironment {
         deviceStorage: any DeviceStorageInspecting,
         deviceCapacity: any DeviceCapacityReading = UnknownDeviceCapacity(),
         thumbnailProvider: any AssetThumbnailProviding = NoThumbnailProvider(),
+        contentHasher: any AssetContentHashing = NoContentHasher(),
+        featurePrinter: any FeaturePrinting = NoFeaturePrinter(),
+        qualityScorer: any QualityScoring = NoQualityScorer(),
+        sharpnessScorer: any SharpnessScoring = NoSharpnessScorer(),
         videoExporter: any VideoExporting,
         videoSpecProvider: any VideoSpecProviding,
         extraDomains: ExtraDomainsPorts? = nil
@@ -53,6 +64,10 @@ public struct AppEnvironment {
         self.deviceStorage = deviceStorage
         self.deviceCapacity = deviceCapacity
         self.thumbnailProvider = thumbnailProvider
+        self.contentHasher = contentHasher
+        self.featurePrinter = featurePrinter
+        self.qualityScorer = qualityScorer
+        self.sharpnessScorer = sharpnessScorer
         self.videoExporter = videoExporter
         self.videoSpecProvider = videoSpecProvider
         self.extraDomains = extraDomains
@@ -102,6 +117,10 @@ extension AppEnvironment {
             deviceStorage: SystemDeviceStorageInspector(),
             deviceCapacity: SystemDeviceCapacityReader(),
             thumbnailProvider: liveThumbnailProvider(),
+            contentHasher: liveContentHasher(),
+            featurePrinter: liveFeaturePrinter(),
+            qualityScorer: liveQualityScorer(),
+            sharpnessScorer: liveSharpnessScorer(),
             videoExporter: AVFoundationVideoExporter(),
             videoSpecProvider: AVFoundationVideoSpecProvider(),
             extraDomains: liveExtraDomains()
@@ -115,6 +134,43 @@ extension AppEnvironment {
         return PHCachingThumbnailProvider()
         #else
         return NoThumbnailProvider()
+        #endif
+    }
+
+    /// C-1 — Adapter reali dei rilevatori quando i framework Apple sono disponibili;
+    /// altrimenti il null-object (categoria vuota, mai numeri finti). Le guardie
+    /// ricalcano ESATTAMENTE quelle dei rispettivi adapter, così la build non rompe su
+    /// una piattaforma con Photos ma senza CryptoKit/Vision/CoreImage.
+
+    private static func liveContentHasher() -> any AssetContentHashing {
+        #if canImport(Photos) && canImport(CryptoKit)
+        return PHAssetContentHasher()
+        #else
+        return NoContentHasher()
+        #endif
+    }
+
+    private static func liveFeaturePrinter() -> any FeaturePrinting {
+        #if canImport(Vision) && canImport(Photos)
+        return VisionFeaturePrinter()
+        #else
+        return NoFeaturePrinter()
+        #endif
+    }
+
+    private static func liveQualityScorer() -> any QualityScoring {
+        #if canImport(Vision) && canImport(Photos) && canImport(ImageIO) && canImport(CoreGraphics)
+        return VisionQualityScorer()
+        #else
+        return NoQualityScorer()
+        #endif
+    }
+
+    private static func liveSharpnessScorer() -> any SharpnessScoring {
+        #if canImport(Photos) && canImport(ImageIO) && canImport(CoreGraphics)
+        return CoreImageSharpnessScorer()
+        #else
+        return NoSharpnessScorer()
         #endif
     }
 
