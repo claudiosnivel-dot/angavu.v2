@@ -14,34 +14,34 @@ final class AnalysisProgressPresentationTests: XCTestCase {
         XCTAssertEqual(pres.label, "Analisi…")
     }
 
-    func test_someProgress_isDeterminate_withRealFractionAndLabel() {
+    func test_someProgress_isDeterminate_withRealFractionAndLabel() throws {
         let pres = AnalysisProgressPresentation(
             progress: AnalysisProgress(processed: 3, total: 12),
             indeterminateLabel: "Analisi…"
         )
         XCTAssertTrue(pres.isDeterminate)
-        XCTAssertEqual(pres.fraction, 0.25, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(pres.fraction), 0.25, accuracy: 0.0001)
         XCTAssertEqual(pres.label, "3 di 12")
     }
 
-    func test_completeProgress_isFullFraction() {
+    func test_completeProgress_isFullFraction() throws {
         let pres = AnalysisProgressPresentation(
             progress: AnalysisProgress(processed: 8, total: 8),
             indeterminateLabel: "Analisi…"
         )
         XCTAssertTrue(pres.isDeterminate)
-        XCTAssertEqual(pres.fraction, 1.0, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(pres.fraction), 1.0, accuracy: 0.0001)
         XCTAssertEqual(pres.label, "8 di 8")
     }
 
-    func test_zeroTotalProgress_isDeterminateComplete_noDivisionByZero() {
+    func test_zeroTotalProgress_isDeterminateComplete_noDivisionByZero() throws {
         // Un totale nullo è "completo" per il motore (fraction = 1): nessun NaN.
         let pres = AnalysisProgressPresentation(
             progress: AnalysisProgress(processed: 0, total: 0),
             indeterminateLabel: "Analisi…"
         )
         XCTAssertTrue(pres.isDeterminate)
-        XCTAssertEqual(pres.fraction, 1.0, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(pres.fraction), 1.0, accuracy: 0.0001)
         XCTAssertEqual(pres.label, "0 di 0")
     }
 }
