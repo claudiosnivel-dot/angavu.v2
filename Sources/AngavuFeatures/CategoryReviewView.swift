@@ -29,22 +29,33 @@ private func formatReviewDate(_ date: Date?) -> String? {
 public struct CategoryReviewView: View {
     let environment: AppEnvironment
     let category: CleanupCategory
+    // D-1: cache dei risultati posseduta SOPRA la view (da `App/`). Rientrando nella
+    // categoria (navigazione back→avanti o ritorno dal background) il risultato si
+    // riapplica senza ricalcolare; l'invalidazione (conferma eliminazione, scan,
+    // cambio libreria) forza il ricalcolo. Niente più rianalisi da capo.
+    let store: AnalysisResultsStore
 
     /// Fase di caricamento della sorgente. La review reale si legge dall'indice
     /// (può fallire): nessun blocco muto, nessuna lista vuota spacciata per «pulito».
+    /// D-2: `.loading` porta un `AnalysisProgress?` — determinato quando il calcolo
+    /// riporta X/N, `nil` (indeterminato onesto) quando non li espone.
     enum LoadPhase: Equatable {
-        case loading
+        case loading(AnalysisProgress?)
         case loaded
         case failed(String)
     }
 
     @State var vm = CategoryReviewViewModel(review: CategoryReview(keepIds: [], removableIds: []))
-    @State var loadPhase: LoadPhase = .loading
+    @State var loadPhase: LoadPhase = .loading(nil)
 
-    public init(environment: AppEnvironment, category: CleanupCategory) {
+    public init(environment: AppEnvironment, category: CleanupCategory, store: AnalysisResultsStore) {
         self.environment = environment
         self.category = category
+        self.store = store
     }
+
+    /// Chiave di cache di questa categoria (id stabile = raw value dell'enum).
+    var cacheKey: AnalysisResultKey { .category(category.rawValue) }
 
     var presentation: CategoryReviewPresentation {
         CategoryReviewPresentation(
@@ -74,11 +85,20 @@ public struct CategoryReviewView: View {
         .safeAreaInset(edge: .bottom) { actionBar }
         .alert(previewAlertTitle, isPresented: isPreviewing) {
             Button("Annulla", role: .cancel) { vm.cancelDeletion() }
-            Button("Elimina", role: .destructive) { vm.confirmDeletion() }
+            Button("Elimina", role: .destructive) {
+                vm.confirmDeletion()
+                // D-1: l'eliminazione autorizzata cambia conteggi/spazio → i numeri
+                // cachati (dashboard, report, categorie) non sono più freschi. Si
+                // invalida tutto: mai un numero stantìo dopo un delete (numeri veri).
+                store.invalidateAll()
+            }
         } message: {
             Text(presentation.safetyNote)
         }
         .task { await loadIfNeeded() }
+        // D-1: pull-to-refresh = «Ri-analizza» manuale. Invalida la cache e ricalcola
+        // dai dati veri, ri-timbrando la freschezza.
+        .refreshable { await loadIfNeeded(force: true) }
         .hapticFeedback(on: presentation.phase) { old, new in
             // Allerta tenue all'apertura dell'anteprima distruttiva (un solo owner).
             (old != .previewing && new == .previewing) ? .destructivePreview : nil
@@ -121,8 +141,8 @@ extension CategoryReviewView {
     @ViewBuilder
     var content: some View {
         switch loadPhase {
-        case .loading:
-            ProgressView("Analisi della categoria…").progressViewStyle(.circular)
+        case .loading(let progress):
+            loadingIndicator(progress)
         case .failed(let message):
             failedCard(message)
         case .loaded:
@@ -158,6 +178,21 @@ extension CategoryReviewView {
                 Text("\(pres.keepCount) da tenere")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            }
+            // D-1: badge di freschezza — dichiara quando i dati sono stati calcolati,
+            // così un numero cachato non è mai spacciato per appena letto. Assente se
+            // non tracciato (categoria non ancora timbrata).
+            if let freshness = freshnessLabel {
+                Label {
+                    Text(freshness)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+                .padding(.top, 2)
             }
             Label {
                 Text(pres.safetyNote)
@@ -276,7 +311,7 @@ extension CategoryReviewView {
                     .accessibilityHidden(true)
             }
             Button {
-                loadPhase = .loading
+                loadPhase = .loading(nil)
                 Task { await loadIfNeeded(force: true) }
             } label: {
                 Label("Riprova", systemImage: "arrow.clockwise")
@@ -336,34 +371,5 @@ extension CategoryReviewView {
         Binding(get: { presentation.phase == .previewing }, set: { _ in })
     }
 
-    // MARK: Caricamento della sorgente reale
-
-    // La composizione della categoria è la parte pesante (fetch dell'indice + per i
-    // duplicati/simili hashing SHA-256 / feature print Vision per asset): DEVE girare
-    // fuori dal main thread, altrimenti la schermata si blocca come faceva lo scan.
-    // `loadIfNeeded` è @MainActor (metodo di View), quindi delega il calcolo a
-    // `composeReviewData` (nonisolata → gira sul generic executor) e torna sul main
-    // solo per aggiornare `vm`/`loadPhase`. Durante l'attesa `loadPhase` resta `.loading`.
-    @MainActor
-    func loadIfNeeded(force: Bool = false) async {
-        if !force, loadPhase == .loaded { return }
-        do {
-            let data = try await CategoryReviewView.composeReviewData(for: category, from: environment)
-            vm = CategoryReviewViewModel(review: data.review, assets: data.assets)
-            loadPhase = .loaded
-        } catch {
-            loadPhase = .failed(String(describing: error))
-        }
-    }
-
-    /// Calcolo pesante della categoria, ESPLICITAMENTE non isolato al main: awaitandola
-    /// da `.task` (main) il corpo gira sul generic executor, così PhotoKit/Vision non
-    /// bloccano la UI. Restituisce review + metadati degli asset (A-3).
-    nonisolated static func composeReviewData(
-        for category: CleanupCategory,
-        from environment: AppEnvironment
-    ) async throws -> CategoryReviewData {
-        try CategoryReviewSource.reviewData(for: category, from: environment)
-    }
 }
 #endif

@@ -21,7 +21,7 @@ extension DashboardView {
                 .accessibilityAddTraits(.isHeader)
             ForEach(CleanupCategory.allCases, id: \.self) { category in
                 NavigationLink {
-                    CategoryReviewView(environment: environment, category: category)
+                    CategoryReviewView(environment: environment, category: category, store: store)
                 } label: {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {

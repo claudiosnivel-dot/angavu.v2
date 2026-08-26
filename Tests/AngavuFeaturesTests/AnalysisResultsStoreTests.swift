@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import AngavuFeatures
 
@@ -82,5 +83,48 @@ final class AnalysisResultsStoreTests: XCTestCase {
         XCTAssertTrue(store.isEmpty)
         let dash: Int? = store.value(for: .dashboard)
         XCTAssertNil(dash)
+    }
+
+    // MARK: - D-1 Timestamp di freschezza
+
+    func test_setWithoutTimestamp_recordsNoTimestamp() {
+        let store = AnalysisResultsStore()
+        store.set(1, for: .dashboard)
+        XCTAssertNil(store.timestamp(for: .dashboard),
+                     "il badge di freschezza non è tracciato per chi non lo fornisce")
+    }
+
+    func test_setWithTimestamp_isReadableBack() {
+        let store = AnalysisResultsStore()
+        let stamp = Date(timeIntervalSince1970: 1_000)
+        store.set(7, for: .category("screenshots"), at: stamp)
+        XCTAssertEqual(store.timestamp(for: .category("screenshots")), stamp)
+    }
+
+    func test_setWithoutTimestamp_preservesPreviousTimestamp() {
+        // Un ricalcolo che non timbra non deve cancellare la freschezza già nota.
+        let store = AnalysisResultsStore()
+        let stamp = Date(timeIntervalSince1970: 2_000)
+        store.set(1, for: .category("dup"), at: stamp)
+        store.set(2, for: .category("dup")) // ri-set senza timestamp
+        XCTAssertEqual(store.timestamp(for: .category("dup")), stamp)
+        let value: Int? = store.value(for: .category("dup"))
+        XCTAssertEqual(value, 2)
+    }
+
+    func test_invalidate_clearsTimestampToo() {
+        let store = AnalysisResultsStore()
+        store.set(1, for: .category("x"), at: Date(timeIntervalSince1970: 3_000))
+        store.invalidate(.category("x"))
+        XCTAssertNil(store.timestamp(for: .category("x")))
+    }
+
+    func test_invalidateAll_clearsAllTimestamps() {
+        let store = AnalysisResultsStore()
+        store.set(1, for: .dashboard, at: Date(timeIntervalSince1970: 4_000))
+        store.set(2, for: .category("y"), at: Date(timeIntervalSince1970: 5_000))
+        store.invalidateAll()
+        XCTAssertNil(store.timestamp(for: .dashboard))
+        XCTAssertNil(store.timestamp(for: .category("y")))
     }
 }

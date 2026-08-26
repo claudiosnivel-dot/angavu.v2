@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 
 // P0-1 — Store dei risultati d'analisi a livello app (fondazione cache).
@@ -32,6 +33,11 @@ public enum AnalysisResultKey: Hashable, Sendable {
 @Observable
 public final class AnalysisResultsStore {
     private var storage: [AnalysisResultKey: Any] = [:]
+    /// D-1 — Istante in cui ogni valore è stato calcolato, per il badge "aggiornato
+    /// X fa". Popolato solo quando il chiamante lo fornisce (`set(_:for:at:)`);
+    /// invariato dai `set` senza timestamp (dashboard/report, che non mostrano il
+    /// badge). L'età si formatta con `RelativeFreshness` (dominio puro).
+    private var timestamps: [AnalysisResultKey: Date] = [:]
 
     public init() {}
 
@@ -40,20 +46,31 @@ public final class AnalysisResultsStore {
         storage[key] as? Value
     }
 
-    /// Memorizza (o rimpiazza) il valore per la chiave.
-    public func set<Value>(_ value: Value, for key: AnalysisResultKey) {
+    /// Memorizza (o rimpiazza) il valore per la chiave. Se `timestamp` è fornito, lo
+    /// registra per il badge di freschezza; se `nil`, un eventuale timestamp
+    /// precedente resta invariato (il valore è stato ricalcolato ma il chiamante non
+    /// traccia la freschezza per questa chiave).
+    public func set<Value>(_ value: Value, for key: AnalysisResultKey, at timestamp: Date? = nil) {
         storage[key] = value
+        if let timestamp { timestamps[key] = timestamp }
     }
 
-    /// Invalida una singola chiave: la prossima lettura ricalcolerà.
+    /// Istante in cui il valore per la chiave è stato calcolato, se tracciato.
+    public func timestamp(for key: AnalysisResultKey) -> Date? {
+        timestamps[key]
+    }
+
+    /// Invalida una singola chiave (valore e timestamp): la prossima lettura ricalcolerà.
     public func invalidate(_ key: AnalysisResultKey) {
         storage.removeValue(forKey: key)
+        timestamps.removeValue(forKey: key)
     }
 
     /// Invalida tutto: usato dopo un'eliminazione o un cambio di libreria, così
     /// nessun numero stantìo resta a schermo (manifesto: numeri veri).
     public func invalidateAll() {
         storage.removeAll()
+        timestamps.removeAll()
     }
 
     /// Vero quando non c'è nulla in cache (utile ai test e come guardia).
