@@ -41,23 +41,19 @@ private struct HonestStubDeviceStorage: DeviceStorageInspecting {
     func residencyIsDeterminate() -> Bool { false }
 }
 
-/// Probe fake: byte device per id. Un id assente conta 0 (originale in cloud). Può
-/// cancellare il token dopo N sonde, per provare che una misura incompleta resta caveat.
+/// Probe fake: byte device per id. Un id assente conta 0 (originale in cloud).
+/// Registra quante volte è stato sondato (per provare che una misura cancellata
+/// non tocca gli asset).
 private final class FakeResidencyProbe: AssetResidencyProbing {
     let deviceBytesByID: [String: Int64]
-    let token: CancellationToken?
-    let cancelAfter: Int?
     private(set) var probedCount = 0
 
-    init(_ deviceBytesByID: [String: Int64], token: CancellationToken? = nil, cancelAfter: Int? = nil) {
+    init(_ deviceBytesByID: [String: Int64]) {
         self.deviceBytesByID = deviceBytesByID
-        self.token = token
-        self.cancelAfter = cancelAfter
     }
 
     func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 {
         probedCount += 1
-        if let limit = cancelAfter, probedCount >= limit { token?.cancel() }
         return deviceBytesByID[id] ?? 0
     }
 }
@@ -111,21 +107,23 @@ final class ResidencyWiringTests: XCTestCase {
         XCTAssertTrue(after.reclaimable.iCloudCaveat, "100 < 1000 ⇒ gran parte in iCloud")
     }
 
-    // Misura cancellata a metà → residui non misurati → resta indeterminata (caveat),
-    // mai un numero device parziale.
+    // Misura cancellata → residui non misurati → resta indeterminata (caveat), mai un
+    // numero device parziale. Token pre-cancellato: il primo checkpoint di blocco
+    // interrompe subito (robusto rispetto al chunk size, che a runtime è 64 di default).
     func test_cancelledMeasurement_staysCaveat() async {
         let index = FixedIndex(stored: (0..<20).map { photo("P\($0)") })
         var sizes: [String: ByteSize] = [:]
         for i in 0..<20 { sizes["P\(i)"] = .exact(bytes: 100) }
         let token = CancellationToken()
-        let probe = FakeResidencyProbe(sizes.mapValues { _ in Int64(100) }, token: token, cancelAfter: 3)
+        token.cancel() // già cancellato prima di iniziare
+        let probe = FakeResidencyProbe(sizes.mapValues { _ in Int64(100) })
         let vm = DashboardViewModel(environment: makeEnv(index: index, sizes: sizes, probe: probe))
 
         guard case .ready(let screen) = await vm.measureResidency(cancellation: token) else {
             return XCTFail("atteso ready")
         }
-        XCTAssertTrue(screen.reclaimable.deviceSpaceIsIndeterminate, "misura incompleta ⇒ ancora caveat")
-        XCTAssertLessThan(probe.probedCount, 20, "i residui non sono stati sondati")
+        XCTAssertTrue(screen.reclaimable.deviceSpaceIsIndeterminate, "misura cancellata ⇒ ancora caveat")
+        XCTAssertEqual(probe.probedCount, 0, "cancellata prima di iniziare: nessun asset sondato")
         XCTAssertEqual(screen.reclaimable.reclaimableLibrarySpace, 2000, "la libreria resta vera")
     }
 }
