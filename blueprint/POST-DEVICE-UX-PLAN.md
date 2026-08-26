@@ -124,8 +124,21 @@ diventa l'intera libreria (139 GB).
   la determinatezza sono coperti dall'oracolo di dominio (`RealityCeilingTests`) e dal
   wiring (`DashboardScreenTests`).
 
-### P0-2b — Residenza per-asset reale (numero device preciso) · 🟠 · device-only · FOLLOW-UP
-- **Perché separato**: misurare la residenza reale su ~25k asset con API pubbliche è
+### P0-2b — Residenza per-asset reale (numero device preciso) · 🟠 · device-only · ✅ COSTRUITO
+- **Costruito e VERIFICATO (2026-08-26, CI run #75 `success` su `8bd4347`)**: dominio
+  puro `AssetResidencyProbing` (port) + `ResidencyMeasurement`/`ResidencyAggregator`
+  su `ChunkedAnalysis` (a blocchi cancellabili, misura determinata SOLO a copertura
+  piena; cancel/errore ⇒ indeterminata, mai un numero parziale); `ReclaimableSpaceCalculator`
+  esteso con `measuredResidency:` (usa il numero device misurato quando completo, col
+  tetto di realtà, altrimenti caveat P0-3 invariato). Adapter device-only
+  `PHAssetResidencyProbe` (`isNetworkAccessAllowed=false`, zero rete; residente al primo
+  byte, altrimenti 0; async→sync off-main). Wiring: `residencyProbe` in `AppEnvironment`
+  (`live`), `LibraryFiguresReader.probeItems`/`read(measuredResidency:)`,
+  `DashboardViewModel.measureResidency` (off-main). Oracoli: `ResidencyMeasurementTests`
+  (dominio), `ResidencyWiringTests` (features). **Copertura (L-COL-006)**: aggregazione
+  coperta dai target_tests; il probe PhotoKit reale (~8 GB, assenza di freeze su ~25k)
+  è device-only, runtime NON coperto → da validare sul telefono.
+- **Perché era separato**: misurare la residenza reale su ~25k asset con API pubbliche è
   costoso (caricamento dati per-asset) e va progettato per NON rifreezare — off-main,
   a blocchi cancellabili (motore `ChunkedAnalysis`), cachato in `AnalysisResultsStore`
   (P0-1), possibilmente campionato/progressivo. Deciso con l'utente di farlo **dopo P0**.
