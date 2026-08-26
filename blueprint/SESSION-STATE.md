@@ -420,7 +420,7 @@
 | Campo | Valore |
 |---|---|
 | Branch di lavoro | `claude/angavu-ios-app-wjq1jf` |
-| Ultimo commit | `48391c2` fix 5 nit SwiftLint (view spezzata `+Rows`) — **CI run #66 `success`** (repo pubblico, CI ripristinata). Tutti i 6 incrementi ora VERIFICATI: `71c9814` P0-1, `25e7fc2` A-1, `d4ead0c` A-2/A-3, `099aeea` B-1, `c5a2d04` E-4 + fix `a19bd22` (import Foundation). **Verificati prima**: `3fa47de` P0-2 (#61), `5d22222` P0-3/P0-4 (#60), `8a383b0` letture off-main (#59), `03c49b1` scan O(N). |
+| Ultimo commit | `272e731` **Fase C-1** (sblocco categorie foto: duplicati esatti/simili/sfocate/grandi-vecchi → `CleanupCategory` a 5 casi) — **CI run #70 `success`**. Piano POST-DEVICE quasi completo e VERIFICATO in CI: P0-2/3/4 (#60/#61), A-1/A-2/A-3 + P0-1 + B-1 + E-4 (#66), **B-2** batch video (#67), **Fase D** cache per-categoria + progresso determinato (#69), **C-1** categorie foto (#70). **Ancora da fare**: **E-1/E-2/E-3** (flusso primo avvio "Shazam" + carosello UI + schermata successo; E-4 contenuti già fatto) e **P0-2b** (residenza per-asset precisa ~8 GB). CI normale ripristinata (repo pubblico). |
 | Stato merge su `main` | **gate soddisfatto**: CI Apple verde (build+test+lint+app iOS) su **tutti gli 11 macrotask + `wiring` (8/8)**. Merge non ancora eseguito (decisione dell'utente); il branch è mergeabile |
 | Deploy-coupling | `main_deploy_coupled: unknown` — nessun deploy automatico noto (app iOS via App Store Connect, fuori dal repo) |
 
