@@ -239,6 +239,13 @@ Dipende da D (troppo costoso senza cache/progresso).
 
 ## FASE E — Primo avvio "Shazam" (rifà l'esperienza di scansione) · 🟠 UX
 
+> **✅ COSTRUITA E VERIFICATA (CI run #71 `success`, `18c03b7`, 2026-08-26).** E-1
+> (`ScanFlowPresentation`, oracolo), E-2 (`ScanButtonView` battito+riempimento gated,
+> `ScanCarouselView`, resa View-level), E-3 (`ScanSuccessPresentation` oracolo +
+> `ScanResultScreen`/`ConfettiView` gated), E-4 (contenuti) tutti chiusi. La resa
+> (animazioni, coriandoli, gating Reduce Motion/VoiceOver) è compilata dai due job
+> CI ma runtime NON coperto → **da validare on-device** (L-COL-006).
+
 Rimuove il passaggio ridondante "idle → tap Analizza → attesa → tap Vedi i numeri
 veri" e lo trasforma in **un solo tap magico** che porta al risultato. Idea utente
 (2026-08-25). Prevalentemente View-level (`AngavuFeatures` + `App/`); la macchina a
