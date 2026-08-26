@@ -28,10 +28,11 @@ final class HomeScanPresentationTests: XCTestCase {
         XCTAssertNil(pres.progress)
     }
 
-    // scanning → in corso, annullabile (stop cooperativo), progresso esposto.
+    // scanning → in corso, annullabile (stop cooperativo), progresso di fase esposto.
     func test_scanning_isCancellableWithProgress() {
         let progress = AnalysisProgress(processed: 3, total: 10)
-        let pres = HomeScanPresentation(state: .scanning(progress))
+        let pipeline = ScanPipelineProgress(stage: .resolvingSizes, stageProgress: progress)
+        let pres = HomeScanPresentation(state: .scanning(pipeline))
         XCTAssertEqual(pres.kind, .working)
         XCTAssertTrue(pres.canCancel)
         XCTAssertFalse(pres.showsPrimaryAction)

@@ -90,7 +90,7 @@ struct ScanButtonView: View {
                         .font(.title3.weight(.bold).monospacedDigit())
                         .multilineTextAlignment(.center)
                 }
-                Text(flow.isIndeterminate ? "un momento…" : "Analisi in corso")
+                Text(flow.isIndeterminate ? "un momento…" : (flow.stageTitle ?? "Analisi in corso"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -33,33 +33,44 @@ final class ScanFlowPresentationTests: XCTestCase {
         XCTAssertNotNil(flow.statusLabel)
     }
 
-    // scanning → fase determinata: il riempimento è la frazione REALE del progresso.
+    // scanning → fase determinata: il riempimento è la frazione UNIFICATA reale
+    // (sull'intera pipeline), il conteggio è quello reale della fase, la fase è nominata.
     func test_scanning_determinateFillFromRealProgress() {
-        let progress = AnalysisProgress(processed: 3, total: 12)
-        let flow = ScanFlowPresentation(state: .scanning(progress))
+        let pipeline = ScanPipelineProgress(
+            stage: .resolvingSizes,
+            stageProgress: AnalysisProgress(processed: 3, total: 12)
+        )
+        let flow = ScanFlowPresentation(state: .scanning(pipeline))
         XCTAssertEqual(flow.phase, .scanning)
         XCTAssertFalse(flow.isIndeterminate)
-        XCTAssertEqual(flow.fill, progress.fraction)
+        XCTAssertEqual(flow.fill, pipeline.fraction)
         XCTAssertTrue(flow.showsCarousel)
         XCTAssertFalse(flow.isButtonEnabled)
         XCTAssertEqual(flow.statusLabel, "3 di 12")
+        XCTAssertNotNil(flow.stageTitle, "La fase corrente è nominata sotto il conteggio")
         XCTAssertTrue(flow.canCancel, "L'analisi è interrompibile (stop cooperativo)")
     }
 
     // Solo l'analisi vera è annullabile: riposo, permesso ed esiti terminali no.
     func test_onlyScanningIsCancellable() {
+        let pipeline = ScanPipelineProgress(stage: .indexing, stageProgress: AnalysisProgress(processed: 1, total: 2))
         XCTAssertFalse(ScanFlowPresentation(state: .idle).canCancel)
         XCTAssertFalse(ScanFlowPresentation(state: .requestingPermission).canCancel)
+        XCTAssertTrue(ScanFlowPresentation(state: .scanning(pipeline)).canCancel)
         XCTAssertFalse(ScanFlowPresentation(state: .completed(indexed: 1, partialCount: false)).canCancel)
         XCTAssertFalse(ScanFlowPresentation(state: .failed("x")).canCancel)
         XCTAssertFalse(ScanFlowPresentation(state: .cancelled(AnalysisProgress(processed: 1, total: 2))).canCancel)
     }
 
-    // Il riempimento non anticipa mai il progresso reale (nessun teatro).
-    func test_scanning_fillNeverExceedsRealFraction() {
-        let progress = AnalysisProgress(processed: 25, total: 100)
-        let flow = ScanFlowPresentation(state: .scanning(progress))
-        XCTAssertEqual(flow.fill, 0.25)
+    // Il riempimento è la frazione UNIFICATA reale, mai fabbricata: metà della fase
+    // centrale (di tre) → una fase intera + mezza fase = 1.5/3 = 0.5.
+    func test_scanning_fillIsUnifiedRealFraction() {
+        let pipeline = ScanPipelineProgress(
+            stage: .resolvingSizes,
+            stageProgress: AnalysisProgress(processed: 50, total: 100)
+        )
+        let flow = ScanFlowPresentation(state: .scanning(pipeline))
+        XCTAssertEqual(flow.fill ?? -1, 0.5, accuracy: 0.0001)
     }
 
     // completed → esito terminale: il flusso cede alla schermata di risultato (E-3).

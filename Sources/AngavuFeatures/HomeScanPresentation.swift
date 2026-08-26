@@ -90,12 +90,14 @@ public struct HomeScanPresentation: Equatable, Sendable {
             )
         case .requestingPermission:
             self = .init(kind: .working, title: "Richiedo l'accesso alla libreria…")
-        case .scanning(let progress):
+        case .scanning(let pipeline):
+            // Progresso UNIFICATO: il conteggio esposto è quello reale della fase
+            // corrente (`stageProgress`); la barra complessiva vive nel flusso E.
             self = .init(
                 kind: .working,
                 title: "Analisi in corso…",
-                detail: "\(progress.processed) di \(progress.total)",
-                progress: progress,
+                detail: "\(pipeline.stageProgress.processed) di \(pipeline.stageProgress.total)",
+                progress: pipeline.stageProgress,
                 canCancel: true
             )
         case .completed(let indexed, let partial):

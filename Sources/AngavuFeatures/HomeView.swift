@@ -120,7 +120,16 @@ public struct HomeView: View {
         let token = CancellationToken()
         cancellation = token
         scanTask?.cancel()
-        scanTask = Task { await vm.run(cancellation: token) }
+        scanTask = Task {
+            await vm.run(cancellation: token)
+            // La scansione unificata ha già calcolato i numeri veri (fasi 2-3):
+            // li mettiamo nella cache sopra le view così, toccando «È ora di fare
+            // pulizia!», la dashboard è ISTANTANEA — nessuna seconda attesa
+            // «Calcolo dei numeri veri…», nessun ricalcolo.
+            if let figures = vm.figures {
+                store.set(figures, for: .dashboard)
+            }
+        }
     }
 
     private func cancelScan() {

@@ -47,6 +47,10 @@ public struct ScanFlowPresentation: Equatable, Sendable {
     /// Etichetta di stato sempre onesta durante il lavoro ("Chiedo l'accesso…" /
     /// "X di N"); `nil` a riposo o a esito terminale.
     public let statusLabel: String?
+    /// Titolo della fase corrente della scansione unificata ("Indicizzo…" / "Calcolo
+    /// i byte…" / "Spazio sul telefono…"); `nil` fuori dall'analisi. Rende visibile
+    /// che l'unica barra copre più fasi del lavoro vero, senza fabbricare numeri.
+    public let stageTitle: String?
     /// Vero mentre l'analisi è interrompibile (stop cooperativo, motore T-004). La
     /// richiesta permessi non è annullabile in modo utile → falso.
     public let canCancel: Bool
@@ -62,6 +66,7 @@ public struct ScanFlowPresentation: Equatable, Sendable {
         isIndeterminate: Bool = false,
         fill: Double? = nil,
         statusLabel: String? = nil,
+        stageTitle: String? = nil,
         canCancel: Bool = false
     ) {
         self.phase = phase
@@ -72,7 +77,17 @@ public struct ScanFlowPresentation: Equatable, Sendable {
         self.isIndeterminate = isIndeterminate
         self.fill = fill
         self.statusLabel = statusLabel
+        self.stageTitle = stageTitle
         self.canCancel = canCancel
+    }
+
+    /// Nome umano e onesto della fase, per la didascalia sotto il conteggio.
+    private static func phaseLabel(for stage: ScanPipelineProgress.Stage) -> String {
+        switch stage {
+        case .indexing: return "Indicizzo…"
+        case .resolvingSizes: return "Calcolo i byte…"
+        case .measuringDeviceSpace: return "Spazio sul telefono…"
+        }
     }
 
     /// Deriva il flusso dallo stato di scansione. Deterministica e totale: ogni
@@ -93,13 +108,17 @@ public struct ScanFlowPresentation: Equatable, Sendable {
                 isIndeterminate: true,
                 statusLabel: "Chiedo l'accesso alla libreria…"
             )
-        case .scanning(let progress):
+        case .scanning(let pipeline):
+            // `fill` è la frazione UNIFICATA sull'intera pipeline (mai per-fase):
+            // un'unica barra monotòna. `statusLabel` resta il conteggio reale entro
+            // la fase; `stageTitle` nomina la fase.
             self = .init(
                 phase: .scanning,
                 showsCarousel: true,
                 isIndeterminate: false,
-                fill: progress.fraction,
-                statusLabel: "\(progress.processed) di \(progress.total)",
+                fill: pipeline.fraction,
+                statusLabel: "\(pipeline.stageProgress.processed) di \(pipeline.stageProgress.total)",
+                stageTitle: Self.phaseLabel(for: pipeline.stage),
                 canCancel: true
             )
         case .completed:

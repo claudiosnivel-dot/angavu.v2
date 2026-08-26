@@ -64,11 +64,7 @@ public final class DashboardViewModel {
     public func load() async -> DashboardState {
         do {
             let figures = try LibraryFiguresReader.read(from: environment, measuredResidency: residency)
-            state = .ready(DashboardScreen(
-                categories: figures.aggregate.categories,
-                reclaimable: figures.reclaimable,
-                banner: DashboardBannerPolicy.banner(for: figures.access)
-            ))
+            state = .ready(DashboardScreen(figures: figures))
         } catch {
             state = .failed(String(describing: error))
         }

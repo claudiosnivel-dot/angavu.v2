@@ -59,7 +59,9 @@ final class ScanSuccessPresentationTests: XCTestCase {
     func test_nonTerminalStates_produceNoResultScreen() {
         XCTAssertNil(ScanSuccessPresentation.make(state: .idle))
         XCTAssertNil(ScanSuccessPresentation.make(state: .requestingPermission))
-        XCTAssertNil(ScanSuccessPresentation.make(state: .scanning(AnalysisProgress(processed: 1, total: 4))))
+        XCTAssertNil(ScanSuccessPresentation.make(state: .scanning(
+            ScanPipelineProgress(stage: .indexing, stageProgress: AnalysisProgress(processed: 1, total: 4))
+        )))
         XCTAssertNil(ScanSuccessPresentation.make(state: .cancelled(AnalysisProgress(processed: 2, total: 4))))
     }
 }

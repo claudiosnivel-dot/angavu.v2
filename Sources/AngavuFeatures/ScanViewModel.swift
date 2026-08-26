@@ -13,7 +13,10 @@ import Observation
 public enum ScanState: Equatable, Sendable {
     case idle
     case requestingPermission
-    case scanning(AnalysisProgress)
+    /// In corso: il progresso è UNIFICATO su tutte le fasi del lavoro vero
+    /// (indice → byte per-asset → residenza device), così la barra del tasto copre
+    /// l'intera scansione, non solo l'indicizzazione.
+    case scanning(ScanPipelineProgress)
     /// Indicizzati `indexed` asset; `partialCount` vero se l'accesso era limited.
     case completed(indexed: Int, partialCount: Bool)
     case cancelled(AnalysisProgress)
@@ -29,11 +32,20 @@ public final class ScanViewModel {
 
     public private(set) var state: ScanState = .idle
 
+    /// Numeri veri della dashboard calcolati DENTRO la scansione unificata (fasi 2-3),
+    /// pronti da cachare sopra le view: così, aprendo «Numeri veri», la dashboard è
+    /// istantanea — nessuna seconda attesa «Calcolo dei numeri veri…», nessun
+    /// ricalcolo. `nil` finché una scansione non è arrivata a `completed`, o se le fasi
+    /// dei numeri sono state saltate (cancellazione/errore: la dashboard ricalcolerà).
+    public private(set) var figures: DashboardScreen?
+
+    private let environment: AppEnvironment
     private let authorizer: any PhotoLibraryAuthorizing
     private let enumerator: any PhotoAssetEnumerating
     private let indexWriter: any AssetIndexWriting
 
     public init(environment: AppEnvironment) {
+        self.environment = environment
         self.authorizer = environment.authorizer
         self.enumerator = environment.enumerator
         self.indexWriter = environment.indexWriter
@@ -43,6 +55,8 @@ public final class ScanViewModel {
     /// rispetto allo stato: lo aggiorna passo per passo.
     @discardableResult
     public func run(cancellation: CancellationToken = CancellationToken()) async -> ScanState {
+        // Nuova scansione: i numeri veri della precedente non valgono più.
+        figures = nil
         state = .requestingPermission
         let access = await authorizer.requestAccess()
         let decision = PhotoAccessPolicy.decide(for: access)
@@ -53,27 +67,88 @@ public final class ScanViewModel {
             return state
         }
 
+        // FASE 1 — indice (enumerazione + mapping + upsert).
         let raws = enumerator.enumerateRawAssets()
-        state = .scanning(AnalysisProgress(processed: 0, total: raws.count))
+        report(.indexing, AnalysisProgress(processed: 0, total: raws.count))
 
         let outcome = LibraryAssetMapper.mapBatch(raws, cancellation: cancellation) { progress in
-            self.state = .scanning(progress)
+            self.report(.indexing, progress)
         }
 
+        let assets: [LibraryAsset]
         switch outcome {
-        case .completed(let assets):
+        case .completed(let mapped):
             do {
-                try indexWriter.upsert(assets)
-                state = .completed(indexed: assets.count, partialCount: decision.isPartialCount)
+                try indexWriter.upsert(mapped)
+                assets = mapped
             } catch {
                 state = .failed(String(describing: error))
+                return state
             }
         case .cancelled(let at):
             // Cancellata: nessuna indicizzazione dei blocchi non processati.
             state = .cancelled(at)
+            return state
         case .failed(let reason, _):
             state = .failed(reason.message)
+            return state
         }
+
+        // FASI 2-3 — numeri veri (byte per-asset + residenza device), stessa barra.
+        // Un fallimento QUI non annulla la scansione: l'indice è scritto (fatto reale),
+        // i numeri restano non calcolati e la dashboard li ricalcolerà. Una
+        // cancellazione, invece, è volontà dell'utente → esito `cancelled`.
+        computeFigures(cancellation: cancellation) { cancelledAt in
+            self.state = .cancelled(cancelledAt)
+        }
+        if case .cancelled = state { return state }
+
+        state = .completed(indexed: assets.count, partialCount: decision.isPartialCount)
         return state
+    }
+
+    /// Aggiorna lo stato con un progresso di fase, come parte dell'unica barra.
+    private func report(_ stage: ScanPipelineProgress.Stage, _ progress: AnalysisProgress) {
+        state = .scanning(ScanPipelineProgress(stage: stage, stageProgress: progress))
+    }
+
+    /// FASI 2-3: risolve i byte per-asset e misura la residenza device, riportando il
+    /// progresso sull'unica barra, e compone i `DashboardScreen` in `figures`. Su
+    /// cancellazione invoca `onCancelled` col progresso raggiunto (l'esito diventa
+    /// `cancelled`); su errore lascia `figures == nil` senza abortire la scansione.
+    private func computeFigures(
+        cancellation: CancellationToken,
+        onCancelled: (AnalysisProgress) -> Void
+    ) {
+        // FASE 2 — byte reali per-asset + aggregazione.
+        let resolveOutcome = LibraryFiguresReader.resolve(from: environment, cancellation: cancellation) { progress in
+            self.report(.resolvingSizes, progress)
+        }
+        let resolved: ResolvedLibrary
+        switch resolveOutcome {
+        case .completed(let value): resolved = value
+        case .cancelled(let at): onCancelled(at); return
+        case .failed: figures = nil; return
+        }
+
+        // FASE 3 — residenza per-asset reale (numero device preciso, P0-2b).
+        report(.measuringDeviceSpace, AnalysisProgress(processed: 0, total: resolved.probeItems.count))
+        let residencyOutcome = ResidencyAggregator.measure(
+            items: resolved.probeItems,
+            probe: environment.residencyProbe,
+            cancellation: cancellation
+        ) { progress in
+            self.report(.measuringDeviceSpace, progress)
+        }
+        if case .cancelled(let at) = residencyOutcome { onCancelled(at); return }
+
+        // Misura reale e completa ⇒ numero device preciso; altrimenti caveat onesto.
+        let measurement = ResidencyAggregator.measurement(from: residencyOutcome)
+        let figuresValue = LibraryFiguresReader.figures(
+            from: resolved,
+            environment: environment,
+            measuredResidency: measurement.isDeterminate ? measurement : nil
+        )
+        figures = DashboardScreen(figures: figuresValue)
     }
 }
