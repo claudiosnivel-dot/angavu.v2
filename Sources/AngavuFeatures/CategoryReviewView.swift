@@ -12,7 +12,9 @@
 // l'unico strato compilato-ma-non-testato (L-COL-006). L'ambiente arriva iniettato
 // dall'`AppEnvironment`: nessun singleton nascosto. L'esecuzione reale del delete
 // (adapter della safety_net) è fuori scope qui: la conferma AUTORIZZA, la rete di
-// sicurezza esegue.
+// sicurezza esegue. Le righe (`CategoryReviewRowView`/`RowThumbnailView`) vivono in
+// `CategoryReviewView+Rows.swift`; le sezioni sono in una extension in fondo a
+// questo file (tiene il corpo della struct sotto `type_body_length`).
 #if canImport(SwiftUI)
 import AngavuData
 import AngavuDomain
@@ -25,26 +27,26 @@ private func formatReviewDate(_ date: Date?) -> String? {
 }
 
 public struct CategoryReviewView: View {
-    private let environment: AppEnvironment
-    private let category: CleanupCategory
+    let environment: AppEnvironment
+    let category: CleanupCategory
 
     /// Fase di caricamento della sorgente. La review reale si legge dall'indice
     /// (può fallire): nessun blocco muto, nessuna lista vuota spacciata per «pulito».
-    private enum LoadPhase: Equatable {
+    enum LoadPhase: Equatable {
         case loading
         case loaded
         case failed(String)
     }
 
-    @State private var vm = CategoryReviewViewModel(review: CategoryReview(keepIds: [], removableIds: []))
-    @State private var loadPhase: LoadPhase = .loading
+    @State var vm = CategoryReviewViewModel(review: CategoryReview(keepIds: [], removableIds: []))
+    @State var loadPhase: LoadPhase = .loading
 
     public init(environment: AppEnvironment, category: CleanupCategory) {
         self.environment = environment
         self.category = category
     }
 
-    private var presentation: CategoryReviewPresentation {
+    var presentation: CategoryReviewPresentation {
         CategoryReviewPresentation(
             review: vm.review,
             flowState: vm.flow.state,
@@ -82,10 +84,18 @@ public struct CategoryReviewView: View {
             (old != .previewing && new == .previewing) ? .destructivePreview : nil
         }
     }
+}
+
+// MARK: - Sezioni e caricamento
+//
+// In extension (stesso file) per tenere il corpo della struct sotto il limite di
+// leggibilità (type_body_length) senza cambiare comportamento — stesso pattern di
+// DashboardView+Sections / CompressionView+Sections.
+extension CategoryReviewView {
 
     // MARK: Header
 
-    private var header: some View {
+    var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label {
                 Text(category.title)
@@ -109,7 +119,7 @@ public struct CategoryReviewView: View {
     // MARK: Contenuto per fase di caricamento
 
     @ViewBuilder
-    private var content: some View {
+    var content: some View {
         switch loadPhase {
         case .loading:
             ProgressView("Analisi della categoria…").progressViewStyle(.circular)
@@ -121,7 +131,7 @@ public struct CategoryReviewView: View {
     }
 
     @ViewBuilder
-    private var loadedContent: some View {
+    var loadedContent: some View {
         let pres = presentation
         if pres.phase == .confirmed {
             confirmedCard(pres)
@@ -136,7 +146,7 @@ public struct CategoryReviewView: View {
 
     // MARK: Riepilogo
 
-    private func summaryCard(_ pres: CategoryReviewPresentation) -> some View {
+    func summaryCard(_ pres: CategoryReviewPresentation) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("\(pres.removableCount)")
                 .auroraHeroNumber()
@@ -168,7 +178,7 @@ public struct CategoryReviewView: View {
 
     // MARK: Sezioni di righe
 
-    private func rowsSection(_ title: String, _ rows: [CategoryReviewPresentation.Row]) -> some View {
+    func rowsSection(_ title: String, _ rows: [CategoryReviewPresentation.Row]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title)
@@ -198,7 +208,7 @@ public struct CategoryReviewView: View {
         }
     }
 
-    private var selectAllControl: some View {
+    var selectAllControl: some View {
         let allSelected = presentation.selectedRemovableCount == presentation.removableCount
         return Button {
             if allSelected { vm.selectNone() } else { vm.selectAllRemovable() }
@@ -211,7 +221,7 @@ public struct CategoryReviewView: View {
 
     // MARK: Stato vuoto (niente da eliminare)
 
-    private var emptyCard: some View {
+    var emptyCard: some View {
         ContentUnavailableView(
             "Niente da eliminare qui",
             systemImage: "checkmark.circle",
@@ -222,7 +232,7 @@ public struct CategoryReviewView: View {
 
     // MARK: Conferma (eliminazione autorizzata → rete di sicurezza)
 
-    private func confirmedCard(_ pres: CategoryReviewPresentation) -> some View {
+    func confirmedCard(_ pres: CategoryReviewPresentation) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
                 Text(pres.confirmedCount == 1
@@ -253,7 +263,7 @@ public struct CategoryReviewView: View {
 
     // MARK: Stato d'errore
 
-    private func failedCard(_ message: String) -> some View {
+    func failedCard(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Label {
                 Text(message)
@@ -282,7 +292,7 @@ public struct CategoryReviewView: View {
     // MARK: Barra d'azione (apre il gate d'anteprima)
 
     @ViewBuilder
-    private var actionBar: some View {
+    var actionBar: some View {
         if presentation.canRequestDeletion {
             // A-2: la CTA elimina i SELEZIONATI (non più tutto-o-niente), instradati
             // allo stesso gate d'anteprima. Disabilitata se non c'è selezione.
@@ -303,7 +313,7 @@ public struct CategoryReviewView: View {
         }
     }
 
-    private var deletionCTATitle: String {
+    var deletionCTATitle: String {
         let count = presentation.selectedRemovableCount
         if count == 0 { return "Seleziona elementi da eliminare" }
         return count == 1 ? "Elimina 1 selezionato" : "Elimina \(count) selezionati"
@@ -311,7 +321,7 @@ public struct CategoryReviewView: View {
 
     // MARK: Anteprima come alert (gate obbligatorio)
 
-    private var previewAlertTitle: String {
+    var previewAlertTitle: String {
         presentation.previewCount == 1
             ? "Eliminare 1 elemento?"
             : "Eliminare \(presentation.previewCount) elementi?"
@@ -322,7 +332,7 @@ public struct CategoryReviewView: View {
     /// spostano già la fase fuori da `previewing`, così il `get` torna falso e
     /// l'alert si chiude. Il `set` è quindi un no-op: nessuna race di ordinamento
     /// tra l'azione del pulsante e la dismissal di sistema.
-    private var isPreviewing: Binding<Bool> {
+    var isPreviewing: Binding<Bool> {
         Binding(get: { presentation.phase == .previewing }, set: { _ in })
     }
 
@@ -332,10 +342,10 @@ public struct CategoryReviewView: View {
     // duplicati/simili hashing SHA-256 / feature print Vision per asset): DEVE girare
     // fuori dal main thread, altrimenti la schermata si blocca come faceva lo scan.
     // `loadIfNeeded` è @MainActor (metodo di View), quindi delega il calcolo a
-    // `composeReview` (nonisolata → gira sul generic executor) e torna sul main solo
-    // per aggiornare `vm`/`loadPhase`. Durante l'attesa `loadPhase` resta `.loading`.
+    // `composeReviewData` (nonisolata → gira sul generic executor) e torna sul main
+    // solo per aggiornare `vm`/`loadPhase`. Durante l'attesa `loadPhase` resta `.loading`.
     @MainActor
-    private func loadIfNeeded(force: Bool = false) async {
+    func loadIfNeeded(force: Bool = false) async {
         if !force, loadPhase == .loaded { return }
         do {
             let data = try await CategoryReviewView.composeReviewData(for: category, from: environment)
@@ -354,134 +364,6 @@ public struct CategoryReviewView: View {
         from environment: AppEnvironment
     ) async throws -> CategoryReviewData {
         try CategoryReviewSource.reviewData(for: category, from: environment)
-    }
-}
-
-/// Riga di review: etichetta UMANA (tipo · data, A-3) + controllo di selezione per i
-/// removable (A-2) o badge «TIENI» per i keep. Il `localIdentifier` grezzo non è più
-/// mostrato: resta solo nel modello per la logica/accessibilità.
-private struct CategoryReviewRowView: View {
-    let row: CategoryReviewPresentation.Row
-    /// Data già formattata (dalla View, unica fonte del formato locale), o `nil`.
-    let formattedDate: String?
-    /// Azione di toggle selezione; `nil` per i keep (non selezionabili, protetti).
-    let onToggle: (() -> Void)?
-    /// A-1: provider di miniature reali (device-only); placeholder se non residente.
-    let thumbnailProvider: any AssetThumbnailProviding
-
-    var body: some View {
-        // R-08: alle accessibility sizes il controllo di coda verrebbe compresso
-        // contro il titolo; ViewThatFits lo porta sotto prima di comprimere. Stessi
-        // accessibility modifier in entrambi i branch.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                identity
-                Spacer(minLength: 12)
-                trailing
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                identity
-                trailing
-            }
-        }
-        .padding(.vertical, 8)
-        // VoiceOver: un solo elemento con etichetta UMANA (tipo + data) — mai il
-        // `localIdentifier` grezzo. Valore = disposizione + stato di selezione.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(row.accessibilityLabel(formattedDate: formattedDate))
-        .accessibilityValue(accessibilityValue)
-        .accessibilityAddTraits(row.isSelected ? .isSelected : [])
-        .contentShape(Rectangle())
-        .onTapGesture { onToggle?() }
-    }
-
-    private var identity: some View {
-        HStack(spacing: 12) {
-            RowThumbnailView(
-                provider: thumbnailProvider,
-                id: row.id,
-                placeholderSymbol: symbol,
-                tint: tint
-            )
-            Text(row.displayTitle(formattedDate: formattedDate))
-                .font(.body)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-    }
-
-    @ViewBuilder
-    private var trailing: some View {
-        if row.isSelectable {
-            // Indicatore visivo; il toggle è gestito dal tap sull'intera riga (un solo
-            // owner del gesto → niente doppio-toggle). Nascosto a VoiceOver: lo stato è
-            // già nel trait/valore della riga.
-            Image(systemName: row.isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(row.isSelected ? AuroraBrand.accentFucsia : .secondary)
-                .imageScale(.large)
-                .accessibilityHidden(true)
-        } else {
-            Text("TIENI")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AuroraBrand.accentAzzurro)
-                .lineLimit(1)
-        }
-    }
-
-    /// Valore VoiceOver: disposizione + (per i selezionabili) stato di selezione.
-    private var accessibilityValue: String {
-        guard row.isSelectable else { return row.accessibilityValue }
-        return row.isSelected
-            ? "\(row.accessibilityValue), selezionato"
-            : "\(row.accessibilityValue), non selezionato"
-    }
-
-    private var symbol: String {
-        switch row.category {
-        case .video?: return "video"
-        case .screenshot?: return "camera.viewfinder"
-        case .photo?, nil: return "photo"
-        }
-    }
-
-    private var tint: Color {
-        row.disposition == .keep ? AuroraBrand.accentAzzurro : AuroraBrand.accentFucsia
-    }
-}
-
-/// A-1 — Miniatura reale di una riga, caricata async off-main. Placeholder (glifo di
-/// categoria) finché non è pronta o quando l'originale è solo in iCloud (nil). Nessun
-/// download di rete (il provider usa `isNetworkAccessAllowed=false`).
-private struct RowThumbnailView: View {
-    let provider: any AssetThumbnailProviding
-    let id: String
-    let placeholderSymbol: String
-    let tint: Color
-
-    private static let side: CGFloat = 44
-    @State private var image: CGImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(decorative: image, scale: 1)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Image(systemName: placeholderSymbol)
-                    .foregroundStyle(tint)
-                    .imageScale(.large)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .frame(width: Self.side, height: Self.side)
-        .background(.quaternary)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        // `.task(id:)` ricarica se la riga viene riusata per un altro asset (scroll).
-        .task(id: id) {
-            image = await provider.thumbnail(forLocalIdentifier: id, maxPixel: 120)
-        }
-        .accessibilityHidden(true)
     }
 }
 #endif

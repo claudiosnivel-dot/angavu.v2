@@ -59,10 +59,10 @@ final class AnalysisResultsStoreTests: XCTestCase {
         store.set(1, for: .category("screenshots"))
         store.set(2, for: .category("duplicates"))
 
-        let a: Int? = store.value(for: .category("screenshots"))
-        let b: Int? = store.value(for: .category("duplicates"))
-        XCTAssertEqual(a, 1)
-        XCTAssertEqual(b, 2)
+        let shot: Int? = store.value(for: .category("screenshots"))
+        let dup: Int? = store.value(for: .category("duplicates"))
+        XCTAssertEqual(shot, 1)
+        XCTAssertEqual(dup, 2)
 
         store.invalidate(.category("screenshots"))
         let goneA: Int? = store.value(for: .category("screenshots"))
@@ -80,7 +80,7 @@ final class AnalysisResultsStoreTests: XCTestCase {
         store.invalidateAll()
 
         XCTAssertTrue(store.isEmpty)
-        let d: Int? = store.value(for: .dashboard)
-        XCTAssertNil(d)
+        let dash: Int? = store.value(for: .dashboard)
+        XCTAssertNil(dash)
     }
 }
