@@ -43,6 +43,9 @@ public final class DashboardViewModel {
     public private(set) var state: DashboardState = .idle
 
     private let environment: AppEnvironment
+    /// P0-2b: ultima misura di residenza per-asset (dal probe device, off-main). Nil o
+    /// indeterminata ⇒ la dashboard mostra il caveat P0-3, mai un numero fabbricato.
+    private var residency: ResidencyMeasurement?
 
     public init(environment: AppEnvironment) {
         self.environment = environment
@@ -60,7 +63,7 @@ public final class DashboardViewModel {
     @discardableResult
     public func load() async -> DashboardState {
         do {
-            let figures = try LibraryFiguresReader.read(from: environment)
+            let figures = try LibraryFiguresReader.read(from: environment, measuredResidency: residency)
             state = .ready(DashboardScreen(
                 categories: figures.aggregate.categories,
                 reclaimable: figures.reclaimable,
@@ -70,6 +73,25 @@ public final class DashboardViewModel {
             state = .failed(String(describing: error))
         }
         return state
+    }
+
+    /// P0-2b — Misura la residenza per-asset reale e ricarica la dashboard col numero
+    /// device onesto (~8 GB sul device di test) invece del caveat. Il probe device è
+    /// bloccante per asset ma gira a blocchi cancellabili (`ResidencyAggregator`) su
+    /// questo contesto async NON isolato al main → nessun freeze della UI. Una misura
+    /// cancellata o incompleta resta indeterminata: si torna al caveat, mai un numero
+    /// parziale. Copertura (L-COL-006): l'aggregazione è coperta dall'oracolo di
+    /// dominio; il probe PhotoKit reale è device-only (runtime non coperto in CI).
+    @discardableResult
+    public func measureResidency(cancellation: CancellationToken = CancellationToken()) async -> DashboardState {
+        let items = (try? LibraryFiguresReader.probeItems(from: environment)) ?? []
+        let outcome = ResidencyAggregator.measure(
+            items: items,
+            probe: environment.residencyProbe,
+            cancellation: cancellation
+        )
+        residency = ResidencyAggregator.measurement(from: outcome)
+        return await load()
     }
 
     /// P0-1: applica un risultato già calcolato (dalla cache sopra la view,

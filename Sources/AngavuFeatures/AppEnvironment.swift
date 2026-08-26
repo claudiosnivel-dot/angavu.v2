@@ -23,6 +23,10 @@ public struct AppEnvironment {
     /// P0-2: capacità/spazio libero del device per il tetto di realtà (P0-3). Default
     /// `UnknownDeviceCapacity` (nessun tetto) finché il grafo reale non lo cabla.
     public let deviceCapacity: any DeviceCapacityReading
+    /// P0-2b: probe della residenza per-asset reale. Default `AssumeResidentResidencyProbe`
+    /// (segnaposto inerte) finché `live()` non inietta l'adapter PhotoKit reale: la
+    /// dashboard mostra un numero device solo da una misura reale e completa.
+    public let residencyProbe: any AssetResidencyProbing
     /// A-1: miniature reali degli asset. Default `NoThumbnailProvider` (placeholder)
     /// finché il grafo reale non inietta l'adapter PhotoKit.
     public let thumbnailProvider: any AssetThumbnailProviding
@@ -47,6 +51,7 @@ public struct AppEnvironment {
         byteResolver: any AssetByteSizeResolving,
         deviceStorage: any DeviceStorageInspecting,
         deviceCapacity: any DeviceCapacityReading = UnknownDeviceCapacity(),
+        residencyProbe: any AssetResidencyProbing = AssumeResidentResidencyProbe(),
         thumbnailProvider: any AssetThumbnailProviding = NoThumbnailProvider(),
         contentHasher: any AssetContentHashing = NoContentHasher(),
         featurePrinter: any FeaturePrinting = NoFeaturePrinter(),
@@ -63,6 +68,7 @@ public struct AppEnvironment {
         self.byteResolver = byteResolver
         self.deviceStorage = deviceStorage
         self.deviceCapacity = deviceCapacity
+        self.residencyProbe = residencyProbe
         self.thumbnailProvider = thumbnailProvider
         self.contentHasher = contentHasher
         self.featurePrinter = featurePrinter
@@ -116,6 +122,7 @@ extension AppEnvironment {
             byteResolver: PHAssetByteSizeResolver(),
             deviceStorage: SystemDeviceStorageInspector(),
             deviceCapacity: SystemDeviceCapacityReader(),
+            residencyProbe: PHAssetResidencyProbe(),
             thumbnailProvider: liveThumbnailProvider(),
             contentHasher: liveContentHasher(),
             featurePrinter: liveFeaturePrinter(),

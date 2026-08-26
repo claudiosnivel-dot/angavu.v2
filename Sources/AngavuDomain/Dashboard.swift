@@ -217,13 +217,32 @@ public enum ReclaimableSpaceCalculator {
     /// residenza (`residencyDeterminate == false`), lo spazio device non è un numero
     /// affidabile: si restituisce uno `ReclaimableSpace` marcato indeterminato (la
     /// presentazione mostra un caveat, non una cifra fabbricata).
+    ///
+    /// **P0-2b — misura per-asset reale.** Quando `measuredResidency` è presente e
+    /// `isDeterminate` (il probe device ha coperto tutti gli asset), si usa il numero
+    /// device MISURATO — non più l'euristica optimize-storage — col solito tetto di
+    /// realtà. È così che la dashboard passa dal caveat al numero reale (~8 GB sul
+    /// device di test). Una misura assente o indeterminata (probe non ancora eseguito,
+    /// cancellato o fallito) lascia il comportamento P0-3 invariato (caveat onesto).
     public static func reclaimable(
         from items: [DeletedAssetSize],
         optimizeStorage: ICloudOptimizeStorage,
         deviceCapacity: DeviceStorageCapacity? = nil,
-        residencyDeterminate: Bool = true
+        residencyDeterminate: Bool = true,
+        measuredResidency: ResidencyMeasurement? = nil
     ) -> ReclaimableSpace {
         let library = items.reduce(Int64(0)) { $0 + $1.libraryBytes }
+
+        // P0-2b: misura per-asset reale e COMPLETA → numero device misurato (col tetto
+        // di realtà), mai più l'euristica. La libreria resta l'aggregato autorevole
+        // degli item; il device è la somma misurata, comunque `<= libreria` per costruzione.
+        if let measured = measuredResidency, measured.isDeterminate {
+            return ReclaimableSpace(
+                reclaimableLibrarySpace: library,
+                reclaimableDeviceSpaceNow: capToReality(measured.deviceResidentBytes, within: deviceCapacity),
+                deviceSpaceIsDeterminate: true
+            )
+        }
 
         // Residenza non determinabile: nessun numero device, solo caveat.
         guard residencyDeterminate else {

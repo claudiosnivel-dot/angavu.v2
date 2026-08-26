@@ -17,7 +17,14 @@ struct LibraryFigures {
 enum LibraryFiguresReader {
     /// Legge i numeri veri dietro i port dell'ambiente. Può lanciare: la lettura
     /// dell'indice non va mai mascherata con un verde finto.
-    static func read(from environment: AppEnvironment) throws -> LibraryFigures {
+    ///
+    /// `measuredResidency` (P0-2b): quando una misura per-asset reale e completa è
+    /// disponibile (dal probe device, eseguito off-main e cachato), il device-now
+    /// mostra quel numero invece del caveat. Assente/indeterminata ⇒ comportamento P0-3.
+    static func read(
+        from environment: AppEnvironment,
+        measuredResidency: ResidencyMeasurement? = nil
+    ) throws -> LibraryFigures {
         let assets = try environment.indexReader.assets(matching: .all)
 
         // Un asset alla volta: byte reali dietro il port (exact se disponibile,
@@ -52,7 +59,8 @@ enum LibraryFiguresReader {
             from: deleted,
             optimizeStorage: environment.deviceStorage.optimizeStorageStatus(),
             deviceCapacity: environment.deviceCapacity.deviceCapacity(),
-            residencyDeterminate: environment.deviceStorage.residencyIsDeterminate()
+            residencyDeterminate: environment.deviceStorage.residencyIsDeterminate(),
+            measuredResidency: measuredResidency
         )
 
         return LibraryFigures(
@@ -60,6 +68,20 @@ enum LibraryFiguresReader {
             reclaimable: reclaimable,
             access: environment.authorizer.currentAccess()
         )
+    }
+
+    /// P0-2b — Asset da sondare per la residenza (id + byte libreria), letti
+    /// dall'indice e risolti coi byte reali dietro i port. È l'input del probe
+    /// per-asset (`ResidencyAggregator.measure`), eseguito off-main dal chiamante.
+    static func probeItems(from environment: AppEnvironment) throws -> [ResidencyProbeItem] {
+        let assets = try environment.indexReader.assets(matching: .all)
+        return assets.map { asset in
+            let size = environment.byteResolver.byteSize(
+                forLocalIdentifier: asset.id,
+                fallbackEstimate: fallbackEstimate(for: asset)
+            )
+            return ResidencyProbeItem(id: asset.id, libraryBytes: size.bytes)
+        }
     }
 
     /// Stima di ripiego (byte) usata SOLO quando il file-size esatto non è
