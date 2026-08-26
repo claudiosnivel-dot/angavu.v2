@@ -1,21 +1,23 @@
-// CompressionView — la schermata «Comprimi video» (guscio UI).
+// CompressionView — la schermata «Comprimi video» (guscio UI), flusso a BATCH.
 //
-// Presenta il flusso di compressione cablato (`CompressionViewModel`, T-116):
-// elenca i video VERI dell'indice (`CompressionCandidateSource`, byte reali),
-// stima il risparmio on-device (mai fabbricato), richiede il consenso opt-in
-// esplicito e — solo dopo la conferma dell'anteprima della rete di sicurezza —
-// ricodifica in HEVC instradando l'originale a «Eliminati di recente» (mai un
-// delete diretto, mai una perdita di dati).
+// B-2: dove vivono i ~106 GB di video del device-test, si comprime in blocco.
+// Elenca i video VERI dell'indice (`CompressionCandidateSource`, byte reali) con
+// MINIATURA (A-1, «mai alla cieca»), stima il risparmio aggregato sui più grandi
+// (`BatchCompressionEstimator`, sempre marcato stima, cap dichiarato), lascia
+// SELEZIONARE il sottoinsieme (opt-in: nulla preselezionato) e — solo dopo la
+// conferma dell'anteprima della rete di sicurezza — comprime i selezionati con
+// PROGRESSO DETERMINATO e ANNULLA, instradando OGNI originale a «Eliminati di
+// recente» (mai un delete diretto, mai una perdita di dati).
 //
-// Le decisioni di presentazione vivono in `CompressionPresentation` (puro,
-// testato); qui c'è solo il rendering SwiftUI, guardato `#if canImport(SwiftUI)` —
-// l'unico strato compilato-ma-non-testato (L-COL-006). L'ambiente arriva iniettato
-// dall'`AppEnvironment`: exporter e lettore di spec dietro i port, nessun singleton
-// nascosto. La stima (durata/bitrate) e l'export reale sono device-only: compilati
-// in CI, runtime non coperto — dichiarato apertamente. Le sezioni di rendering
-// stanno in `CompressionView+Sections.swift` (una sola type, spezzata per leggibilità).
+// Le decisioni vivono nei layer puri (`BatchCompression*` nel Domain,
+// `BatchCompressionPresentation`/`BatchCompressionViewModel` in Features, testati);
+// qui c'è solo il rendering SwiftUI guardato `#if canImport(SwiftUI)` — l'unico
+// strato compilato-ma-non-testato (L-COL-006). Miniature, stima on-device ed export
+// reale sono device-only: compilati in CI, runtime dichiarato NON coperto. Le
+// sezioni di rendering stanno in `CompressionView+Sections.swift`.
 #if canImport(SwiftUI)
 import AngavuDomain
+import AngavuData
 import SwiftUI
 
 /// Formatta i byte in stile file (KB/MB/GB), rispettando la locale.
@@ -34,22 +36,19 @@ public struct CompressionView: View {
         case failed(String)
     }
 
-    @State var vm: CompressionViewModel
+    /// Tetto della stima: quanti video (i più grandi, già ordinati) leggere
+    /// on-device per la stima. Limita il costo su librerie con migliaia di video
+    /// (perf, no freeze); la copertura ridotta è DICHIARATA a schermo, mai silente.
+    static let estimateCap = 100
+
+    @State var vm: BatchCompressionViewModel
     @State var loadPhase: LoadPhase = .loading
-    @State var selected: CompressionCandidate?
-    @State var preset: HEVCPreset = .balanced
-    @State var pendingConfirmation: CompressionCandidate?
-    /// Avviso onesto quando la spec on-device non è leggibile (niente stima finta).
-    @State var specNotice: String?
-    @State var cancellation = CancellationToken()
+    /// Vero mentre l'anteprima batch attende la conferma (rete di sicurezza).
+    @State var pendingBatchConfirmation = false
 
     public init(environment: AppEnvironment) {
         self.environment = environment
-        _vm = State(initialValue: CompressionViewModel(exporter: environment.videoExporter))
-    }
-
-    var presentation: CompressionPresentation {
-        CompressionPresentation(state: vm.state)
+        _vm = State(initialValue: BatchCompressionViewModel(exporter: environment.videoExporter))
     }
 
     public var body: some View {
@@ -66,19 +65,16 @@ public struct CompressionView: View {
         #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .alert("Sostituire l'originale?", isPresented: confirmationBinding) {
-            Button("Annulla", role: .cancel) { pendingConfirmation = nil }
-            Button("Comprimi e sostituisci", role: .destructive) { startCompression() }
+        .alert("Comprimere i video selezionati?", isPresented: $pendingBatchConfirmation) {
+            Button("Annulla", role: .cancel) { }
+            Button("Comprimi e sostituisci", role: .destructive) { startBatch() }
         } message: {
-            Text(CompressionPresentation.safetyNetText)
+            Text(BatchCompressionCopy.safetyNet)
         }
         .task { await loadIfNeeded() }
-        .hapticFeedback(on: vm.state) { _, new in
-            switch new {
-            case .done: return .success
-            case .failed: return .failure
-            default: return nil
-            }
+        .hapticFeedback(on: vm.phase) { _, new in
+            // Onestà: si festeggia solo se qualcosa è stato davvero compresso.
+            new == .done && (vm.run?.succeededCount ?? 0) > 0 ? .success : nil
         }
     }
 
@@ -96,7 +92,7 @@ public struct CompressionView: View {
                     .foregroundStyle(AuroraBrand.accentViola)
             }
             Text("Libera spazio senza cancellare: ricodifica HEVC on-device, opt-in, "
-                + "numeri veri. L'originale resta recuperabile dalla rete di sicurezza.")
+                + "numeri veri. Gli originali restano recuperabili dalla rete di sicurezza.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -114,116 +110,72 @@ public struct CompressionView: View {
         case .failed(let message):
             indexFailedCard(message)
         case .loaded(let candidates):
-            flowContent(candidates)
-        }
-    }
-
-    // MARK: Contenuto per fase del flusso di compressione
-
-    @ViewBuilder
-    func flowContent(_ candidates: [CompressionCandidate]) -> some View {
-        let pres = presentation
-        switch pres.phase {
-        case .idle:
             if candidates.isEmpty {
                 noVideosCard
             } else {
-                presetPicker
-                candidateList(candidates)
+                flowContent(candidates)
             }
-        case .estimated:
-            estimateCard(pres)
-        case .consented:
-            consentedCard(pres)
-        case .working:
-            workingCard(pres)
-        case .done:
-            doneCard(pres)
-        case .cancelled:
-            terminalCard(pres, symbol: "xmark.circle", tint: AuroraBrand.accentBlu)
-        case .failed:
-            terminalCard(pres, symbol: "exclamationmark.triangle", tint: AuroraBrand.accentFucsia, retry: true)
         }
     }
 
-    // MARK: Binding dell'anteprima obbligatoria
+    // MARK: Contenuto per fase del flusso batch
 
-    /// Vero SOLO quando c'è una compressione in attesa di conferma. L'alert si
-    /// chiude coi suoi pulsanti (entrambi azzerano `pendingConfirmation`), quindi il
-    /// `set` è un no-op: nessuna race tra l'azione e la dismissal di sistema.
-    var confirmationBinding: Binding<Bool> {
-        Binding(get: { pendingConfirmation != nil }, set: { _ in })
+    @ViewBuilder
+    func flowContent(_ candidates: [CompressionCandidate]) -> some View {
+        switch vm.phase {
+        case .selecting:
+            selectingSection(candidates)
+        case .running:
+            runningSection
+        case .done:
+            doneSection
+        }
+    }
+
+    // MARK: Binding del preset (ricalcola la stima al cambio, senza rifetch)
+
+    var presetBinding: Binding<HEVCPreset> {
+        Binding(
+            get: { vm.preset },
+            set: { newValue in
+                vm.preset = newValue
+                vm.reestimate()
+            }
+        )
     }
 
     // MARK: Azioni
 
-    // La raccolta dei candidati (lettura indice video + risoluzione byte per-asset via
-    // PhotoKit) è pesante: gira FUORI dal main thread per non bloccare la schermata.
-    // `loadIfNeeded` è @MainActor (metodo di View) e delega il calcolo a `loadCandidates`
-    // (nonisolata → generic executor), tornando sul main solo per aggiornare `loadPhase`.
+    // La raccolta dei candidati (lettura indice video + byte per-asset via PhotoKit)
+    // e la stima (durata/bitrate on-device) sono pesanti: girano FUORI dal main.
+    // `loadIfNeeded` è @MainActor (metodo di View) e delega ai metodi non isolati
+    // del VM / statici, tornando sul main solo per lo stato.
     @MainActor
     func loadIfNeeded(force: Bool = false) async {
         if !force, case .loaded = loadPhase { return }
         do {
             let candidates = try await CompressionView.loadCandidates(from: environment)
+            vm.setCandidates(candidates)
             loadPhase = .loaded(candidates)
+            await vm.computeEstimate(cap: Self.estimateCap, using: environment.videoSpecProvider)
         } catch {
             loadPhase = .failed(String(describing: error))
         }
     }
 
-    /// Calcolo pesante dei candidati, ESPLICITAMENTE non isolato al main: awaitandola da
-    /// `.task` il corpo gira sul generic executor (PhotoKit non blocca la UI).
+    /// Calcolo pesante dei candidati, ESPLICITAMENTE non isolato al main.
     nonisolated static func loadCandidates(from environment: AppEnvironment) async throws -> [CompressionCandidate] {
         try CompressionCandidateSource.candidates(from: environment)
     }
 
-    /// Legge la spec on-device (durata/bitrate) e calcola la stima. Se la spec non è
-    /// disponibile, mostra un avviso onesto — mai una stima inventata.
-    func estimate(for candidate: CompressionCandidate) {
-        selected = candidate
-        specNotice = nil
-        Task {
-            let spec = await environment.videoSpecProvider.videoSpec(
-                forLocalIdentifier: candidate.id,
-                originalBytes: candidate.originalBytes
-            )
-            guard let spec else {
-                specNotice = "Non riesco a leggere durata/bitrate di questo video "
-                    + "sul dispositivo: nessuna stima mostrata (non ne invento una)."
-                return
-            }
-            vm.estimate(spec: spec, preset: preset)
-        }
+    /// Avvia la compressione dei selezionati dopo la conferma dell'anteprima batch.
+    func startBatch() {
+        Task { await vm.start(previewConfirmed: true) }
     }
 
-    func grantConsent() {
-        guard let candidate = selected else { return }
-        vm.grantConsent(for: [candidate.id])
-    }
-
-    func startCompression() {
-        guard let candidate = pendingConfirmation else { return }
-        pendingConfirmation = nil
-        cancellation = CancellationToken()
-        Task {
-            await vm.compress(
-                originalId: candidate.id,
-                preset: preset,
-                exportVerifiedIntegral: true,
-                previewConfirmed: true,
-                cancellation: cancellation
-            )
-        }
-    }
-
-    /// Ricomincia da capo: nuovo view-model (stato `idle`, consenso azzerato).
-    func reset() {
-        vm = CompressionViewModel(exporter: environment.videoExporter)
-        selected = nil
-        specNotice = nil
-        pendingConfirmation = nil
-        cancellation = CancellationToken()
+    /// Ricomincia: torna alla selezione (nuova coda, consenso revocato).
+    func resetBatch() {
+        vm.reset()
     }
 }
 #endif
