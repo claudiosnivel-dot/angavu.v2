@@ -113,7 +113,7 @@ final class ResidencyWiringTests: XCTestCase {
     func test_cancelledMeasurement_staysCaveat() async {
         let index = FixedIndex(stored: (0..<20).map { photo("P\($0)") })
         var sizes: [String: ByteSize] = [:]
-        for i in 0..<20 { sizes["P\(i)"] = .exact(bytes: 100) }
+        for idx in 0..<20 { sizes["P\(idx)"] = .exact(bytes: 100) }
         let token = CancellationToken()
         token.cancel() // già cancellato prima di iniziare
         let probe = FakeResidencyProbe(sizes.mapValues { _ in Int64(100) })
