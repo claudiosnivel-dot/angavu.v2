@@ -1,3 +1,4 @@
+import Foundation
 import AngavuDomain
 
 // Guscio UI — Review di categoria: presentazione PURA dello stato di review.
