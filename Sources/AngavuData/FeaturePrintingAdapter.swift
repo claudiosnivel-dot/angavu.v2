@@ -22,7 +22,7 @@ import Vision
 /// due asset. Mantiene una cache per `id` così ogni feature print è calcolato una
 /// sola volta (i confronti in un cluster sono molti). Sincrono verso il chiamante
 /// (che lo mette off-main), come gli altri adapter del Data layer.
-public final class VisionFeaturePrinter: FeaturePrinting {
+public final class VisionFeaturePrinter: FeaturePrinting, FeaturePrintVectorProducing {
     /// Cache id → feature print. Il valore interno `nil` memorizza "già tentato ma
     /// non calcolabile", per non ripetere la richiesta a ogni confronto.
     /// FSE-D2 — protetta da lock: sotto esecuzione CONCORRENTE (pre-warm parallelo dei
@@ -57,6 +57,20 @@ public final class VisionFeaturePrinter: FeaturePrinting {
     /// motore concorrente (pre-warm), quindi la cache è protetta da lock.
     public func prepare(for asset: LibraryAsset) throws {
         _ = try featurePrint(for: asset)
+    }
+
+    /// FSE-E3 — Produce il vettore feature print SERIALIZZATO (bytes opachi), così la
+    /// cache dei derivati (FSE-E2) può persisterlo e riusarlo fra scansioni senza
+    /// ricalcolare Vision. Il Domain vede solo `Data`: nessun tipo di Vision attraversa
+    /// il confine (altitudine, 00-INDEX §1bis). `nil` se l'asset non ha un feature print
+    /// calcolabile on-device (mai un vettore fabbricato). Riusa la cache d'osservazioni
+    /// in memoria, quindi serializza al più una volta per asset per sessione.
+    public func vector(for asset: LibraryAsset) throws -> Data? {
+        guard let observation = try featurePrint(for: asset) else { return nil }
+        return try NSKeyedArchiver.archivedData(
+            withRootObject: observation,
+            requiringSecureCoding: true
+        )
     }
 
     /// Feature print dell'asset (con cache thread-safe). `nil` se i pixel non sono
