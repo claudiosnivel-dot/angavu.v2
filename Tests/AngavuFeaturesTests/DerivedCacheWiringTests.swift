@@ -194,13 +194,21 @@ final class DerivedCacheWiringTests: XCTestCase {
         let sink = StoreInvalidatingLibrarySink(store: AnalysisResultsStore(), derivedCache: cache)
         sink.didObserve(IndexDelta(changed: [asset("A")]))
 
-        // THEN il derivato di A è invalidato (ricalcola) ma quello di B resta (HIT).
-        _ = try caching.vector(for: asset("A"))
-        XCTAssertEqual(base.computeCount, 1, "A è stato invalidato → ricalcolo")
+        // THEN il derivato STANTÌO di A è rimosso subito (prima di qualunque ricalcolo);
+        // quello di B, non toccato dal delta, resta.
         XCTAssertNil(store.records["A"], "il derivato stantìo di A è rimosso dallo store")
+        XCTAssertEqual(store.records["B"]?.value.featurePrint, Data("B".utf8), "B non è invalidato")
 
-        _ = try caching.vector(for: asset("B"))
-        XCTAssertEqual(base.computeCount, 1, "B non è toccato dal delta → resta un HIT, nessun ricalcolo")
+        // Il prossimo uso di A ricalcola (mai il vettore stantìo) e ripersiste il FRESCO.
+        let recomputedA = try caching.vector(for: asset("A"))
+        XCTAssertEqual(base.computeCount, 1, "A è stato invalidato → ricalcolo")
+        XCTAssertEqual(recomputedA, Data("vec-A".utf8), "il vettore servito è quello fresco, non lo stantìo")
+        XCTAssertEqual(store.records["A"]?.value.featurePrint, Data("vec-A".utf8), "il fresco è ripersistito")
+
+        // B resta un HIT: nessun ricalcolo aggiuntivo.
+        let cachedB = try caching.vector(for: asset("B"))
+        XCTAssertEqual(cachedB, Data("B".utf8))
+        XCTAssertEqual(base.computeCount, 1, "B non è toccato dal delta → HIT, nessun ricalcolo")
     }
 
     func test_libraryChange_removedAsset_invalidatesItsDerived() throws {
