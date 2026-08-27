@@ -97,7 +97,15 @@ enum CategoryDetectionDefaults {
     /// Valori dichiarati e conservativi, affinabili in seguito.
     static let similarity = SimilarityThresholds(semantic: 0.5, hamming: 10)
     /// Soglia di sfocatura: nitidezza normalizzata 0…1, sfocato se strettamente sotto.
-    static let blur = BlurThreshold(minimumSharpness: 0.3)
+    /// FSE-C2 — taglia di riferimento DICHIARATA = `.sharpness` (≈64px, FSE-C1): il
+    /// valore 0.3 è tarato a questa scala (48×48 dopo il ricampionamento). C1 non ha
+    /// cambiato la risoluzione effettiva del kernel (il percorso legacy ricampionava già
+    /// a ≈64px), quindi 0.3 resta valido; qui la scala è resa esplicita e vincolata,
+    /// non più assunta. Ri-tarabile se la taglia `.sharpness` cambia (BlurThreshold).
+    static let blur = BlurThreshold(
+        minimumSharpness: 0.3,
+        referenceLongestSide: LogicalImageSize.sharpness.longestSide
+    )
     /// Blocco d'analisi cancellabile (motore T-004).
     static let chunkSize = 64
 }

@@ -81,6 +81,20 @@ come **suggerimento**, mai eliminando in autonomia.
     - "L'eliminazione (macrotask safety_net)"
 ```
 
+## Nota sulla taglia di riferimento (FSE-C2)
+
+«Sfocato» è un'**euristica alla taglia di decodifica**, non una verità assoluta. La
+nitidezza è la varianza del Laplaciano (`SharpnessMetric`) su una griglia 48×48
+ricampionata da un originale a taglia `.sharpness` (≈64px, FSE-C1); il suo valore grezzo
+è **sensibile alla risoluzione**. La soglia (`BlurThreshold.minimumSharpness` = 0.3)
+dichiara perciò la scala a cui è tarata (`referenceLongestSide` = 64). FSE-C1 non ha
+cambiato la risoluzione effettiva del kernel — il percorso legacy ricampionava già a
+≈64px — quindi 0.3 resta valido; la scala è ora **esplicita e vincolata**, non assunta.
+Se la taglia `.sharpness` cambia, la soglia va **ri-tarata e ri-dichiarata**
+(oracolo `SharpnessThresholdRetuneTests`), mai ereditata a caso. La distanza semantica
+del feature print è invece **invariante alla taglia** (Vision normalizza il descrittore),
+verificata da `FeaturePrintScaleInvarianceTests`.
+
 ## Self-check
 
 - **Strutturale**: `validate_blueprint.mjs blueprint` — atteso exit 0.

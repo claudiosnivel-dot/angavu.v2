@@ -29,12 +29,26 @@ public protocol SharpnessScoring {
 
 /// Soglia di sfocatura: sotto la soglia un asset è considerato `blurry`. La nitidezza
 /// e la soglia vivono sulla stessa scala normalizzata 0…1 del port `SharpnessScoring`.
+///
+/// FSE-C2 — La nitidezza (varianza del Laplaciano, `SharpnessMetric`) è SENSIBILE ALLA
+/// RISOLUZIONE di decodifica: la stessa foto letta a 64px o a piena risoluzione dà
+/// valori grezzi diversi. Perciò la soglia dichiara la taglia a cui è tarata
+/// (`referenceLongestSide`, la taglia logica `.sharpness` ≈64px di FSE-C1): un numero di
+/// nitidezza senza la sua risoluzione di riferimento è privo di significato. Cambiando
+/// la taglia di decodifica, la soglia va RI-TARATA e ri-dichiarata, mai ereditata a caso.
 public struct BlurThreshold: Equatable, Sendable {
     /// Nitidezza minima (esclusa) per NON essere sfocato. Confinata a 0…1.
     public let minimumSharpness: Double
 
-    public init(minimumSharpness: Double) {
+    /// Lato lungo (px) dell'immagine decodificata a cui questa soglia è tarata. È
+    /// metadato DICHIARATIVO (non entra nella classificazione): documenta la scala su
+    /// cui `minimumSharpness` è calibrata, così un cambio di taglia è visibile e la
+    /// ri-taratura è forzata. Default 64: la taglia `.sharpness` di FSE-C1.
+    public let referenceLongestSide: Int
+
+    public init(minimumSharpness: Double, referenceLongestSide: Int = 64) {
         self.minimumSharpness = min(1, max(0, minimumSharpness))
+        self.referenceLongestSide = max(1, referenceLongestSide)
     }
 }
 

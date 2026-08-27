@@ -66,11 +66,14 @@ import CoreGraphics
 /// `v / (v + k)`. Deterministico e cross-Apple (CoreGraphics puro): compila e gira
 /// anche sull'host macOS della CI. Il valore assoluto è un'euristica; il confronto
 /// relativo (ranking dentro un cluster, soglia di sfocatura) è ciò che conta.
+///
+/// FSE-C2: la MATEMATICA (varianza del Laplaciano + curva saturante) vive ora nel
+/// Domain (`SharpnessMetric`, pura e provabile senza CoreGraphics); qui resta solo
+/// l'estrazione pixel (ricampionamento in scala di grigi). Un solo posto per il kernel.
 public enum SharpnessKernel {
-    /// Lato della griglia in scala di grigi.
-    public static let side = 48
-    /// Costante di saturazione della normalizzazione (euristica).
-    public static let saturation = 500.0
+    /// Lato della griglia in scala di grigi: è la RISOLUZIONE DI RIFERIMENTO della
+    /// metrica, dichiarata nel Domain. La soglia di sfocatura è tarata a questa scala.
+    public static let side = SharpnessMetric.referenceGridSide
 
     /// Nitidezza normalizzata 0…1 dai byte di un'immagine, o `nil` se la decodifica
     /// fallisce. Percorso legacy (dati full-res → thumbnail ImageIO): resta per i
@@ -78,7 +81,7 @@ public enum SharpnessKernel {
     /// alimentato dall'immagine già ridimensionata dal provider (leva 2).
     public static func normalizedSharpness(from data: Data) -> Double? {
         guard let gray = grayscale(from: data, side: side) else { return nil }
-        return normalizedSharpness(fromGrayscale: gray)
+        return SharpnessMetric.normalizedSharpness(grayscale: gray, side: side)
     }
 
     /// FSE-C1 — Nitidezza da un `CGImage` già ridimensionato dal provider
@@ -86,33 +89,7 @@ public enum SharpnessKernel {
     /// griglia `side`×`side`. `nil` se il disegno in scala di grigi fallisce.
     public static func normalizedSharpness(from cgImage: CGImage) -> Double? {
         guard let gray = grayscale(from: cgImage, side: side) else { return nil }
-        return normalizedSharpness(fromGrayscale: gray)
-    }
-
-    /// Varianza del Laplaciano su una griglia in scala di grigi `side`×`side`, passata
-    /// nella curva saturante `v / (v + k)`. Matematica PURA, indipendente dalla
-    /// sorgente (byte o `CGImage`): un solo posto per il kernel di nitidezza.
-    private static func normalizedSharpness(fromGrayscale gray: [UInt8]) -> Double? {
-        var sum = 0.0
-        var sumOfSquares = 0.0
-        var count = 0
-        for row in 1..<(side - 1) {
-            for column in 1..<(side - 1) {
-                let center = Double(gray[row * side + column])
-                let up = Double(gray[(row - 1) * side + column])
-                let down = Double(gray[(row + 1) * side + column])
-                let left = Double(gray[row * side + column - 1])
-                let right = Double(gray[row * side + column + 1])
-                let laplacian = up + down + left + right - 4 * center
-                sum += laplacian
-                sumOfSquares += laplacian * laplacian
-                count += 1
-            }
-        }
-        guard count > 0 else { return 0 }
-        let mean = sum / Double(count)
-        let variance = max(0, sumOfSquares / Double(count) - mean * mean)
-        return variance / (variance + saturation)
+        return SharpnessMetric.normalizedSharpness(grayscale: gray, side: side)
     }
 
     /// Ridisegna un `CGImage` (già piccolo) a `side`×`side` in scala di grigi a 8 bit.
