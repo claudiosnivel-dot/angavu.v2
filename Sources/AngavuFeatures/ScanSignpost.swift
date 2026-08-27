@@ -1,3 +1,4 @@
+import AngavuDomain
 import Foundation
 
 // FSE-A1 — Strumentazione di misura delle fasi della scansione.
