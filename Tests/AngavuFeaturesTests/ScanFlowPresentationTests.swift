@@ -62,15 +62,18 @@ final class ScanFlowPresentationTests: XCTestCase {
         XCTAssertFalse(ScanFlowPresentation(state: .cancelled(AnalysisProgress(processed: 1, total: 2))).canCancel)
     }
 
-    // Il riempimento è la frazione UNIFICATA reale, mai fabbricata: metà della fase
-    // centrale (di tre) → una fase intera + mezza fase = 1.5/3 = 0.5.
+    // Il riempimento è la frazione UNIFICATA reale, mai fabbricata: metà della 2ª fase
+    // (byte) → una fase intera + mezza fase = 1.5/N. FSE-F1: N = 8 fasi (3 numeri + 5
+    // rilevatori), quindi 1.5/8 = 0.1875. L'atteso è derivato dal numero di fasi, non
+    // hardcoded, così resta vero se la pipeline cambia ancora.
     func test_scanning_fillIsUnifiedRealFraction() {
+        let stageCount = Double(ScanPipelineProgress.Stage.allCases.count)
         let pipeline = ScanPipelineProgress(
             stage: .resolvingSizes,
             stageProgress: AnalysisProgress(processed: 50, total: 100)
         )
         let flow = ScanFlowPresentation(state: .scanning(pipeline))
-        XCTAssertEqual(flow.fill ?? -1, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(flow.fill ?? -1, 1.5 / stageCount, accuracy: 0.0001)
     }
 
     // completed → esito terminale: il flusso cede alla schermata di risultato (E-3).
