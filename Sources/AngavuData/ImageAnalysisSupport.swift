@@ -20,7 +20,24 @@ public enum OnDeviceImageBytes {
     public static func data(for asset: LibraryAsset) -> Data? {
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [asset.id], options: nil)
         guard let phAsset = fetch.firstObject else { return nil }
+        return data(for: phAsset)
+    }
 
+    /// FSE-B1 — Percorso a PHAsset già risolto: riusa l'handle batch invece di
+    /// rifetchare per id. Handle non riconosciuto → fallback al fetch per id.
+    /// (La taglia di decodifica resta full-res qui: il downscale è FSE-C1, ortogonale
+    /// al riuso dell'handle.)
+    public static func data(for handle: AssetHandle) -> Data? {
+        guard let phAsset = handle.resolvedPHAsset else {
+            let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [handle.assetLocalIdentifier], options: nil)
+            guard let fetched = fetch.firstObject else { return nil }
+            return data(for: fetched)
+        }
+        return data(for: phAsset)
+    }
+
+    /// Byte on-device dell'asset già risolto (`isNetworkAccessAllowed = false`).
+    private static func data(for phAsset: PHAsset) -> Data? {
         let options = PHImageRequestOptions()
         options.isNetworkAccessAllowed = false   // zero rete: nessun fetch iCloud
         options.isSynchronous = true

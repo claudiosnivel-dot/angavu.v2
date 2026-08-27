@@ -38,10 +38,25 @@ public struct PHAssetResidencyProbe: AssetResidencyProbing {
         guard libraryBytes > 0 else { return 0 }
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil)
         guard let asset = fetch.firstObject else { return 0 }
+        return deviceResidentBytes(for: asset, libraryBytes: libraryBytes)
+    }
 
+    /// FSE-B1 — Percorso a PHAsset già risolto: riusa l'handle batch invece di
+    /// rifetchare per id (la residenza è tra le fasi più pesanti, §1.7). Handle non
+    /// riconosciuto → fallback al fetch per id (correttezza invariata).
+    public func deviceResidentBytes(for handle: AssetHandle, libraryBytes: Int64) -> Int64 {
+        guard libraryBytes > 0 else { return 0 }
+        guard let asset = handle.resolvedPHAsset else {
+            return deviceResidentBytes(forLocalIdentifier: handle.assetLocalIdentifier, libraryBytes: libraryBytes)
+        }
+        return deviceResidentBytes(for: asset, libraryBytes: libraryBytes)
+    }
+
+    /// Misura la residenza sulla risorsa "piena" dell'asset già risolto. Nessun tipo
+    /// di Photos attraversa il confine del port (restituisce solo `Int64`).
+    private func deviceResidentBytes(for asset: PHAsset, libraryBytes: Int64) -> Int64 {
         let resources = PHAssetResource.assetResources(for: asset)
         guard let primary = primaryResource(for: asset, among: resources) else { return 0 }
-
         return isResidentWithoutNetwork(primary) ? libraryBytes : 0
     }
 

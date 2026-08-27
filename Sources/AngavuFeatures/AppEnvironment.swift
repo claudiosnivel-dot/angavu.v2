@@ -19,6 +19,11 @@ public struct AppEnvironment {
     public let indexReader: any AssetIndexReading
     public let indexWriter: any AssetIndexWriting
     public let byteResolver: any AssetByteSizeResolving
+    /// FSE-B1: risolutore batch dei PHAsset, riusabile da tutti gli adapter per la
+    /// durata della scansione (fine dei fetch singoli per asset). Default
+    /// `EmptyAssetHandleResolver` (nessun handle) finché `live()` non inietta
+    /// `PHAssetBatchResolver`. Il cablaggio attraverso le fasi della scansione è FSE-F.
+    public let handleResolver: any AssetHandleResolving
     public let deviceStorage: any DeviceStorageInspecting
     /// P0-2: capacità/spazio libero del device per il tetto di realtà (P0-3). Default
     /// `UnknownDeviceCapacity` (nessun tetto) finché il grafo reale non lo cabla.
@@ -49,6 +54,7 @@ public struct AppEnvironment {
         indexReader: any AssetIndexReading,
         indexWriter: any AssetIndexWriting,
         byteResolver: any AssetByteSizeResolving,
+        handleResolver: any AssetHandleResolving = EmptyAssetHandleResolver(),
         deviceStorage: any DeviceStorageInspecting,
         deviceCapacity: any DeviceCapacityReading = UnknownDeviceCapacity(),
         residencyProbe: any AssetResidencyProbing = AssumeResidentResidencyProbe(),
@@ -66,6 +72,7 @@ public struct AppEnvironment {
         self.indexReader = indexReader
         self.indexWriter = indexWriter
         self.byteResolver = byteResolver
+        self.handleResolver = handleResolver
         self.deviceStorage = deviceStorage
         self.deviceCapacity = deviceCapacity
         self.residencyProbe = residencyProbe
@@ -120,6 +127,7 @@ extension AppEnvironment {
             indexReader: index,
             indexWriter: index,
             byteResolver: PHAssetByteSizeResolver(),
+            handleResolver: PHAssetBatchResolver(),
             deviceStorage: SystemDeviceStorageInspector(),
             deviceCapacity: SystemDeviceCapacityReader(),
             residencyProbe: PHAssetResidencyProbe(),

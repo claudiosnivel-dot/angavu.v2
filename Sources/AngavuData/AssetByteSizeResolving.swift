@@ -26,7 +26,23 @@ public struct PHAssetByteSizeResolver: AssetByteSizeResolving {
         guard let asset = fetch.firstObject else {
             return ByteSizePolicy.resolve(RawResourceSize(exactBytes: nil, fallbackEstimate: fallbackEstimate))
         }
+        return byteSize(for: asset, fallbackEstimate: fallbackEstimate)
+    }
 
+    /// FSE-B1 — Percorso a PHAsset già risolto: riusa l'handle prodotto in batch dal
+    /// `PHAssetBatchResolver` invece di rifetchare per id. Se l'handle non è
+    /// riconosciuto (non proviene da questo Data), ricade sul fetch per id (nessuna
+    /// perdita di correttezza, solo il costo di un fetch in più).
+    public func byteSize(for handle: AssetHandle, fallbackEstimate: Int64) -> ByteSize {
+        guard let asset = handle.resolvedPHAsset else {
+            return byteSize(forLocalIdentifier: handle.assetLocalIdentifier, fallbackEstimate: fallbackEstimate)
+        }
+        return byteSize(for: asset, fallbackEstimate: fallbackEstimate)
+    }
+
+    /// Somma i `fileSize` esatti delle risorse dell'asset; se nessuna li espone,
+    /// restituisce la stima marcata. Nessun tipo di Photos attraversa il confine.
+    private func byteSize(for asset: PHAsset, fallbackEstimate: Int64) -> ByteSize {
         var total: Int64 = 0
         var sawExact = false
         for resource in PHAssetResource.assetResources(for: asset) {
