@@ -129,6 +129,15 @@ public struct HomeView: View {
             if let figures = vm.figures {
                 store.set(figures, for: .dashboard)
             }
+            // FSE-F1: la scansione unificata ha già calcolato le review di categoria
+            // (fasi dei rilevatori): le mettiamo nella cache sopra le view (chiavi
+            // `.category(...)`) col timestamp per il badge di freschezza, così aprire
+            // una categoria è ISTANTANEO — la `CategoryReviewView` trova il valore in
+            // cache e non lancia mai una nuova composizione (nessun rilevatore al tap).
+            let now = Date()
+            for (category, data) in vm.categoryResults {
+                store.set(data, for: .category(category.rawValue), at: now)
+            }
         }
     }
 

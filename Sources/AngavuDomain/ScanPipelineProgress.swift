@@ -20,6 +20,15 @@ public struct ScanPipelineProgress: Equatable, Sendable {
     /// Le fasi del lavoro vero, in ordine. Il `rawValue` è l'indice della fase e
     /// pesa la frazione complessiva (fasi equipesate: ognuna copre una quota uguale
     /// della barra). Ordine = ordine di esecuzione.
+    ///
+    /// FSE-F1 — «un'unica scansione fa tutto»: alle tre fasi dei numeri veri
+    /// (indice → byte → residenza) seguono le cinque fasi dei RILEVATORI di categoria,
+    /// così le categorie si calcolano nella stessa passata e aprire una categoria è
+    /// istantaneo (dalla cache), mai una nuova scansione al tap. Otto fasi, **tuttora
+    /// equipesate** — la pesatura è DICHIARATA (DoD FSE-F1): ognuna copre 1/8 della
+    /// barra. È la scelta onesta e semplice: non fabbrica mai una frazione; i rilevatori
+    /// pesanti (duplicati/simili/sfocate) semplicemente impiegano più tempo REALE entro
+    /// la loro quota, invece di gonfiare artificialmente il loro peso.
     public enum Stage: Int, Equatable, Sendable, CaseIterable {
         /// Enumerazione + mapping + scrittura dell'indice.
         case indexing
@@ -27,6 +36,16 @@ public struct ScanPipelineProgress: Equatable, Sendable {
         case resolvingSizes
         /// Misura della residenza per-asset (spazio device liberabile ORA, P0-2b).
         case measuringDeviceSpace
+        /// Rilevatore screenshot (filtro puro sul sottotipo indicizzato).
+        case analyzingScreenshots
+        /// Rilevatore duplicati esatti (SHA-256 sui candidati per dimensione).
+        case analyzingExactDuplicates
+        /// Rilevatore foto simili (distanza semantica Vision, «tieni la migliore»).
+        case analyzingSimilarPhotos
+        /// Rilevatore foto sfocate (nitidezza sotto soglia).
+        case analyzingBlurryPhotos
+        /// Rilevatore video grandi e vecchi (soglie congiunte, filtro puro).
+        case analyzingLargeOldVideos
     }
 
     /// La fase corrente.

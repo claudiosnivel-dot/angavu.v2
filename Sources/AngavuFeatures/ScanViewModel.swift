@@ -39,6 +39,17 @@ public final class ScanViewModel {
     /// dei numeri sono state saltate (cancellazione/errore: la dashboard ricalcolerà).
     public private(set) var figures: DashboardScreen?
 
+    /// FSE-F1 — «un'unica scansione fa tutto»: le review di categoria calcolate DENTRO
+    /// la scansione unificata (fasi dei rilevatori), pronte da cachare sopra le view
+    /// (chiavi `.category(...)`) → aprire una categoria è istantaneo, mai una nuova
+    /// scansione al tap. Contiene SOLO le categorie effettivamente raggiunte e
+    /// completate: una scansione cancellata a metà lascia le categorie non raggiunte
+    /// FUORI dalla mappa (verranno calcolate al tap), mai un risultato parziale
+    /// spacciato per completo. `CategoryReviewData` è un tipo interno al modulo, quindi
+    /// la proprietà è interna (letta dalla Home, che popola la cache). Vuota finché una
+    /// scansione non raggiunge le fasi dei rilevatori.
+    private(set) var categoryResults: [CleanupCategory: CategoryReviewData] = [:]
+
     private let environment: AppEnvironment
     private let authorizer: any PhotoLibraryAuthorizing
     private let enumerator: any PhotoAssetEnumerating
@@ -63,8 +74,10 @@ public final class ScanViewModel {
     /// rispetto allo stato: lo aggiorna passo per passo.
     @discardableResult
     public func run(cancellation: CancellationToken = CancellationToken()) async -> ScanState {
-        // Nuova scansione: i numeri veri della precedente non valgono più.
+        // Nuova scansione: i numeri veri e le review di categoria della precedente non
+        // valgono più (l'indice viene ricostruito).
         figures = nil
+        categoryResults = [:]
         state = .requestingPermission
         let access = await authorizer.requestAccess()
         let decision = PhotoAccessPolicy.decide(for: access)
@@ -122,6 +135,16 @@ public final class ScanViewModel {
         }
         if case .cancelled = state { return state }
 
+        // FASI 4-8 — rilevatori di categoria (FSE-F1): la STESSA passata calcola anche
+        // duplicati/simili/sfocate/screenshot/grandi-vecchi e ne cacha i risultati, così
+        // aprire una categoria è istantaneo. Un rilevatore che fallisce lascia la SUA
+        // categoria non-cachata (verrà calcolata al tap) senza abortire la scansione;
+        // una cancellazione, invece, è volontà dell'utente → esito `cancelled`.
+        computeCategoryResults(cancellation: cancellation) { cancelledAt in
+            self.state = .cancelled(cancelledAt)
+        }
+        if case .cancelled = state { return state }
+
         state = .completed(indexed: assets.count, partialCount: decision.isPartialCount)
         return state
     }
@@ -174,6 +197,74 @@ public final class ScanViewModel {
             measuredResidency: measurement.isDeterminate ? measurement : nil
         )
         figures = DashboardScreen(figures: figuresValue)
+    }
+
+    /// FASI 4-8 (FSE-F1): calcola le review di categoria nella stessa passata e le
+    /// raccoglie in `categoryResults` (pronte per la cache sopra le view). Ogni
+    /// categoria è una fase della barra unificata (`scanStage`), misurata da un
+    /// intervallo signpost dedicato (FSE-A1, 1:1). Invarianti di onestà:
+    ///  • una categoria COMPLETATA finisce in `categoryResults` (cache hit al tap);
+    ///  • una categoria non ancora RAGGIUNTA (cancellazione a metà) resta FUORI dalla
+    ///    mappa → verrà calcolata al tap, mai un parziale spacciato per completo;
+    ///  • un ERRORE del rilevatore (non una cancellazione) lascia la sola categoria
+    ///    non-cachata e prosegue con le altre (la scansione non aborta);
+    ///  • la barra non arretra: ogni fase parte dalla fine della precedente e viene
+    ///    chiusa a fase completa prima di passare alla successiva.
+    private func computeCategoryResults(
+        cancellation: CancellationToken,
+        onCancelled: (AnalysisProgress) -> Void
+    ) {
+        let categories = CleanupCategory.allCases
+        let total = categories.count
+        var done = 0
+        for category in categories {
+            // Cancellazione RILEVATA al confine di categoria: le raggiunte sono cachate,
+            // questa e le successive no.
+            if cancellation.isCancelled {
+                onCancelled(AnalysisProgress(processed: done, total: total))
+                return
+            }
+            let stage = category.scanStage
+            let outcome: CategoryOutcome = signpost.measure(ScanSignpostPhase(stage)) {
+                do {
+                    let data = try CategoryReviewSource.reviewData(
+                        for: category,
+                        from: environment,
+                        cancellation: cancellation
+                    ) { progress in
+                        self.report(stage, progress)
+                    }
+                    return .completed(data)
+                } catch {
+                    return .failed
+                }
+            }
+            switch outcome {
+            case .completed(let data):
+                categoryResults[category] = data
+                done += 1
+            case .failed:
+                // Un rilevatore che lancia PERCHÉ cancellato (via `completed(_:)`) è
+                // volontà dell'utente: esito `cancelled`, categoria non-cachata. Un
+                // errore genuino (token non cancellato) lascia solo questa categoria
+                // fuori e prosegue.
+                if cancellation.isCancelled {
+                    onCancelled(AnalysisProgress(processed: done, total: total))
+                    return
+                }
+            }
+            // Chiude la fase corrente a «completa» prima della prossima: le categorie a
+            // filtro puro (screenshot, grandi/vecchi) non riportano X/N, e questo snap
+            // porta la barra alla fine della loro quota senza mai farla arretrare.
+            report(stage, AnalysisProgress(processed: 1, total: 1))
+        }
+    }
+
+    /// Esito d'una singola fase-categoria, catturato DENTRO l'intervallo di misura così
+    /// che l'intervallo si chiuda prima di aggiornare `categoryResults`/lo stato.
+    private enum CategoryOutcome {
+        case completed(CategoryReviewData)
+        case failed
     }
 
     /// Esito della FASE 1 (indice), catturato DENTRO l'intervallo di misura così che

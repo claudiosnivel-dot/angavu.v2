@@ -82,11 +82,18 @@ public struct ScanFlowPresentation: Equatable, Sendable {
     }
 
     /// Nome umano e onesto della fase, per la didascalia sotto il conteggio.
+    /// FSE-F1 aggiunge le fasi dei rilevatori (imposte dal tipo `Stage`); i titoli e la
+    /// copertura del carosello per l'intera attesa sono di FSE-F2 (che li testa).
     private static func phaseLabel(for stage: ScanPipelineProgress.Stage) -> String {
         switch stage {
         case .indexing: return "Indicizzo…"
         case .resolvingSizes: return "Calcolo i byte…"
         case .measuringDeviceSpace: return "Spazio sul telefono…"
+        case .analyzingScreenshots: return "Cerco gli screenshot…"
+        case .analyzingExactDuplicates: return "Cerco i duplicati…"
+        case .analyzingSimilarPhotos: return "Confronto le foto simili…"
+        case .analyzingBlurryPhotos: return "Controllo la nitidezza…"
+        case .analyzingLargeOldVideos: return "Cerco i video grandi e vecchi…"
         }
     }
 

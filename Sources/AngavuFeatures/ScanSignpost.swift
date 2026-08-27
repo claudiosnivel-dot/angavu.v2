@@ -27,6 +27,29 @@ public enum ScanSignpostPhase: String, CaseIterable, Sendable {
     case resolvingSizes
     /// Misura della residenza per-asset (spazio device liberabile ORA, P0-2b).
     case measuringDeviceSpace
+    /// FSE-F1 — rilevatori di categoria, ognuno un intervallo NOMINATO così Instruments
+    /// attribuisce il tempo alla singola categoria (i pesanti — duplicati/simili/sfocate
+    /// — sono i candidati alle leve FSE).
+    case analyzingScreenshots
+    case analyzingExactDuplicates
+    case analyzingSimilarPhotos
+    case analyzingBlurryPhotos
+    case analyzingLargeOldVideos
+
+    /// Fase di misura corrispondente alla fase della barra (allineamento 1:1). Una sola
+    /// fonte per la mappatura: la scansione misura ESATTAMENTE le fasi che l'utente vede.
+    public init(_ stage: ScanPipelineProgress.Stage) {
+        switch stage {
+        case .indexing: self = .indexing
+        case .resolvingSizes: self = .resolvingSizes
+        case .measuringDeviceSpace: self = .measuringDeviceSpace
+        case .analyzingScreenshots: self = .analyzingScreenshots
+        case .analyzingExactDuplicates: self = .analyzingExactDuplicates
+        case .analyzingSimilarPhotos: self = .analyzingSimilarPhotos
+        case .analyzingBlurryPhotos: self = .analyzingBlurryPhotos
+        case .analyzingLargeOldVideos: self = .analyzingLargeOldVideos
+        }
+    }
 
     /// Nome stabile dell'intervallo per gli strumenti. `StaticString`: costante di
     /// codice, mai un dato utente.
@@ -35,6 +58,11 @@ public enum ScanSignpostPhase: String, CaseIterable, Sendable {
         case .indexing: return "scan.indexing"
         case .resolvingSizes: return "scan.resolvingSizes"
         case .measuringDeviceSpace: return "scan.measuringDeviceSpace"
+        case .analyzingScreenshots: return "scan.analyzingScreenshots"
+        case .analyzingExactDuplicates: return "scan.analyzingExactDuplicates"
+        case .analyzingSimilarPhotos: return "scan.analyzingSimilarPhotos"
+        case .analyzingBlurryPhotos: return "scan.analyzingBlurryPhotos"
+        case .analyzingLargeOldVideos: return "scan.analyzingLargeOldVideos"
         }
     }
 }

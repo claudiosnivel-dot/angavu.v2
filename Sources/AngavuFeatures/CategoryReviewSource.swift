@@ -83,6 +83,20 @@ public enum CleanupCategory: String, CaseIterable, Sendable {
         case .largeOldVideos: return "film.stack"
         }
     }
+
+    /// FSE-F1 — fase della barra unificata in cui questa categoria viene calcolata
+    /// durante la scansione «un'unica scansione fa tutto». L'ordine dei `case` di
+    /// `CleanupCategory` (screenshot → duplicati → simili → sfocate → grandi/vecchi)
+    /// coincide con l'ordine delle fasi rilevatore in `ScanPipelineProgress.Stage`.
+    var scanStage: ScanPipelineProgress.Stage {
+        switch self {
+        case .screenshots: return .analyzingScreenshots
+        case .exactDuplicates: return .analyzingExactDuplicates
+        case .similarPhotos: return .analyzingSimilarPhotos
+        case .blurryPhotos: return .analyzingBlurryPhotos
+        case .largeOldVideos: return .analyzingLargeOldVideos
+        }
+    }
 }
 
 /// Soglie e parametri **dichiarati** dei rilevatori di categoria. Sono default
@@ -129,20 +143,27 @@ enum CategoryReviewSource {
     ///   il motore a blocchi (duplicati/simili/sfocate). Le categorie a filtro puro
     ///   (screenshot, grandi/vecchi) non lo invocano: sono immediate e restano
     ///   onestamente indeterminate. Default no-op (usato dall'oracolo).
+    /// - Parameter cancellation: token cooperativo. FSE-F1: la scansione unificata
+    ///   passa il PROPRIO token così i rilevatori pesanti (duplicati/simili/sfocate)
+    ///   si fermano quando l'utente annulla la scansione; una categoria interrotta
+    ///   lancia (via `completed(_:)`) e la scansione la lascia non-cachata (mai un
+    ///   risultato parziale spacciato per completo). Default: token nuovo (le aperture
+    ///   singole di categoria restano indipendenti).
     static func reviewData(
         for category: CleanupCategory,
         from environment: AppEnvironment,
+        cancellation: CancellationToken = CancellationToken(),
         progress: (AnalysisProgress) -> Void = { _ in }
     ) throws -> CategoryReviewData {
         switch category {
         case .screenshots:
             return try screenshotsReview(from: environment)
         case .exactDuplicates:
-            return try exactDuplicatesReview(from: environment, progress: progress)
+            return try exactDuplicatesReview(from: environment, cancellation: cancellation, progress: progress)
         case .similarPhotos:
-            return try similarPhotosReview(from: environment, progress: progress)
+            return try similarPhotosReview(from: environment, cancellation: cancellation, progress: progress)
         case .blurryPhotos:
-            return try blurryPhotosReview(from: environment, progress: progress)
+            return try blurryPhotosReview(from: environment, cancellation: cancellation, progress: progress)
         case .largeOldVideos:
             return try largeOldVideosReview(from: environment)
         }
@@ -167,6 +188,7 @@ enum CategoryReviewSource {
 
     private static func exactDuplicatesReview(
         from environment: AppEnvironment,
+        cancellation: CancellationToken,
         progress: (AnalysisProgress) -> Void
     ) throws -> CategoryReviewData {
         let sized = try sizedAssets(from: environment)
@@ -175,7 +197,7 @@ enum CategoryReviewSource {
             from: groups,
             hasher: environment.contentHasher,
             chunkSize: CategoryDetectionDefaults.chunkSize,
-            cancellation: CancellationToken(),
+            cancellation: cancellation,
             progress: progress
         ))
         let proposals = KeepOneSelection.proposals(for: clusters)
@@ -191,6 +213,7 @@ enum CategoryReviewSource {
 
     private static func similarPhotosReview(
         from environment: AppEnvironment,
+        cancellation: CancellationToken,
         progress: (AnalysisProgress) -> Void
     ) throws -> CategoryReviewData {
         let photos = try environment.indexReader.assets(matching: .all).filter { $0.kind == .photo }
@@ -203,7 +226,7 @@ enum CategoryReviewSource {
             provider: environment.featurePrinter,
             thresholds: CategoryDetectionDefaults.similarity,
             chunkSize: CategoryDetectionDefaults.chunkSize,
-            cancellation: CancellationToken(),
+            cancellation: cancellation,
             progress: progress
         ))
         // Solo i gruppi REALI di simili (≥ 2): un singleton non ha nulla da proporre e
@@ -222,6 +245,7 @@ enum CategoryReviewSource {
 
     private static func blurryPhotosReview(
         from environment: AppEnvironment,
+        cancellation: CancellationToken,
         progress: (AnalysisProgress) -> Void
     ) throws -> CategoryReviewData {
         let assets = try environment.indexReader.assets(matching: .all)
@@ -230,7 +254,7 @@ enum CategoryReviewSource {
             scoring: environment.sharpnessScorer,
             threshold: CategoryDetectionDefaults.blur,
             chunkSize: CategoryDetectionDefaults.chunkSize,
-            cancellation: CancellationToken(),
+            cancellation: cancellation,
             progress: progress
         ))
         return CategoryReviewData(review: CategoryReview.fromBlurry(blurry), assets: indexed(blurry))

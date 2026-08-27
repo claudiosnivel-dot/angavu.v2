@@ -113,8 +113,14 @@ private func makeEnv(access: PhotoAccess, raws: [RawEnumeratedAsset], index: Rec
 final class ScanSignpostTests: XCTestCase {
 
     /// Ordine atteso delle fasi in una scansione completa, ognuna aperta e poi chiusa
-    /// prima della successiva (nessuna sovrapposizione).
-    private let expectedPhases: [ScanSignpostPhase] = [.indexing, .resolvingSizes, .measuringDeviceSpace]
+    /// prima della successiva (nessuna sovrapposizione). FSE-F1 estende la scansione
+    /// unificata alle cinque fasi dei rilevatori (allineamento 1:1 con la barra): la
+    /// telemetria le misura tutte, in ordine di categoria.
+    private let expectedPhases: [ScanSignpostPhase] = [
+        .indexing, .resolvingSizes, .measuringDeviceSpace,
+        .analyzingScreenshots, .analyzingExactDuplicates, .analyzingSimilarPhotos,
+        .analyzingBlurryPhotos, .analyzingLargeOldVideos
+    ]
 
     // AC-FSE-A1-1: ogni fase apre e chiude esattamente un intervallo, in ordine,
     // senza orfani né sovrapposizioni.
