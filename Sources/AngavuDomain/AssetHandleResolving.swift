@@ -63,6 +63,19 @@ public struct ResolvedAssetHandles {
     public var resolvedIdentifiers: Set<String> { Set(handlesByID.keys) }
 }
 
+/// Handle minimale che porta SOLO l'identificatore locale, senza un asset di sistema
+/// risolto. Serve da bridge dove un adapter ha un `LibraryAsset` (quindi un id) ma non
+/// ancora la mappa batch condivisa: il consumatore reale (es. il provider di immagine
+/// ridimensionata, FSE-C1) non riconosce questo handle → ricade sul proprio fetch per
+/// id, comportamento identico a oggi. Il riuso senza refetch arriva quando FSE-F caba
+/// la `ResolvedAssetHandles` attraverso le fasi.
+public final class IdentifierAssetHandle: AssetHandle {
+    public let assetLocalIdentifier: String
+    public init(_ assetLocalIdentifier: String) {
+        self.assetLocalIdentifier = assetLocalIdentifier
+    }
+}
+
 /// Risolve un elenco di identificatori locali in handle riusabili, in batch.
 public protocol AssetHandleResolving {
     /// Risolve gli id in una mappa `id → handle`. Gli id inesistenti sono

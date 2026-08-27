@@ -14,7 +14,9 @@ import AngavuDomain
 
 #if canImport(Vision) && canImport(Photos)
 import Vision
-import Photos
+// FSE-C1: i pixel arrivano dal provider ridimensionato (Data), non più da PhotoKit
+// diretto — `import Photos` non serve più qui (il gate `canImport(Photos)` resta,
+// perché il provider di default richiede PhotoKit).
 
 /// Adapter reale: calcola i feature print via Vision e la distanza semantica fra
 /// due asset. Mantiene una cache per `id` così ogni feature print è calcolato una
@@ -24,8 +26,15 @@ public final class VisionFeaturePrinter: FeaturePrinting {
     /// Cache id → feature print. Il valore interno `nil` memorizza "già tentato ma
     /// non calcolabile", per non ripetere la richiesta a ogni confronto.
     private var cache: [String: VNFeaturePrintObservation?] = [:]
+    private let imageProvider: any DownscaledImageProviding
 
-    public init() {}
+    /// FSE-C1: default al provider ridimensionato reale. Vision normalizza comunque il
+    /// feature print a piccolo → la distanza semantica è invariante alla taglia (da
+    /// verificare in FSE-C2), quindi decodificare a `.featurePrint` (≈224px) invece del
+    /// full-res è puro risparmio (leva 2).
+    public init(imageProvider: any DownscaledImageProviding = PHImageDownscaledProvider()) {
+        self.imageProvider = imageProvider
+    }
 
     public func distance(between lhs: LibraryAsset, and rhs: LibraryAsset) throws -> Float? {
         guard
@@ -45,11 +54,15 @@ public final class VisionFeaturePrinter: FeaturePrinting {
         if let cached = cache[asset.id] {
             return cached
         }
-        guard let data = imageData(for: asset) else {
+        let handle = IdentifierAssetHandle(asset.id)
+        guard
+            let image = imageProvider.downscaledImage(for: handle, size: .featurePrint),
+            let cgImage = image.resolvedCGImage
+        else {
             cache[asset.id] = .some(nil)
             return nil
         }
-        let handler = VNImageRequestHandler(data: data, options: [:])
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         let request = VNGenerateImageFeaturePrintRequest()
         try handler.perform([request])
         // `results` di questa richiesta è già [VNFeaturePrintObservation]?: niente
@@ -57,27 +70,6 @@ public final class VisionFeaturePrinter: FeaturePrinting {
         let observation = request.results?.first
         cache[asset.id] = .some(observation)
         return observation
-    }
-
-    /// Byte dell'immagine, letti SOLO on-device (zero rete). `nil` se l'originale
-    /// non è residente sul device o l'asset non è risolvibile.
-    private func imageData(for asset: LibraryAsset) -> Data? {
-        let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [asset.id], options: nil)
-        guard let phAsset = fetch.firstObject else { return nil }
-
-        let options = PHImageRequestOptions()
-        options.isNetworkAccessAllowed = false   // zero rete: nessun fetch iCloud
-        options.isSynchronous = true
-        options.deliveryMode = .highQualityFormat
-
-        var result: Data?
-        _ = PHImageManager.default().requestImageDataAndOrientation(
-            for: phAsset,
-            options: options
-        ) { data, _, _, _ in
-            result = data
-        }
-        return result
     }
 }
 #endif

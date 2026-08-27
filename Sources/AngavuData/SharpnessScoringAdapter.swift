@@ -8,8 +8,10 @@ import AngavuDomain
 //   • T-071 `VisionQualityScorer` (di `similar_photos`) esteso ad `AestheticsScoring`
 //     — riusa l'aesthetics score iOS 18 già calcolato, come progressive enhancement.
 //
-// Solo on-device: i pixel si leggono con `OnDeviceImageBytes` (zero rete). Un asset
-// senza pixel residenti → nitidezza `nil`: il Domain non lo dichiara mai sfocato.
+// Solo on-device (zero rete). FSE-C1: la nitidezza legge dal provider ridimensionato
+// (`DownscaledImageProviding`, ≈64px) invece del full-res; l'aesthetics (T-071) resta
+// per ora sul percorso di `VisionQualityScorer`. Un asset senza pixel residenti →
+// nitidezza `nil`: il Domain non lo dichiara mai sfocato.
 
 // MARK: - T-070 — Adapter di nitidezza
 
@@ -18,12 +20,27 @@ import AngavuDomain
 /// Adapter reale del punteggio di nitidezza. Sincrono verso il chiamante (off-main).
 /// `nil` se i pixel non sono leggibili on-device o la decodifica fallisce: così il
 /// Domain (T-070) non classifica mai come sfocato un asset non verificabile.
+///
+/// FSE-C1: chiede l'immagine alla taglia `.sharpness` (≈64px) al provider
+/// ridimensionato, invece di decodificare l'originale full-res per un francobollo
+/// (leva 2). La griglia del kernel resta `SharpnessKernel.side`: la SOGLIA di sfocatura
+/// va ri-tarata/ri-dichiarata a questa taglia in FSE-C2 (non toccata qui).
 public struct CoreImageSharpnessScorer: SharpnessScoring {
-    public init() {}
+    private let imageProvider: any DownscaledImageProviding
+
+    public init(imageProvider: any DownscaledImageProviding = PHImageDownscaledProvider()) {
+        self.imageProvider = imageProvider
+    }
 
     public func sharpness(for asset: LibraryAsset) throws -> Double? {
-        guard let data = OnDeviceImageBytes.data(for: asset) else { return nil }
-        return SharpnessKernel.normalizedSharpness(from: data)
+        let handle = IdentifierAssetHandle(asset.id)
+        guard
+            let image = imageProvider.downscaledImage(for: handle, size: .sharpness),
+            let cgImage = image.resolvedCGImage
+        else {
+            return nil   // non residente / non producibile → mai un falso "sfocato"
+        }
+        return SharpnessKernel.normalizedSharpness(from: cgImage)
     }
 }
 #endif

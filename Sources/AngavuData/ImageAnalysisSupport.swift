@@ -72,10 +72,27 @@ public enum SharpnessKernel {
     /// Costante di saturazione della normalizzazione (euristica).
     public static let saturation = 500.0
 
-    /// Nitidezza normalizzata 0…1, o `nil` se la decodifica fallisce.
+    /// Nitidezza normalizzata 0…1 dai byte di un'immagine, o `nil` se la decodifica
+    /// fallisce. Percorso legacy (dati full-res → thumbnail ImageIO): resta per i
+    /// chiamanti che partono dai byte. FSE-C1 preferisce il percorso `CGImage` sotto,
+    /// alimentato dall'immagine già ridimensionata dal provider (leva 2).
     public static func normalizedSharpness(from data: Data) -> Double? {
         guard let gray = grayscale(from: data, side: side) else { return nil }
+        return normalizedSharpness(fromGrayscale: gray)
+    }
 
+    /// FSE-C1 — Nitidezza da un `CGImage` già ridimensionato dal provider
+    /// (`DownscaledImageProviding`): nessuna decodifica full-res, si ricampiona solo la
+    /// griglia `side`×`side`. `nil` se il disegno in scala di grigi fallisce.
+    public static func normalizedSharpness(from cgImage: CGImage) -> Double? {
+        guard let gray = grayscale(from: cgImage, side: side) else { return nil }
+        return normalizedSharpness(fromGrayscale: gray)
+    }
+
+    /// Varianza del Laplaciano su una griglia in scala di grigi `side`×`side`, passata
+    /// nella curva saturante `v / (v + k)`. Matematica PURA, indipendente dalla
+    /// sorgente (byte o `CGImage`): un solo posto per il kernel di nitidezza.
+    private static func normalizedSharpness(fromGrayscale gray: [UInt8]) -> Double? {
         var sum = 0.0
         var sumOfSquares = 0.0
         var count = 0
@@ -98,20 +115,8 @@ public enum SharpnessKernel {
         return variance / (variance + saturation)
     }
 
-    /// Decodifica e ridimensiona a `side`×`side` in scala di grigi a 8 bit.
-    private static func grayscale(from data: Data, side: Int) -> [UInt8]? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        let thumbnailOptions: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(side, 64)
-        ]
-        guard
-            let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary)
-        else {
-            return nil
-        }
-
+    /// Ridisegna un `CGImage` (già piccolo) a `side`×`side` in scala di grigi a 8 bit.
+    private static func grayscale(from cgImage: CGImage, side: Int) -> [UInt8]? {
         let colorSpace = CGColorSpaceCreateDeviceGray()
         guard let context = CGContext(
             data: nil,
@@ -126,11 +131,27 @@ public enum SharpnessKernel {
         }
 
         context.interpolationQuality = .medium
-        context.draw(thumbnail, in: CGRect(x: 0, y: 0, width: side, height: side))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
         guard let pixels = context.data else { return nil }
 
         let buffer = pixels.bindMemory(to: UInt8.self, capacity: side * side)
         return Array(UnsafeBufferPointer(start: buffer, count: side * side))
+    }
+
+    /// Decodifica e ridimensiona a `side`×`side` in scala di grigi a 8 bit.
+    private static func grayscale(from data: Data, side: Int) -> [UInt8]? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let thumbnailOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(side, 64)
+        ]
+        guard
+            let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary)
+        else {
+            return nil
+        }
+        return grayscale(from: thumbnail, side: side)
     }
 }
 #endif
