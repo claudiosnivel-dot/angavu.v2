@@ -126,7 +126,10 @@ extension AppEnvironment {
             enumerator: SystemPhotoAssetEnumerator(),
             indexReader: index,
             indexWriter: index,
-            byteResolver: PHAssetByteSizeResolver(),
+            // FSE-B2: la stessa istanza cachante è condivisa da scansione e categorie —
+            // i byte si risolvono una volta (fase `resolvingSizes`) e si riusano, invece
+            // di ri-risolvere ~25k asset a ogni schermata.
+            byteResolver: CachingByteSizeResolver(base: PHAssetByteSizeResolver()),
             handleResolver: PHAssetBatchResolver(),
             deviceStorage: SystemDeviceStorageInspector(),
             deviceCapacity: SystemDeviceCapacityReader(),
