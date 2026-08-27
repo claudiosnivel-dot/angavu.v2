@@ -92,8 +92,10 @@ cambiato la risoluzione effettiva del kernel — il percorso legacy ricampionava
 ≈64px — quindi 0.3 resta valido; la scala è ora **esplicita e vincolata**, non assunta.
 Se la taglia `.sharpness` cambia, la soglia va **ri-tarata e ri-dichiarata**
 (oracolo `SharpnessThresholdRetuneTests`), mai ereditata a caso. La distanza semantica
-del feature print è invece **invariante alla taglia** (Vision normalizza il descrittore),
-verificata da `FeaturePrintScaleInvarianceTests`.
+del feature print è invece **invariante alla taglia** (Vision normalizza il descrittore):
+`FeaturePrintScaleInvarianceTests` ne prova in CI l'invarianza **relativa** (il feature
+print discrimina il contenuto più della scala: `d(A,A') < d(A,A@2x) < d(A,B)`); la parità
+di clustering 224px vs full-res su **foto reali** è device-only (§7, nessuna fixture reale).
 
 ## Self-check
 

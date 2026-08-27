@@ -1,5 +1,4 @@
 import XCTest
-import AngavuDomain
 
 #if canImport(Vision) && canImport(CoreGraphics)
 import Vision
@@ -9,60 +8,65 @@ import CoreGraphics
 // FSE-C2 (Data) — Oracolo di INVARIANZA DI SCALA del feature print Vision, AC-FSE-C2-2.
 //
 // FSE-C1 fa decodificare il feature print a taglia piccola (`.featurePrint` ≈224px)
-// invece del full-res: è puro risparmio SOLO se la distanza semantica del feature print
-// è invariante alla taglia (Vision normalizza internamente il descrittore). Questo
-// oracolo lo VERIFICA sul percorso Vision reale, con la STESSA richiesta che usa
-// l'adapter (`VNGenerateImageFeaturePrintRequest` su `VNImageRequestHandler(cgImage:)`):
-//   • la stessa immagine a due risoluzioni → distanza piccola, decisione «simile» stabile;
-//   • un'immagine diversa → distanza nettamente maggiore (l'invarianza non è banale).
+// invece del full-res: è puro risparmio SOLO se la decisione simile/non-simile non
+// dipende dalla taglia di decodifica. In produzione (`VisionFeaturePrinter`) i due
+// operandi di ogni confronto sono SEMPRE decodificati alla stessa `.featurePrint`, quindi
+// il rischio si riduce a: la taglia sposta la distanza più di quanto faccia il contenuto?
 //
-// Copertura dichiarata (L-COL-006): gira dove Vision+CoreGraphics ci sono (host macOS
-// della CI e device); degrada a `throw XCTSkip` altrove. Nessun accesso rete: le
-// immagini sono disegnate in memoria, mai lette da PhotoKit/iCloud.
+// Questo oracolo prova la proprietà DETERMINISTICA e onesta: un ORDINAMENTO, non una
+// soglia assoluta. Sullo stesso percorso Vision dell'adapter
+// (`VNGenerateImageFeaturePrintRequest` su `VNImageRequestHandler(cgImage:)`):
+//     d(A, A')  <  d(A, A@2x)  <  d(A, B)
+// «contenuto identico» più vicino di «stesso contenuto riscalato», a sua volta più vicino
+// di «contenuto diverso». Cioè: il feature print discrimina il CONTENUTO più della SCALA —
+// perciò decodificare a 224px non ribalta la decisione di similarità.
+//
+// Onestà/copertura (00-INDEX §6, L-COL-006): il VALORE ASSOLUTO della distanza
+// cross-risoluzione non è significativo su immagini sintetiche (Vision è tarato su foto
+// reali); la parità di clustering 224px vs full-res su FOTO REALI è device-only (§7),
+// coerente col resto del repo (nessuna fixture d'immagine, nessun Vision reale in CI
+// altrove). Qui si prova solo l'ordinamento, che è deterministico. Zero rete: le immagini
+// sono disegnate in memoria, mai lette da PhotoKit/iCloud.
 final class FeaturePrintScaleInvarianceTests: XCTestCase {
 
     #if canImport(Vision) && canImport(CoreGraphics)
 
-    /// Soglia semantica di decisione simile/non-simile: la STESSA dichiarata in
-    /// produzione (`CategoryDetectionDefaults.similarity.semantic` = 0.5), riusata qui
-    /// dal tipo di Domain così l'oracolo non fissa un magic number a parte.
-    private let semanticDecisionThreshold = SimilarityThresholds(semantic: 0.5, hamming: 10).semantic
+    func testContentDominatesScaleInFeaturePrintDistance() throws {
+        // Stessa scena, resa due volte a 224 (contenuto identico), una a 448 (riscalata),
+        // e una scena diversa a 224 (contenuto diverso).
+        let sceneA = try makeFeaturePrint(size: 224) { drawStructuredScene(in: $0, size: 224) }
+        let sceneACopy = try makeFeaturePrint(size: 224) { drawStructuredScene(in: $0, size: 224) }
+        let sceneARescaled = try makeFeaturePrint(size: 448) { drawStructuredScene(in: $0, size: 448) }
+        let sceneB = try makeFeaturePrint(size: 224) { drawContrastingScene(in: $0, size: 224) }
 
-    func testFeaturePrintDistanceIsStableAcrossResolution() throws {
-        let small = try makeFeaturePrint(size: 224) { drawStructuredScene(in: $0, size: 224) }
-        let large = try makeFeaturePrint(size: 448) { drawStructuredScene(in: $0, size: 448) }
+        let identical = try distance(sceneA, sceneACopy)
+        let rescaled = try distance(sceneA, sceneARescaled)
+        let different = try distance(sceneA, sceneB)
 
-        var distance = Float(0)
-        try small.computeDistance(&distance, to: large)
+        XCTAssertTrue(identical.isFinite && rescaled.isFinite && different.isFinite,
+                      "le distanze devono essere finite, mai NaN")
 
-        XCTAssertTrue(distance.isFinite, "la distanza deve essere finita, mai NaN")
-        // Invarianza: la stessa scena a 224 e a 448 resta «la stessa» → la decisione
-        // simile/non-simile (distanza < soglia semantica) è stabile rispetto alla taglia.
+        // Contenuto identico è il più vicino possibile (min): più vicino dello stesso
+        // contenuto riscalato.
         XCTAssertLessThan(
-            distance, semanticDecisionThreshold,
-            "la decisione «simile» non deve dipendere dalla taglia di decodifica (invarianza)"
+            identical, rescaled,
+            "contenuto identico deve stare più vicino dello stesso contenuto riscalato"
+        )
+        // Il cuore dell'invarianza: lo STESSO contenuto a un'altra taglia resta più vicino
+        // di un contenuto DIVERSO → la taglia non ribalta la decisione simile/non-simile.
+        XCTAssertLessThan(
+            rescaled, different,
+            "stesso contenuto riscalato deve stare più vicino di un contenuto diverso"
         )
     }
 
-    func testDifferentSceneIsFartherThanSameSceneRescaled() throws {
-        let reference = try makeFeaturePrint(size: 224) { drawStructuredScene(in: $0, size: 224) }
-        let rescaled = try makeFeaturePrint(size: 448) { drawStructuredScene(in: $0, size: 448) }
-        let different = try makeFeaturePrint(size: 224) { drawContrastingScene(in: $0, size: 224) }
+    // MARK: - Percorso Vision reale da CGImage disegnato (nessun PhotoKit)
 
-        var sameSceneDistance = Float(0)
-        try reference.computeDistance(&sameSceneDistance, to: rescaled)
-        var differentSceneDistance = Float(0)
-        try reference.computeDistance(&differentSceneDistance, to: different)
-
-        // L'invarianza non è banale: una scena DIVERSA è nettamente più lontana della
-        // stessa scena ridimensionata (altrimenti «tutto è vicino» = metrica inutile).
-        XCTAssertLessThan(
-            sameSceneDistance, differentSceneDistance,
-            "la stessa scena ridimensionata deve stare più vicina di una scena diversa"
-        )
+    private func distance(_ lhs: VNFeaturePrintObservation, _ rhs: VNFeaturePrintObservation) throws -> Float {
+        var value = Float(0)
+        try lhs.computeDistance(&value, to: rhs)
+        return value
     }
-
-    // MARK: - Costruzione feature print da CGImage disegnato (nessun PhotoKit)
 
     private func makeFeaturePrint(
         size: Int,
@@ -96,7 +100,7 @@ final class FeaturePrintScaleInvarianceTests: XCTestCase {
     }
 
     /// Scena strutturata, disegnata in coordinate proporzionali alla taglia: identica a
-    /// ogni risoluzione modulo la scala (è ciò di cui si prova l'invarianza).
+    /// ogni risoluzione modulo la scala (è ciò di cui si prova l'invarianza relativa).
     private func drawStructuredScene(in context: CGContext, size: Int) {
         let dimension = CGFloat(size)
         context.setFillColor(red: 0.15, green: 0.20, blue: 0.35, alpha: 1)
@@ -115,8 +119,8 @@ final class FeaturePrintScaleInvarianceTests: XCTestCase {
         ))
     }
 
-    /// Scena nettamente diversa (bande a forte contrasto): controllo negativo perché
-    /// l'invarianza non degeneri in «ogni immagine è vicina».
+    /// Scena nettamente diversa (bande a forte contrasto): contenuto diverso, controllo
+    /// perché l'ordinamento non degeneri in «ogni immagine è vicina».
     private func drawContrastingScene(in context: CGContext, size: Int) {
         let dimension = CGFloat(size)
         let bands = 8
