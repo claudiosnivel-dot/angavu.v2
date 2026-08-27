@@ -101,4 +101,59 @@ final class ScanFlowPresentationTests: XCTestCase {
         XCTAssertFalse(flow.showsCarousel)
         XCTAssertTrue(flow.buttonCaption?.contains("Niente è stato modificato") ?? false)
     }
+
+    // MARK: - FSE-F2 — progresso onesto multi-fase + carosello su tutte le fasi
+
+    private var stageCount: Double { Double(ScanPipelineProgress.Stage.allCases.count) }
+
+    // AC-FSE-F2-1 — in fase 'similar' il titolo NOMINA onestamente l'attività corrente,
+    // e la frazione è quella REALE della fase (unificata), mai fabbricata.
+    func test_similarPhase_honestTitleAndRealFraction() {
+        let pipeline = ScanPipelineProgress(
+            stage: .analyzingSimilarPhotos,
+            stageProgress: AnalysisProgress(processed: 2, total: 4)
+        )
+        let flow = ScanFlowPresentation(state: .scanning(pipeline))
+
+        XCTAssertEqual(flow.stageTitle, "Confronto le foto simili…", "il titolo nomina la fase corrente")
+        XCTAssertEqual(flow.statusLabel, "2 di 4", "il conteggio è quello reale della fase")
+        // Frazione unificata reale: (indice della fase + frazione della fase) / n fasi.
+        let expected = (Double(ScanPipelineProgress.Stage.analyzingSimilarPhotos.rawValue) + 0.5) / stageCount
+        XCTAssertEqual(flow.fill ?? -1, expected, accuracy: 0.0001, "frazione reale della fase, mai fabbricata")
+        XCTAssertFalse(flow.isIndeterminate, "in analisi il progresso è determinato")
+    }
+
+    // AC-FSE-F2-2 — una fase a totale NULLO (categoria vuota) è trattata come COMPLETA
+    // senza incollare la barra: la frazione arriva al confine della fase successiva,
+    // coerente con ScanPipelineProgress (AnalysisProgress: total 0 ⇒ fraction 1).
+    func test_emptyPhase_treatedAsCompleteWithoutStickingBar() {
+        let stage = ScanPipelineProgress.Stage.analyzingExactDuplicates
+        let pipeline = ScanPipelineProgress(
+            stage: stage,
+            stageProgress: AnalysisProgress(processed: 0, total: 0)   // categoria vuota
+        )
+        let flow = ScanFlowPresentation(state: .scanning(pipeline))
+
+        let phaseStart = Double(stage.rawValue) / stageCount
+        let phaseEnd = Double(stage.rawValue + 1) / stageCount
+        XCTAssertEqual(flow.fill ?? -1, phaseEnd, accuracy: 0.0001, "fase vuota = completa, barra al confine")
+        XCTAssertGreaterThan(flow.fill ?? -1, phaseStart, "non incollata all'inizio della fase")
+        XCTAssertEqual(flow.stageTitle, "Cerco i duplicati…", "il titolo resta onesto anche a totale nullo")
+    }
+
+    // DoD FSE-F2 — il carosello resta attivo per TUTTE le fasi, e OGNI fase ha un
+    // titolo onesto non vuoto (i rilevatori inclusi): l'unica attesa lunga resta leggibile.
+    func test_carouselAndHonestTitleForEveryStage() {
+        for stage in ScanPipelineProgress.Stage.allCases {
+            let pipeline = ScanPipelineProgress(
+                stage: stage,
+                stageProgress: AnalysisProgress(processed: 1, total: 4)
+            )
+            let flow = ScanFlowPresentation(state: .scanning(pipeline))
+            XCTAssertTrue(flow.showsCarousel, "carosello attivo in fase \(stage)")
+            XCTAssertEqual(flow.isButtonEnabled, false, "tasto non toccabile durante il lavoro (\(stage))")
+            let title = flow.stageTitle ?? ""
+            XCTAssertFalse(title.isEmpty, "titolo di fase onesto non vuoto per \(stage)")
+        }
+    }
 }
