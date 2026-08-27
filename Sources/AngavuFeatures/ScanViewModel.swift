@@ -43,12 +43,20 @@ public final class ScanViewModel {
     private let authorizer: any PhotoLibraryAuthorizing
     private let enumerator: any PhotoAssetEnumerating
     private let indexWriter: any AssetIndexWriting
+    /// FSE-A1: strumentazione di misura. Ogni fase è racchiusa in un intervallo
+    /// signpost (attribuzione dei tempi in Instruments, §7). Default reale su Apple,
+    /// no-op altrove; i test iniettano un fake che conta begin/end.
+    private let signpost: any ScanSignposting
 
-    public init(environment: AppEnvironment) {
+    public init(
+        environment: AppEnvironment,
+        signpost: any ScanSignposting = liveScanSignpost()
+    ) {
         self.environment = environment
         self.authorizer = environment.authorizer
         self.enumerator = environment.enumerator
         self.indexWriter = environment.indexWriter
+        self.signpost = signpost
     }
 
     /// Esegue la scansione completa e restituisce lo stato finale. Idempotente
@@ -67,30 +75,41 @@ public final class ScanViewModel {
             return state
         }
 
-        // FASE 1 — indice (enumerazione + mapping + upsert).
-        let raws = enumerator.enumerateRawAssets()
-        report(.indexing, AnalysisProgress(processed: 0, total: raws.count))
+        // FASE 1 — indice (enumerazione + mapping + upsert). Un solo intervallo di
+        // misura racchiude l'intera fase (FSE-A1): apre alla prima riga, chiude a
+        // qualunque via d'uscita (completato/cancellato/errore) via `measure`.
+        let indexResult: IndexOutcome = signpost.measure(.indexing) {
+            let raws = enumerator.enumerateRawAssets()
+            report(.indexing, AnalysisProgress(processed: 0, total: raws.count))
 
-        let outcome = LibraryAssetMapper.mapBatch(raws, cancellation: cancellation) { progress in
-            self.report(.indexing, progress)
+            let outcome = LibraryAssetMapper.mapBatch(raws, cancellation: cancellation) { progress in
+                self.report(.indexing, progress)
+            }
+            switch outcome {
+            case .completed(let mapped):
+                do {
+                    try indexWriter.upsert(mapped)
+                    return .completed(mapped)
+                } catch {
+                    return .failed(String(describing: error))
+                }
+            case .cancelled(let at):
+                // Cancellata: nessuna indicizzazione dei blocchi non processati.
+                return .cancelled(at)
+            case .failed(let reason, _):
+                return .failed(reason.message)
+            }
         }
 
         let assets: [LibraryAsset]
-        switch outcome {
+        switch indexResult {
         case .completed(let mapped):
-            do {
-                try indexWriter.upsert(mapped)
-                assets = mapped
-            } catch {
-                state = .failed(String(describing: error))
-                return state
-            }
+            assets = mapped
         case .cancelled(let at):
-            // Cancellata: nessuna indicizzazione dei blocchi non processati.
             state = .cancelled(at)
             return state
-        case .failed(let reason, _):
-            state = .failed(reason.message)
+        case .failed(let message):
+            state = .failed(message)
             return state
         }
 
@@ -120,9 +139,11 @@ public final class ScanViewModel {
         cancellation: CancellationToken,
         onCancelled: (AnalysisProgress) -> Void
     ) {
-        // FASE 2 — byte reali per-asset + aggregazione.
-        let resolveOutcome = LibraryFiguresReader.resolve(from: environment, cancellation: cancellation) { progress in
-            self.report(.resolvingSizes, progress)
+        // FASE 2 — byte reali per-asset + aggregazione. Intervallo di misura FSE-A1.
+        let resolveOutcome = signpost.measure(.resolvingSizes) {
+            LibraryFiguresReader.resolve(from: environment, cancellation: cancellation) { progress in
+                self.report(.resolvingSizes, progress)
+            }
         }
         let resolved: ResolvedLibrary
         switch resolveOutcome {
@@ -132,13 +153,16 @@ public final class ScanViewModel {
         }
 
         // FASE 3 — residenza per-asset reale (numero device preciso, P0-2b).
+        // Intervallo di misura FSE-A1 (candidato #1 a ottimizzazione, §1.7/FSE-G).
         report(.measuringDeviceSpace, AnalysisProgress(processed: 0, total: resolved.probeItems.count))
-        let residencyOutcome = ResidencyAggregator.measure(
-            items: resolved.probeItems,
-            probe: environment.residencyProbe,
-            cancellation: cancellation
-        ) { progress in
-            self.report(.measuringDeviceSpace, progress)
+        let residencyOutcome = signpost.measure(.measuringDeviceSpace) {
+            ResidencyAggregator.measure(
+                items: resolved.probeItems,
+                probe: environment.residencyProbe,
+                cancellation: cancellation
+            ) { progress in
+                self.report(.measuringDeviceSpace, progress)
+            }
         }
         if case .cancelled(let at) = residencyOutcome { onCancelled(at); return }
 
@@ -150,5 +174,13 @@ public final class ScanViewModel {
             measuredResidency: measurement.isDeterminate ? measurement : nil
         )
         figures = DashboardScreen(figures: figuresValue)
+    }
+
+    /// Esito della FASE 1 (indice), catturato DENTRO l'intervallo di misura così che
+    /// ogni via d'uscita chiuda l'intervallo prima che lo stato venga aggiornato.
+    private enum IndexOutcome {
+        case completed([LibraryAsset])
+        case cancelled(AnalysisProgress)
+        case failed(String)
     }
 }

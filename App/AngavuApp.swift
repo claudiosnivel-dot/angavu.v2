@@ -14,6 +14,11 @@ struct AngavuApp: App {
     /// Preferenza tema persistita; `Sistema` finché l'utente non sceglie.
     @AppStorage(ThemePreference.storageKey) private var theme: ThemeChoice = .system
 
+    /// FSE-A1: telemetria d'app. Costruita all'avvio del processo (l'App `@main` è
+    /// istanziata una sola volta): il subscriber MetricKit è registrato qui, mai in
+    /// una schermata secondaria. Ritenuto per l'intera vita del processo.
+    private let telemetry = AppTelemetry()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
