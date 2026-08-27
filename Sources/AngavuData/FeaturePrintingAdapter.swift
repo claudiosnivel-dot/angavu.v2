@@ -25,7 +25,11 @@ import Vision
 public final class VisionFeaturePrinter: FeaturePrinting {
     /// Cache id → feature print. Il valore interno `nil` memorizza "già tentato ma
     /// non calcolabile", per non ripetere la richiesta a ogni confronto.
+    /// FSE-D2 — protetta da lock: sotto esecuzione CONCORRENTE (pre-warm parallelo dei
+    /// feature print) più worker leggono/scrivono la mappa. La correttezza del
+    /// dizionario vive qui; la validazione a runtime è on-device con Thread Sanitizer (§7).
     private var cache: [String: VNFeaturePrintObservation?] = [:]
+    private let cacheLock = NSLock()
     private let imageProvider: any DownscaledImageProviding
 
     /// FSE-C1: default al provider ridimensionato reale. Vision normalizza comunque il
@@ -48,18 +52,43 @@ public final class VisionFeaturePrinter: FeaturePrinting {
         return distance
     }
 
-    /// Feature print dell'asset (con cache). `nil` se i pixel non sono leggibili
-    /// on-device o Vision non produce un'osservazione.
+    /// FSE-D2 — Pre-calcola e mette in cache il feature print dell'asset, così il
+    /// clustering greedy successivo trova la cache calda. Chiamato in PARALLELO dal
+    /// motore concorrente (pre-warm), quindi la cache è protetta da lock.
+    public func prepare(for asset: LibraryAsset) throws {
+        _ = try featurePrint(for: asset)
+    }
+
+    /// Feature print dell'asset (con cache thread-safe). `nil` se i pixel non sono
+    /// leggibili on-device o Vision non produce un'osservazione.
     private func featurePrint(for asset: LibraryAsset) throws -> VNFeaturePrintObservation? {
-        if let cached = cache[asset.id] {
+        cacheLock.lock()
+        let cached = cache[asset.id]
+        cacheLock.unlock()
+        if let cached {
             return cached
         }
+
+        // Calcolo Vision FUORI dal lock: serializzarlo annullerebbe il parallelismo di
+        // FSE-D2. Due worker sullo stesso asset possono calcolare entrambi nella
+        // finestra fra miss e store — innocuo (stesso valore deterministico, l'ultimo
+        // scrive). Un `throw` propaga senza scrivere in cache (si ritenta, come prima).
+        let observation = try computeFeaturePrint(for: asset)
+
+        cacheLock.lock()
+        cache[asset.id] = .some(observation)
+        cacheLock.unlock()
+        return observation
+    }
+
+    /// Calcolo puro del feature print (nessun accesso alla cache): isolato così il
+    /// lavoro Vision resta fuori dal lock.
+    private func computeFeaturePrint(for asset: LibraryAsset) throws -> VNFeaturePrintObservation? {
         let handle = IdentifierAssetHandle(asset.id)
         guard
             let image = imageProvider.downscaledImage(for: handle, size: .featurePrint),
             let cgImage = image.resolvedCGImage
         else {
-            cache[asset.id] = .some(nil)
             return nil
         }
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
@@ -67,9 +96,7 @@ public final class VisionFeaturePrinter: FeaturePrinting {
         try handler.perform([request])
         // `results` di questa richiesta è già [VNFeaturePrintObservation]?: niente
         // cast (un `as?` qui sarebbe "always succeeds" → errore con warnings-as-errors).
-        let observation = request.results?.first
-        cache[asset.id] = .some(observation)
-        return observation
+        return request.results?.first
     }
 }
 #endif

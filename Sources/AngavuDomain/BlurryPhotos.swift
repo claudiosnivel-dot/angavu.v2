@@ -81,27 +81,41 @@ public enum BlurClassification {
     /// La sfocatura ha senso solo per le **foto**: i video sono esclusi a monte
     /// (una "nitidezza fotografica" del video non è definita qui). L'ordine dei
     /// blurry rispetta l'ordine d'ingresso dei candidati (deterministico).
+    ///
+    /// FSE-D2 — La nitidezza per foto è INDIPENDENTE fra asset: si calcola con un motore
+    /// per-item iniettabile (`PerItemAnalysis`, default seriale), poi si filtra in ordine
+    /// d'input. Col motore concorrente ogni nitidezza gira in parallelo e il risultato è
+    /// IDENTICO al seriale (stesso predicato, stesso ordine) — AC-FSE-D2-2.
     public static func blurry(
         among assets: [LibraryAsset],
         scoring: SharpnessScoring,
         threshold: BlurThreshold,
         chunkSize: Int = 64,
         cancellation: CancellationToken,
-        progress: (AnalysisProgress) -> Void = { _ in }
+        progress: (AnalysisProgress) -> Void = { _ in },
+        analysis: PerItemAnalysis? = nil
     ) -> AnalysisOutcome<[LibraryAsset]> {
         let photos = assets.filter { $0.kind == .photo }
-        let engine = ChunkedAnalysis<LibraryAsset, [LibraryAsset]>(
-            chunkSize: chunkSize,
-            initial: []
-        ) { blurry, asset in
-            var next = blurry
-            if try isBlurry(asset, scoring: scoring, threshold: threshold) {
-                next.append(asset)
-            }
-            return next
+        let engine = analysis ?? .serial(chunkSize: chunkSize)
+        let outcome = engine.map(photos, cancellation: cancellation, progress: progress) { asset in
+            BlurFlag(asset: asset, isBlurry: try isBlurry(asset, scoring: scoring, threshold: threshold))
         }
-        return engine.run(over: photos, cancellation: cancellation, progress: progress)
+        switch outcome {
+        case .completed(let flags):
+            return .completed(flags.filter { $0.isBlurry }.map { $0.asset })
+        case .cancelled(let at):
+            return .cancelled(at: at)
+        case .failed(let reason, let at):
+            return .failed(reason: reason, at: at)
+        }
     }
+}
+
+/// Esito per-asset della nitidezza (FSE-D2): l'asset e se è sfocato. Prodotto in
+/// parallelo dal motore per-item, poi filtrato in ordine d'input.
+private struct BlurFlag: Equatable {
+    let asset: LibraryAsset
+    let isBlurry: Bool
 }
 
 // MARK: - T-071 — Aesthetics score come progressive enhancement iOS 18

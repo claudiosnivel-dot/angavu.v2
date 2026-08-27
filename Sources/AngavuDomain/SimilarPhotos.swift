@@ -28,6 +28,19 @@ public protocol FeaturePrinting {
     /// senza feature print non viene mai dichiarato simile per via semantica: il
     /// clustering ricadrà sul dHash (T-041), mai su un falso "via libera".
     func distance(between lhs: LibraryAsset, and rhs: LibraryAsset) throws -> Float?
+
+    /// FSE-D2 — Pre-calcola (e mette in cache) il feature print per-asset, così il
+    /// clustering greedy successivo trova la cache calda. Consente di parallelizzare
+    /// la fase DOMINANTE (Vision) fuori dal loop ordine-dipendente. Default no-op: un
+    /// provider senza cache (o un fake) non fa nulla e resta corretto — nessun cambio
+    /// agli AC già verdi.
+    func prepare(for asset: LibraryAsset) throws
+}
+
+public extension FeaturePrinting {
+    /// Default: nessun pre-calcolo. I provider con cache (adapter Vision reale) lo
+    /// sovrascrivono per scaldarla in parallelo (cache thread-safe, FSE-D2).
+    func prepare(for asset: LibraryAsset) throws {}
 }
 
 /// Interrogazione di dominio della distanza semantica fra due asset. È un seam
@@ -125,14 +138,43 @@ public enum SimilarClustering {
     /// confine di un blocco lascia i candidati residui **non processati** (AC-041-3),
     /// e l'esito porta con sé il progresso raggiunto. La partizione include anche i
     /// singleton (un cluster da un solo asset): li consuma T-043.
+    ///
+    /// FSE-D2 — Il clustering greedy è ORDINE-DIPENDENTE (l'appartenenza di un
+    /// candidato dipende dai cluster già formati) → resta SERIALE: il determinismo e
+    /// gli AC di T-041 sono invariati. La fase DOMINANTE parallelizzabile è il calcolo
+    /// dei feature print per-asset, indipendente fra asset: un pre-warm col motore
+    /// per-item iniettabile (`PerItemAnalysis`) scalda la cache del provider (in
+    /// parallelo col motore concorrente) PRIMA del loop seriale. Per un provider senza
+    /// cache (fake) è un no-op → i cluster restano IDENTICI col motore seriale o
+    /// concorrente (AC-FSE-D2-1). Il guadagno reale (Vision in parallelo) è device-only
+    /// (§7); la cache dell'adapter reale è resa thread-safe.
     public static func clusters(
         of candidates: [SimilarityCandidate],
         provider: FeaturePrinting,
         thresholds: SimilarityThresholds,
         chunkSize: Int = 64,
         cancellation: CancellationToken,
-        progress: (AnalysisProgress) -> Void = { _ in }
+        progress: (AnalysisProgress) -> Void = { _ in },
+        analysis: PerItemAnalysis? = nil
     ) -> AnalysisOutcome<[SimilarCluster]> {
+        let perItem = analysis ?? .serial(chunkSize: chunkSize)
+
+        // Fase indipendente: pre-warm dei feature print per-asset (no-op sui fake).
+        // Progress non utente (warm-up); la cancellazione durante il warm è propagata.
+        let warm = perItem.map(candidates, cancellation: cancellation) { candidate -> PreparedFeaturePrint in
+            try provider.prepare(for: candidate.asset)
+            return PreparedFeaturePrint(id: candidate.asset.id)
+        }
+        switch warm {
+        case .cancelled(let at):
+            return .cancelled(at: at)
+        case .failed(let reason, let at):
+            return .failed(reason: reason, at: at)
+        case .completed:
+            break
+        }
+
+        // Clustering greedy: ordine-dipendente → SERIALE (determinismo invariato).
         let engine = ChunkedAnalysis<SimilarityCandidate, [SimilarCluster]>(
             chunkSize: chunkSize,
             initial: []
@@ -151,6 +193,13 @@ public enum SimilarClustering {
         }
         return engine.run(over: candidates, cancellation: cancellation, progress: progress)
     }
+}
+
+/// Segnaposto dell'esito di pre-warm del feature print (FSE-D2): porta solo l'id
+/// (il feature print vive nella cache del provider). Serve al motore per-item per un
+/// output `Equatable` deterministico.
+private struct PreparedFeaturePrint: Equatable {
+    let id: String
 }
 
 // MARK: - T-042 — Punteggio qualità per "tieni la migliore"
@@ -204,12 +253,28 @@ public enum ClusterQualityRanking {
     /// Ordina i membri del cluster dal **migliore al peggiore** per punteggio
     /// aggregato. A parità di punteggio l'ordine è stabile per `id` crescente
     /// (deterministico), così il keep di un cluster non dipende dall'ordine d'ingresso.
+    ///
+    /// FSE-D2 — Il punteggio di qualità è INDIPENDENTE per membro: si calcola con un
+    /// motore per-item iniettabile (`PerItemAnalysis`, default seriale), poi si ordina
+    /// (regola pura, tiebreak per id). Col motore concorrente ogni punteggio gira in
+    /// parallelo e il ranking è IDENTICO al seriale (stessi punteggi, stesso ordine) —
+    /// così keep/removable non dipendono dalla taglia del parallelismo (AC-FSE-D2-1).
     public static func ranked(
         _ cluster: SimilarCluster,
-        scoring: QualityScoring
+        scoring: QualityScoring,
+        analysis: PerItemAnalysis = .serial()
     ) throws -> [ScoredCandidate] {
-        let scored = try cluster.members.map { member in
+        let outcome = analysis.map(cluster.members, cancellation: CancellationToken()) { member in
             ScoredCandidate(candidate: member, score: try scoring.score(for: member.asset))
+        }
+        let scored: [ScoredCandidate]
+        switch outcome {
+        case .completed(let value):
+            scored = value
+        case .failed(let reason, _):
+            throw reason
+        case .cancelled:
+            throw AnalysisFailure("ranking qualità cancellato")   // token fresco → non accade
         }
         return scored.sorted { lhs, rhs in
             if lhs.score.overall != rhs.score.overall {
@@ -246,9 +311,10 @@ public enum SimilarDeletionProposal {
     /// Restituisce `nil` per un cluster vuoto (nessun keep possibile).
     public static func compose(
         for cluster: SimilarCluster,
-        scoring: QualityScoring
+        scoring: QualityScoring,
+        analysis: PerItemAnalysis = .serial()
     ) throws -> DeletionProposal? {
-        let ranked = try ClusterQualityRanking.ranked(cluster, scoring: scoring)
+        let ranked = try ClusterQualityRanking.ranked(cluster, scoring: scoring, analysis: analysis)
         guard let best = ranked.first else { return nil }
         return DeletionProposal(
             keep: best.candidate,
@@ -257,10 +323,12 @@ public enum SimilarDeletionProposal {
     }
 
     /// Comodità: una proposta per ogni cluster (i cluster vuoti sono omessi).
+    /// FSE-D2 — `analysis` inoltrato al ranking di qualità (parallelo su richiesta).
     public static func proposals(
         for clusters: [SimilarCluster],
-        scoring: QualityScoring
+        scoring: QualityScoring,
+        analysis: PerItemAnalysis = .serial()
     ) throws -> [DeletionProposal] {
-        try clusters.compactMap { try compose(for: $0, scoring: scoring) }
+        try clusters.compactMap { try compose(for: $0, scoring: scoring, analysis: analysis) }
     }
 }

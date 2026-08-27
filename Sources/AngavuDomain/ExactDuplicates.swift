@@ -91,6 +91,14 @@ public struct ExactDuplicateCluster: Equatable, Sendable {
     }
 }
 
+/// Esito per-candidato dell'hashing (FSE-D2): il candidato e il suo digest (o `nil`
+/// se non hashabile on-device). Prodotto in parallelo dal motore per-item, poi
+/// raggruppato in ordine d'input.
+private struct HashedCandidate: Equatable {
+    let item: SizedAsset
+    let digest: AssetDigest?
+}
+
 /// Clustering puro dei duplicati esatti a partire dai gruppi candidati.
 public enum ExactDuplicateClustering {
     /// Hasha i candidati a blocchi cancellabili (T-004) e forma i cluster di asset
@@ -100,31 +108,37 @@ public enum ExactDuplicateClustering {
     /// hashati (AC-031-2): l'esito porta con sé il progresso raggiunto.
     ///
     /// L'ordine dei cluster è deterministico: per dimensione byte, poi per digest.
+    ///
+    /// FSE-D2 — L'hashing è INDIPENDENTE per candidato: si calcola con un motore
+    /// per-item iniettabile (`PerItemAnalysis`, default seriale), poi si raggruppa per
+    /// digest identico (riduzione PURA che preserva l'ordine d'input). Col motore
+    /// concorrente ogni digest gira in parallelo e i cluster sono IDENTICI al seriale
+    /// (stessi digest, stesso ordine di raggruppamento) — AC-FSE-D2-1.
     public static func clusters(
         from groups: [SizeCandidateGroup],
         hasher: AssetContentHashing,
         chunkSize: Int = 64,
         cancellation: CancellationToken,
-        progress: (AnalysisProgress) -> Void = { _ in }
+        progress: (AnalysisProgress) -> Void = { _ in },
+        analysis: PerItemAnalysis? = nil
     ) -> AnalysisOutcome<[ExactDuplicateCluster]> {
         let candidates = groups.flatMap { $0.assets }
+        let engine = analysis ?? .serial(chunkSize: chunkSize)
 
-        // Il motore cancellabile (T-004) accumula i candidati per digest, un
-        // blocco alla volta, con checkpoint di cancellazione fra i blocchi.
-        let engine = ChunkedAnalysis<SizedAsset, [AssetDigest: [SizedAsset]]>(
-            chunkSize: chunkSize,
-            initial: [:]
-        ) { accumulator, item in
-            var next = accumulator
-            if let digest = try hasher.digest(for: item.asset) {
-                next[digest, default: []].append(item)
-            }
-            return next
+        // Fase indipendente: il digest di ogni candidato, in parallelo o in serie.
+        let outcome = engine.map(candidates, cancellation: cancellation, progress: progress) { item in
+            HashedCandidate(item: item, digest: try hasher.digest(for: item.asset))
         }
 
-        let outcome = engine.run(over: candidates, cancellation: cancellation, progress: progress)
         switch outcome {
-        case .completed(let byDigest):
+        case .completed(let hashed):
+            // Riduzione pura ordine-preservante: identica alla piega seriale storica.
+            var byDigest: [AssetDigest: [SizedAsset]] = [:]
+            for entry in hashed {
+                if let digest = entry.digest {
+                    byDigest[digest, default: []].append(entry.item)
+                }
+            }
             return .completed(makeClusters(byDigest))
         case .cancelled(let at):
             return .cancelled(at: at)
