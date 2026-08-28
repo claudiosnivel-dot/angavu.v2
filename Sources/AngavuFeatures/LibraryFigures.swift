@@ -95,15 +95,18 @@ enum LibraryFiguresReader {
                 )
             )
         }
-        // P0-2/P0-3: il device-now è limitato dal tetto di realtà (capacità/spazio
-        // libero del device) e, se la residenza non è determinabile, sostituito da un
-        // caveat — mai un numero device gonfiato (il bug "139 GB su un 128 GB").
-        let reclaimable = ReclaimableSpaceCalculator.reclaimable(
+        // P0-2/P0-3 + FSE-G1 (strategia B): la policy della residenza è il punto di
+        // decisione unico. Numero device SOLO da misura reale e completa; misura
+        // incompleta ⇒ caveat; misura assente ⇒ rispetta la determinabilità dell'ambiente
+        // (optimize off = device==libreria; optimize on = caveat, finché il passo
+        // differito non porta la misura reale). Mai un numero gonfiato ("139 GB su 128").
+        let reclaimable = ResidencyPolicy.reclaimable(
+            strategy: .deferred,
+            measurement: measuredResidency,
             from: deleted,
             optimizeStorage: environment.deviceStorage.optimizeStorageStatus(),
             deviceCapacity: environment.deviceCapacity.deviceCapacity(),
-            residencyDeterminate: environment.deviceStorage.residencyIsDeterminate(),
-            measuredResidency: measuredResidency
+            residencyDeterminate: environment.deviceStorage.residencyIsDeterminate()
         )
 
         return LibraryFigures(
@@ -183,12 +186,15 @@ enum LibraryFiguresReader {
         measuredResidency: ResidencyMeasurement? = nil
     ) -> LibraryFigures {
         let aggregate = DashboardAggregator.aggregate(resolved.sized)
-        let reclaimable = ReclaimableSpaceCalculator.reclaimable(
+        // FSE-G1 (strategia B): policy della residenza come punto di decisione unico
+        // (vedi `read`). Numero device solo da misura reale e completa; altrimenti caveat.
+        let reclaimable = ResidencyPolicy.reclaimable(
+            strategy: .deferred,
+            measurement: measuredResidency,
             from: resolved.deleted,
             optimizeStorage: environment.deviceStorage.optimizeStorageStatus(),
             deviceCapacity: environment.deviceCapacity.deviceCapacity(),
-            residencyDeterminate: environment.deviceStorage.residencyIsDeterminate(),
-            measuredResidency: measuredResidency
+            residencyDeterminate: environment.deviceStorage.residencyIsDeterminate()
         )
         return LibraryFigures(aggregate: aggregate, reclaimable: reclaimable, access: resolved.access)
     }

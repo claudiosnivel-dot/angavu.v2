@@ -27,6 +27,9 @@ public enum ScanSignpostPhase: String, CaseIterable, Sendable {
     /// Risoluzione dei byte reali per-asset + aggregazione per categoria.
     case resolvingSizes
     /// Misura della residenza per-asset (spazio device liberabile ORA, P0-2b).
+    /// FSE-G1 — NON è più una fase della barra unificata: la misura è differita
+    /// (strategia B, `DashboardViewModel.measureResidency`). La fase resta un intervallo
+    /// NOMINATO così Instruments attribuisce il tempo del passo differito on-device.
     case measuringDeviceSpace
     /// FSE-F1 — rilevatori di categoria, ognuno un intervallo NOMINATO così Instruments
     /// attribuisce il tempo alla singola categoria (i pesanti — duplicati/simili/sfocate
@@ -39,11 +42,12 @@ public enum ScanSignpostPhase: String, CaseIterable, Sendable {
 
     /// Fase di misura corrispondente alla fase della barra (allineamento 1:1). Una sola
     /// fonte per la mappatura: la scansione misura ESATTAMENTE le fasi che l'utente vede.
+    /// FSE-G1: `measuringDeviceSpace` non è più una fase della barra (residenza differita),
+    /// quindi non ha una `Stage` di origine — resta usabile direttamente dal passo differito.
     public init(_ stage: ScanPipelineProgress.Stage) {
         switch stage {
         case .indexing: self = .indexing
         case .resolvingSizes: self = .resolvingSizes
-        case .measuringDeviceSpace: self = .measuringDeviceSpace
         case .analyzingScreenshots: self = .analyzingScreenshots
         case .analyzingExactDuplicates: self = .analyzingExactDuplicates
         case .analyzingSimilarPhotos: self = .analyzingSimilarPhotos

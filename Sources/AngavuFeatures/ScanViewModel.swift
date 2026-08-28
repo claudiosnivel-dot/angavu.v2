@@ -126,10 +126,11 @@ public final class ScanViewModel {
             return state
         }
 
-        // FASI 2-3 — numeri veri (byte per-asset + residenza device), stessa barra.
-        // Un fallimento QUI non annulla la scansione: l'indice è scritto (fatto reale),
-        // i numeri restano non calcolati e la dashboard li ricalcolerà. Una
-        // cancellazione, invece, è volontà dell'utente → esito `cancelled`.
+        // FASE 2 — numeri veri di libreria (byte per-asset + aggregazione), stessa barra.
+        // La residenza device è differita (FSE-G1, strategia B): non è più una fase
+        // obbligatoria. Un fallimento QUI non annulla la scansione: l'indice è scritto
+        // (fatto reale), i numeri restano non calcolati e la dashboard li ricalcolerà.
+        // Una cancellazione, invece, è volontà dell'utente → esito `cancelled`.
         computeFigures(cancellation: cancellation) { cancelledAt in
             self.state = .cancelled(cancelledAt)
         }
@@ -154,10 +155,19 @@ public final class ScanViewModel {
         state = .scanning(ScanPipelineProgress(stage: stage, stageProgress: progress))
     }
 
-    /// FASI 2-3: risolve i byte per-asset e misura la residenza device, riportando il
+    /// FASE 2: risolve i byte per-asset (aggregazione per categoria) riportando il
     /// progresso sull'unica barra, e compone i `DashboardScreen` in `figures`. Su
     /// cancellazione invoca `onCancelled` col progresso raggiunto (l'esito diventa
     /// `cancelled`); su errore lascia `figures == nil` senza abortire la scansione.
+    ///
+    /// FSE-G1 (strategia B) — la MISURA della residenza device NON è più una fase
+    /// obbligatoria della scansione: è I/O pesante su ogni originale (candidato #1 a
+    /// ottimizzazione, §1.7) e non serve ai numeri di libreria/categoria, solo alla
+    /// cifra «liberabile sul telefono ORA». I `figures` atterrano col CAVEAT device
+    /// (`measuredResidency: nil` ⇒ `ReclaimableSpaceCalculator` mostra il caveat quando
+    /// optimize-storage è attivo; device == libreria quando è disattivo, numero onesto
+    /// senza probe). La misura reale si completa DOPO, in background, dal
+    /// `DashboardViewModel.measureResidency`, e aggiorna la cifra quando è reale e completa.
     private func computeFigures(
         cancellation: CancellationToken,
         onCancelled: (AnalysisProgress) -> Void
@@ -175,26 +185,12 @@ public final class ScanViewModel {
         case .failed: figures = nil; return
         }
 
-        // FASE 3 — residenza per-asset reale (numero device preciso, P0-2b).
-        // Intervallo di misura FSE-A1 (candidato #1 a ottimizzazione, §1.7/FSE-G).
-        report(.measuringDeviceSpace, AnalysisProgress(processed: 0, total: resolved.probeItems.count))
-        let residencyOutcome = signpost.measure(.measuringDeviceSpace) {
-            ResidencyAggregator.measure(
-                items: resolved.probeItems,
-                probe: environment.residencyProbe,
-                cancellation: cancellation
-            ) { progress in
-                self.report(.measuringDeviceSpace, progress)
-            }
-        }
-        if case .cancelled(let at) = residencyOutcome { onCancelled(at); return }
-
-        // Misura reale e completa ⇒ numero device preciso; altrimenti caveat onesto.
-        let measurement = ResidencyAggregator.measurement(from: residencyOutcome)
+        // Atterraggio col caveat device (residenza differita, FSE-G1). I numeri di
+        // libreria e categoria sono già pronti qui: la dashboard atterra subito.
         let figuresValue = LibraryFiguresReader.figures(
             from: resolved,
             environment: environment,
-            measuredResidency: measurement.isDeterminate ? measurement : nil
+            measuredResidency: nil
         )
         figures = DashboardScreen(figures: figuresValue)
     }

@@ -88,7 +88,6 @@ public struct ScanFlowPresentation: Equatable, Sendable {
         switch stage {
         case .indexing: return "Indicizzo…"
         case .resolvingSizes: return "Calcolo i byte…"
-        case .measuringDeviceSpace: return "Spazio sul telefono…"
         case .analyzingScreenshots: return "Cerco gli screenshot…"
         case .analyzingExactDuplicates: return "Cerco i duplicati…"
         case .analyzingSimilarPhotos: return "Confronto le foto simili…"

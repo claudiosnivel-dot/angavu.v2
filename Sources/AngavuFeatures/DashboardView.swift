@@ -58,12 +58,25 @@ public struct DashboardView: View {
             // (navigazione/back o ritorno dal background), lo si applica senza
             // ricalcolare; altrimenti si legge FUORI dal main thread e si memorizza.
             // «Riprova»/ricalcolo espliciti invalidano la cache a monte.
-            if case .ready = vm.state { return }
-            if let cached: DashboardScreen = store.value(for: .dashboard) {
-                vm.present(cached)
-            } else if case .idle = vm.state {
-                if case .ready(let screen) = await vm.load() {
+            if case .idle = vm.state {
+                if let cached: DashboardScreen = store.value(for: .dashboard) {
+                    vm.present(cached)
+                } else if case .ready(let screen) = await vm.load() {
                     store.set(screen, for: .dashboard)
+                }
+            }
+
+            // FSE-G1 (strategia B) — RESIDENZA DIFFERITA. La scansione atterra col
+            // caveat device (la misura per-asset è I/O pesante, fuori dal percorso
+            // obbligatorio). Se la cifra device è ancora un caveat (optimize-storage
+            // attivo, misura non ancora fatta), la si misura ORA in background e si
+            // aggiorna la dashboard col numero reale, ricachandolo — così tornare sulla
+            // schermata mostra il numero, non di nuovo il caveat. `measureResidency` gira
+            // off-main a blocchi cancellabili (nessun freeze). Copertura (L-COL-006):
+            // l'aggregazione è coperta dall'oracolo; il probe PhotoKit reale è device-only.
+            if case .ready(let screen) = vm.state, screen.reclaimable.deviceSpaceIsIndeterminate {
+                if case .ready(let updated) = await vm.measureResidency() {
+                    store.set(updated, for: .dashboard)
                 }
             }
         }

@@ -115,9 +115,12 @@ final class ScanSignpostTests: XCTestCase {
     /// Ordine atteso delle fasi in una scansione completa, ognuna aperta e poi chiusa
     /// prima della successiva (nessuna sovrapposizione). FSE-F1 estende la scansione
     /// unificata alle cinque fasi dei rilevatori (allineamento 1:1 con la barra): la
-    /// telemetria le misura tutte, in ordine di categoria.
+    /// telemetria le misura tutte, in ordine di categoria. FSE-G1 (strategia B): la
+    /// MISURA della residenza (`measuringDeviceSpace`) è uscita dalla barra (differita),
+    /// quindi non compare più nella sequenza della scansione — la si misura, differita,
+    /// dal passo di dashboard.
     private let expectedPhases: [ScanSignpostPhase] = [
-        .indexing, .resolvingSizes, .measuringDeviceSpace,
+        .indexing, .resolvingSizes,
         .analyzingScreenshots, .analyzingExactDuplicates, .analyzingSimilarPhotos,
         .analyzingBlurryPhotos, .analyzingLargeOldVideos
     ]

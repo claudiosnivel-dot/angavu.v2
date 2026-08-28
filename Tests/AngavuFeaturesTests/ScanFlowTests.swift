@@ -35,14 +35,22 @@ private struct StubDeviceStorage: DeviceStorageInspecting {
     func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 { libraryBytes }
 }
 
-/// Probe di residenza che restituisce una FRAZIONE dei byte libreria per asset:
-/// simula originali in parte su iCloud (device < libreria), così il test verifica
-/// che il numero device MISURATO guidi il recuperabile.
-private struct FractionResidencyProbe: AssetResidencyProbing {
-    let numerator: Int64
-    let denominator: Int64
+/// Come l'adapter reale con optimize-storage ATTIVO: la residenza per-asset non è
+/// determinabile a buon mercato → la dashboard mostra il CAVEAT finché una misura
+/// reale e completa (passo differito FSE-G1) non arriva.
+private struct OptimizeOnDeviceStorage: DeviceStorageInspecting {
+    func optimizeStorageStatus() -> ICloudOptimizeStorage { .enabled }
+    func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 { libraryBytes }
+    func residencyIsDeterminate() -> Bool { false }
+}
+
+/// Probe di residenza che REGISTRA quante volte è stato sondato: sotto la strategia B
+/// la scansione NON deve sondare la residenza (è differita), quindi `probedCount` resta 0.
+private final class RecordingResidencyProbe: AssetResidencyProbing {
+    private(set) var probedCount = 0
     func deviceResidentBytes(forLocalIdentifier id: String, libraryBytes: Int64) -> Int64 {
-        libraryBytes * numerator / denominator
+        probedCount += 1
+        return libraryBytes / 2
     }
 }
 
@@ -62,7 +70,8 @@ private func makeEnv(
     access: PhotoAccess,
     raws: [RawEnumeratedAsset],
     index: RecordingIndex,
-    residencyProbe: any AssetResidencyProbing = AssumeResidentResidencyProbe()
+    residencyProbe: any AssetResidencyProbing = AssumeResidentResidencyProbe(),
+    deviceStorage: any DeviceStorageInspecting = StubDeviceStorage()
 ) -> AppEnvironment {
     AppEnvironment(
         authorizer: StubAuthorizer(access: access),
@@ -70,7 +79,7 @@ private func makeEnv(
         indexReader: index,
         indexWriter: index,
         byteResolver: StubByteResolver(),
-        deviceStorage: StubDeviceStorage(),
+        deviceStorage: deviceStorage,
         residencyProbe: residencyProbe,
         videoExporter: NoopVideoExporter(),
         videoSpecProvider: NoopVideoSpecProvider()
@@ -143,27 +152,32 @@ final class ScanFlowTests: XCTestCase {
         XCTAssertEqual(figures.reclaimable.reclaimableLibrarySpace, 3 * expectedLibraryBytesPerPhoto)
     }
 
-    // La residenza per-asset MISURATA (fase 3) guida il numero device: con originali
-    // in parte su iCloud (probe = metà dei byte libreria) il device liberabile ORA è
-    // la metà della libreria, e la misura è determinata (numero reale, non caveat).
-    func test_measuredResidencyDrivesHonestDeviceNumber() async throws {
+    // FSE-G1 (strategia B) — la residenza device è DIFFERITA, fuori dal percorso
+    // obbligatorio: con optimize-storage attivo la scansione atterra col CAVEAT (numeri
+    // di libreria pronti, cifra device rimandata) e NON sonda la residenza. Il numero
+    // device reale arriva DOPO, dal passo differito (coperto da `ResidencyWiringTests`).
+    func test_deferredResidency_scanLandsWithCaveatAndDoesNotProbe() async throws {
         let index = RecordingIndex()
+        let probe = RecordingResidencyProbe()
         let env = makeEnv(
             access: .full,
             raws: [photo("A"), photo("B")],
             index: index,
-            residencyProbe: FractionResidencyProbe(numerator: 1, denominator: 2)
+            residencyProbe: probe,
+            deviceStorage: OptimizeOnDeviceStorage()
         )
         let vm = ScanViewModel(environment: env)
 
-        _ = await vm.run(cancellation: CancellationToken())
-        let figures = try XCTUnwrap(vm.figures)
+        let final = await vm.run(cancellation: CancellationToken())
+        XCTAssertEqual(final, .completed(indexed: 2, partialCount: false),
+                       "la scansione si completa senza attendere la residenza (AC-FSE-G1-3)")
 
+        let figures = try XCTUnwrap(vm.figures)
         let library = 2 * expectedLibraryBytesPerPhoto
-        XCTAssertEqual(figures.reclaimable.reclaimableLibrarySpace, library)
-        XCTAssertEqual(figures.reclaimable.reclaimableDeviceSpaceNow, library / 2)
-        XCTAssertEqual(figures.reclaimable.deviceSpaceIsDeterminate, true,
-                       "una misura per-asset completa è un numero reale, non un caveat")
+        XCTAssertEqual(figures.reclaimable.reclaimableLibrarySpace, library, "i numeri di libreria ci sono già")
+        XCTAssertTrue(figures.reclaimable.deviceSpaceIsIndeterminate,
+                      "atterraggio B: caveat device, mai un numero fabbricato prima della misura")
+        XCTAssertEqual(probe.probedCount, 0, "la scansione non sonda la residenza: è differita")
     }
 
     // Una scansione cancellata non lascia numeri veri da cachare: la dashboard, se

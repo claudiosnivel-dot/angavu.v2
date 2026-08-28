@@ -3,9 +3,10 @@ import AngavuDomain
 
 // Oracolo del progresso UNIFICATO della scansione: la barra unica non arretra mai
 // passando di fase e la frazione è composta dalle frazioni REALI per-fase (mai
-// fabbricata). FSE-F1: OTTO fasi equipesate — le tre dei numeri veri (indice → byte →
-// residenza) e le cinque dei RILEVATORI di categoria (screenshot, duplicati, simili,
-// sfocate, grandi/vecchi), calcolati nella stessa passata.
+// fabbricata). FSE-F1: fasi equipesate — i numeri veri (indice → byte) e le cinque dei
+// RILEVATORI di categoria (screenshot, duplicati, simili, sfocate, grandi/vecchi),
+// calcolati nella stessa passata. FSE-G1 (strategia B): la MISURA della residenza device
+// è uscita dalla barra (differita, fuori dal percorso obbligatorio) → SETTE fasi.
 
 final class ScanPipelineProgressTests: XCTestCase {
 
@@ -31,13 +32,14 @@ final class ScanPipelineProgressTests: XCTestCase {
         XCTAssertEqual(progress.fraction, 1.0, accuracy: 0.0001)
     }
 
-    // La fase dei numeri (residenza) NON è più la fine: restano le cinque fasi dei
-    // rilevatori. Fine della residenza = 3/8, non 1 (nessuna barra "finita" prematura).
-    func test_measuringDeviceSpaceIsNotTheEnd() {
+    // La fase dei numeri (byte) NON è la fine: restano le cinque fasi dei rilevatori.
+    // Fine di `resolvingSizes` = 2/7, non 1 (nessuna barra "finita" prematura). FSE-G1:
+    // la residenza non è più una fase della barra (differita).
+    func test_resolvingSizesIsNotTheEnd() {
         let progress = ScanPipelineProgress(
-            stage: .measuringDeviceSpace, stageProgress: AnalysisProgress(processed: 10, total: 10)
+            stage: .resolvingSizes, stageProgress: AnalysisProgress(processed: 10, total: 10)
         )
-        XCTAssertEqual(progress.fraction, 3.0 / stageCount, accuracy: 0.0001)
+        XCTAssertEqual(progress.fraction, 2.0 / stageCount, accuracy: 0.0001)
         XCTAssertLessThan(progress.fraction, 1.0)
     }
 
@@ -73,8 +75,9 @@ final class ScanPipelineProgressTests: XCTestCase {
             stage: .analyzingSimilarPhotos, stageProgress: AnalysisProgress(processed: 0, total: 40)
         )
         XCTAssertEqual(endOfDuplicates.fraction, startOfSimilar.fraction, accuracy: 0.0001)
-        // Duplicati è la 5ª fase (indice 4): la sua fine è 5/8.
-        XCTAssertEqual(endOfDuplicates.fraction, 5.0 / stageCount, accuracy: 0.0001)
+        // FSE-G1: duplicati è ora la 4ª fase (indice 3, residenza fuori dalla barra):
+        // la sua fine è 4/7.
+        XCTAssertEqual(endOfDuplicates.fraction, 4.0 / stageCount, accuracy: 0.0001)
     }
 
     // Monotonìa al confine: fine di una fase e inizio della successiva danno lo
@@ -91,7 +94,7 @@ final class ScanPipelineProgressTests: XCTestCase {
     }
 
     // La frazione è composta dalla frazione REALE della fase, non fabbricata: metà
-    // della seconda fase (di tre) = una fase intera + mezza = 1.5/3.
+    // della seconda fase = una fase intera + mezza = 1.5/N (N = numero di fasi).
     func test_fractionComposesRealStageFraction() {
         let progress = ScanPipelineProgress(
             stage: .resolvingSizes, stageProgress: AnalysisProgress(processed: 1, total: 2)
@@ -105,7 +108,7 @@ final class ScanPipelineProgressTests: XCTestCase {
         let progress = ScanPipelineProgress(
             stage: .indexing, stageProgress: AnalysisProgress(processed: 0, total: 0)
         )
-        // fase indexing completa → siamo a 1/3.
+        // fase indexing completa → siamo a 1/N.
         XCTAssertEqual(progress.fraction, 1.0 / stageCount, accuracy: 0.0001)
     }
 }
