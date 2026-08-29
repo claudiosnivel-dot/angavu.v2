@@ -23,6 +23,11 @@ public struct HomeView: View {
     @State private var goToDashboard = false
     @State private var cancellation = CancellationToken()
     @State private var scanTask: Task<Void, Never>?
+    // FSE-I1: il ripristino al lancio è UNA-TANTUM (cold relaunch), non a ogni comparsa
+    // della Home: senza questo guardiano, tornare indietro dalla dashboard rientrerebbe
+    // subito in dashboard (loop). Dopo il ripristino, la Home resta il «Ri-scansiona»
+    // esplicito (tasto di scansione idle).
+    @State private var didAttemptRestore = false
     // Conservato per costruire le schermate a valle (Dashboard) con lo stesso grafo
     // di dipendenze iniettato: nessun singleton nascosto.
     private let environment: AppEnvironment
@@ -48,6 +53,7 @@ public struct HomeView: View {
                 DashboardView(environment: environment, store: store)
             }
             .sheet(isPresented: $showThemeSettings) { themeSheet }
+            .task { restoreAtLaunchIfNeeded() }
             .hapticFeedback(on: HomeScanPresentation(state: vm.state).kind) { _, new in
                 switch new {
                 case .completed: return .success
@@ -110,6 +116,20 @@ public struct HomeView: View {
             goToDashboard = true
         } else {
             startScan() // "Riprova" dal ramo onesto di fallimento.
+        }
+    }
+
+    /// FSE-I1 — Ripristino al lancio: se una scansione esiste già (indice persistito non
+    /// vuoto), si atterra in dashboard SENZA forzare una nuova scansione unificata (il
+    /// difetto del cold relaunch). Una-tantum e solo dallo stato `.idle`: dopo un ripristino
+    /// tornare in Home mostra il tasto di scansione — il «Ri-scansiona» esplicito. Il
+    /// ripristino NON avvia `run()`: la dashboard leggerà i numeri freschi dall'indice.
+    private func restoreAtLaunchIfNeeded() {
+        guard !didAttemptRestore else { return }
+        didAttemptRestore = true
+        guard case .idle = vm.state else { return }
+        if LaunchRestoreCoordinator(environment: environment).decision() == .restore {
+            goToDashboard = true
         }
     }
 
