@@ -23,6 +23,16 @@ public struct HomeView: View {
     @State private var goToDashboard = false
     @State private var cancellation = CancellationToken()
     @State private var scanTask: Task<Void, Never>?
+    // FSE-J4: la fase del ciclo di vita, osservata esplicitamente. Il ripristino al foreground
+    // NON dipende più dal solo `.task` del primo appear (fragile al resume-da-sospensione).
+    @Environment(\.scenePhase) private var scenePhase
+    // FSE-J4: l'ultima fase SIGNIFICATIVA vista (gli `.inactive` transitori sono collassati),
+    // così una transizione reale background→active arriva alla policy come tale.
+    @State private var lastSignificantPhase: AppLifecyclePhase = .active
+    // FSE-J4: marker persistito «stavo guardando i risultati», scritto verso background e
+    // riletto al ritorno per atterrare sulla schermata esatta (dashboard o Home), mai su una
+    // ri-scansione forzata. Sopravvive alla sospensione (e alla terminazione) via UserDefaults.
+    @AppStorage(LifecycleMarker.wasViewingResultsKey) private var wasViewingResults = false
     // FSE-I1: il ripristino al lancio è UNA-TANTUM (cold relaunch), non a ogni comparsa
     // della Home: senza questo guardiano, tornare indietro dalla dashboard rientrerebbe
     // subito in dashboard (loop). Dopo il ripristino, la Home resta il «Ri-scansiona»
@@ -54,6 +64,9 @@ public struct HomeView: View {
             }
             .sheet(isPresented: $showThemeSettings) { themeSheet }
             .task { restoreAtLaunchIfNeeded() }
+            .onChange(of: scenePhase) { _, newPhase in
+                handleScenePhaseChange(newPhase)
+            }
             .hapticFeedback(on: HomeScanPresentation(state: vm.state).kind) { _, new in
                 switch new {
                 case .completed: return .success
@@ -133,6 +146,44 @@ public struct HomeView: View {
         }
     }
 
+    /// FSE-J4 — Gestione esplicita del ciclo di vita. Mappa la fase SwiftUI, collassa
+    /// l'`.inactive` transitorio (né vero background né vero ritorno), poi applica la
+    /// `ScenePhaseRestorePolicy` alla transizione dall'ultima fase significativa. Così il
+    /// ripristino al foreground non dipende dal solo `.task` del primo appear.
+    private func handleScenePhaseChange(_ newPhase: ScenePhase) {
+        let mapped = AppLifecyclePhase(newPhase)
+        guard mapped != .inactive else { return }
+        let action = ScenePhaseRestorePolicy.action(
+            from: lastSignificantPhase,
+            to: mapped,
+            indexedCount: LaunchRestoreCoordinator(environment: environment).indexedCount()
+        )
+        apply(action)
+        lastSignificantPhase = mapped
+    }
+
+    /// FSE-J4 — Applica l'azione decisa dalla policy. Nessuna scansione forzata in nessun
+    /// ramo: `startScan()` parte solo su tocco esplicito.
+    private func apply(_ action: ScenePhaseAction) {
+        switch action {
+        case .persist:
+            // Verso background: persisti il marker della schermata PRIMA che iOS possa
+            // terminare l'app memory-heavy, così al ritorno si atterra dove si era.
+            wasViewingResults = goToDashboard
+        case .restore:
+            // Ritorno reale dal background con dati indicizzati: riporta alla schermata
+            // ESATTA (dashboard se si guardavano i risultati, altrimenti la Home idle —
+            // mai una ri-scansione forzata).
+            goToDashboard = wasViewingResults
+        case .fresh:
+            // Nessun dato indicizzato (primo avvio): il tasto di scansione, mai un restore
+            // fantasma su una libreria non ancora scansionata.
+            goToDashboard = false
+        case .none:
+            break
+        }
+    }
+
     private func startScan() {
         // P0-1: una nuova scansione ricostruisce l'indice → i numeri cambiano.
         // Invalidare la cache evita di mostrare cifre stantìe (manifesto: numeri veri).
@@ -170,6 +221,19 @@ public struct HomeView: View {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
         #endif
+    }
+}
+
+// FSE-J4 — Mappa la fase SwiftUI (`ScenePhase`) sulla fase di dominio pura, mantenendo
+// SwiftUI fuori da AngavuDomain (altitudine). Ogni caso non-`.active`/`.background` (incluso
+// l'`.inactive` e futuri casi) è trattato come transitorio (`.inactive`).
+private extension AppLifecyclePhase {
+    init(_ phase: ScenePhase) {
+        switch phase {
+        case .active: self = .active
+        case .background: self = .background
+        default: self = .inactive
+        }
     }
 }
 #endif

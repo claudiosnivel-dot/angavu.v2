@@ -27,7 +27,13 @@ public struct LaunchRestoreCoordinator {
     /// «nessun dato» (conteggio 0) → `.fresh`: si scansiona, non si ripristina su dati
     /// illeggibili.
     public func decision() -> LaunchDecision {
-        let count = (try? indexReader.count()) ?? 0
-        return LaunchRestorePolicy.decide(indexedCount: count)
+        LaunchRestorePolicy.decide(indexedCount: indexedCount())
+    }
+
+    /// FSE-J4 — Conteggio dell'indice persistito, alla stessa condizione d'onestà della
+    /// `decision()`: una lettura fallita conta 0 (mai un ripristino su dati illeggibili).
+    /// Alimenta la `ScenePhaseRestorePolicy` alle transizioni del ciclo di vita.
+    public func indexedCount() -> Int {
+        (try? indexReader.count()) ?? 0
     }
 }
