@@ -139,41 +139,24 @@ public enum SimilarClustering {
     /// e l'esito porta con sé il progresso raggiunto. La partizione include anche i
     /// singleton (un cluster da un solo asset): li consuma T-043.
     ///
-    /// FSE-D2 — Il clustering greedy è ORDINE-DIPENDENTE (l'appartenenza di un
+    /// FSE-D2/FSE-H3 — Il clustering greedy è ORDINE-DIPENDENTE (l'appartenenza di un
     /// candidato dipende dai cluster già formati) → resta SERIALE: il determinismo e
-    /// gli AC di T-041 sono invariati. La fase DOMINANTE parallelizzabile è il calcolo
-    /// dei feature print per-asset, indipendente fra asset: un pre-warm col motore
-    /// per-item iniettabile (`PerItemAnalysis`) scalda la cache del provider (in
-    /// parallelo col motore concorrente) PRIMA del loop seriale. Per un provider senza
-    /// cache (fake) è un no-op → i cluster restano IDENTICI col motore seriale o
-    /// concorrente (AC-FSE-D2-1). Il guadagno reale (Vision in parallelo) è device-only
-    /// (§7); la cache dell'adapter reale è resa thread-safe.
+    /// gli AC di T-041 sono invariati. FSE-D2 aveva aggiunto un pre-warm eager dei
+    /// feature print per-asset (calcolo in parallelo PRIMA del loop). FSE-H3 lo
+    /// **rimuove**: su una libreria reale il pre-warm pre-calcolava TUTTI i feature
+    /// print trattenendo O(N) osservazioni Vision (causa diretta del jetsam osservato
+    /// al device-test), senza riportare progresso (barra congelata). I feature print si
+    /// calcolano ora **pigramente** dentro il loop, una coppia alla volta via
+    /// `areSimilar` → nessuna ritenzione O(N). Con FSE-H1/H2 il percorso principale
+    /// diventa il dHash (BK-tree) e il feature print resta solo conferma opzionale.
     public static func clusters(
         of candidates: [SimilarityCandidate],
         provider: FeaturePrinting,
         thresholds: SimilarityThresholds,
         chunkSize: Int = 64,
         cancellation: CancellationToken,
-        progress: (AnalysisProgress) -> Void = { _ in },
-        analysis: PerItemAnalysis? = nil
+        progress: (AnalysisProgress) -> Void = { _ in }
     ) -> AnalysisOutcome<[SimilarCluster]> {
-        let perItem = analysis ?? .serial(chunkSize: chunkSize)
-
-        // Fase indipendente: pre-warm dei feature print per-asset (no-op sui fake).
-        // Progress non utente (warm-up); la cancellazione durante il warm è propagata.
-        let warm = perItem.map(candidates, cancellation: cancellation) { candidate -> PreparedFeaturePrint in
-            try provider.prepare(for: candidate.asset)
-            return PreparedFeaturePrint(id: candidate.asset.id)
-        }
-        switch warm {
-        case .cancelled(let at):
-            return .cancelled(at: at)
-        case .failed(let reason, let at):
-            return .failed(reason: reason, at: at)
-        case .completed:
-            break
-        }
-
         // Clustering greedy: ordine-dipendente → SERIALE (determinismo invariato).
         let engine = ChunkedAnalysis<SimilarityCandidate, [SimilarCluster]>(
             chunkSize: chunkSize,
@@ -193,13 +176,6 @@ public enum SimilarClustering {
         }
         return engine.run(over: candidates, cancellation: cancellation, progress: progress)
     }
-}
-
-/// Segnaposto dell'esito di pre-warm del feature print (FSE-D2): porta solo l'id
-/// (il feature print vive nella cache del provider). Serve al motore per-item per un
-/// output `Equatable` deterministico.
-private struct PreparedFeaturePrint: Equatable {
-    let id: String
 }
 
 // MARK: - T-042 — Punteggio qualità per "tieni la migliore"

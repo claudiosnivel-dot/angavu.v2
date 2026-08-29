@@ -137,9 +137,14 @@ final class ConcurrentDetectorParityTests: XCTestCase {
         }
     }
 
-    // MARK: AC-FSE-D2-1 — Simili: clustering greedy invariante col motore
-
-    func test_similarClustering_concurrentMatchesSerial() {
+    // MARK: T-041 — Simili: correttezza del clustering greedy
+    //
+    // FSE-H3 ha RIMOSSO il pre-warm eager dei feature print da `SimilarClustering.clusters`
+    // (causa del jetsam on-device: O(N) osservazioni Vision trattenute). Non esiste più un
+    // percorso "serial pre-warm vs concurrent pre-warm" da confrontare: il feature print si
+    // calcola pigramente nel loop greedy. Questo resta come regressione sulla CORRETTEZZA
+    // del clustering (il risultato di dominio è invariato dopo la rimozione del pre-warm).
+    func test_similarClustering_greedyGroupsPairs() {
         // 30 foto in 15 coppie simili (distanza 0.1) e lontane fra coppie (1.0).
         let candidates = (0..<30).map { SimilarityCandidate(asset: photo("S\($0)"), dHash: nil) }
         var distances: [Set<String>: Float] = [:]
@@ -152,17 +157,12 @@ final class ConcurrentDetectorParityTests: XCTestCase {
         let provider = FakeFeaturePrinter(distancesByPair: distances)
         let thresholds = SimilarityThresholds(semantic: 0.5, hamming: 10)
 
-        let serialOutcome = SimilarClustering.clusters(
+        let outcome = SimilarClustering.clusters(
             of: candidates, provider: provider, thresholds: thresholds,
-            cancellation: CancellationToken(), analysis: serial
-        )
-        let concurrentOutcome = SimilarClustering.clusters(
-            of: candidates, provider: provider, thresholds: thresholds,
-            cancellation: CancellationToken(), analysis: concurrent
+            cancellation: CancellationToken()
         )
 
-        XCTAssertEqual(serialOutcome, concurrentOutcome, "clustering simili: concorrente == seriale")
-        if case .completed(let clusters) = concurrentOutcome {
+        if case .completed(let clusters) = outcome {
             XCTAssertEqual(clusters.count, 15, "15 cluster di coppie simili")
         } else {
             XCTFail("atteso completed")

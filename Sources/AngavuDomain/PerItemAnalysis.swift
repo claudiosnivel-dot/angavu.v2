@@ -59,6 +59,13 @@ public struct PerItemAnalysis {
     /// Map seriale a blocchi: stessi invarianti del motore concorrente (ordine
     /// d'input, cancellazione al confine del blocco, progresso monotòno) così i due
     /// percorsi sono intercambiabili a parità di risultato.
+    ///
+    /// FSE-H3 — Ogni `transform` gira dentro un `autoreleasepool`: i temporanei di
+    /// decodifica/Vision di quell'elemento si rilasciano PRIMA del successivo, invece
+    /// di accumularsi per l'intera passata (causa diretta del jetsam osservato al
+    /// device-test). Parità col motore concorrente, che già avvolge ogni worker.
+    /// L'`autoreleasepool` non cambia l'esito (output/progresso/cancellazione), solo il
+    /// profilo di memoria (AC-FSE-H3-1); su Linux è un passaggio trasparente.
     private func serialMap<Element, Output: Equatable>(
         _ items: [Element],
         chunkSize: Int,
@@ -79,7 +86,11 @@ public struct PerItemAnalysis {
             let end = min(index + chunkSize, total)
             while index < end {
                 do {
-                    outputs.append(try transform(items[index]))
+                    // autoreleasepool per elemento: rilascia i temporanei di questa
+                    // decodifica prima della prossima (FSE-H3). `rethrows` → il do/catch
+                    // sottostante intercetta comunque il fallimento del transform.
+                    let output = try autoreleasepool { try transform(items[index]) }
+                    outputs.append(output)
                 } catch let failure as AnalysisFailure {
                     return .failed(reason: failure, at: AnalysisProgress(processed: outputs.count, total: total))
                 } catch {
