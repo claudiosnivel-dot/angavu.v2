@@ -99,6 +99,17 @@ final class CategoryReviewPresentationTests: XCTestCase {
         XCTAssertFalse(pres.safetyNote.isEmpty)
     }
 
+    // AC-FSE-I3-1 — la nota dice DOVE ritrovare le foto (app Foto → Album → «Eliminati
+    // di recente») e per QUANTO (~30 giorni): onestà «dove e per quanto», non solo che
+    // finiscono nel cestino di sistema.
+    func test_safetyNote_saysWhereAndHowLongToRecover() {
+        let note = present(CategoryReview(keepIds: [], removableIds: ["R1"])).safetyNote
+        XCTAssertTrue(note.contains("Foto"))
+        XCTAssertTrue(note.contains("Album"))
+        XCTAssertTrue(note.contains("Eliminati di recente"))
+        XCTAssertTrue(note.contains("30 giorni"))
+    }
+
     // I titoli passati sono esposti (unica fonte del testo della categoria).
     func test_titleAndSubtitle_arePassedThrough() {
         let pres = CategoryReviewPresentation(

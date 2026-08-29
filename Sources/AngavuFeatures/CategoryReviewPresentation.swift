@@ -152,7 +152,8 @@ public struct CategoryReviewPresentation: Equatable, Sendable {
         self.previewAssetIds = previewAssetIds
         self.confirmedAssetIds = confirmedAssetIds
         self.safetyNote = "Gli elementi finiscono in «Eliminati di recente» e restano "
-            + "recuperabili per ~30 giorni: nulla sparisce subito."
+            + "recuperabili per ~30 giorni: nulla sparisce subito. Li ritrovi nell'app "
+            + "Foto → Album → «Eliminati di recente»."
     }
 
     /// Deriva la presentazione da una review e dallo stato del gate. Deterministica
