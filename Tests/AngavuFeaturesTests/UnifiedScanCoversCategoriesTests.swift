@@ -110,10 +110,11 @@ private func makeEnv(
 
 final class UnifiedScanCoversCategoriesTests: XCTestCase {
 
-    // AC-FSE-F1-1 — la scansione unificata calcola OGNI categoria in una passata e ne
-    // cacha il risultato; aprire una categoria legge la cache senza rieseguire i
-    // rilevatori (contatore = 0 al tap).
-    func test_unifiedScanCachesEveryCategory_tapReadsCacheWithoutDetectors() async throws {
+    // AC-FSE-F1-1 (rivisto dopo il device-test) — la scansione unificata calcola e cacha
+    // le categorie ECONOMICHE in una passata (aprirle è istantaneo, 0 rilevatori al tap);
+    // i rilevatori per-foto PESANTI (simili, sfocate) sono DIFFERITI — non calcolati
+    // eager (evitano il crash on-device), si calcolano al primo tap.
+    func test_unifiedScanCachesCheapCategories_defersHeavyDetectors() async throws {
         let index = RecordingIndex()
         let sharpness = CountingSharpnessScorer(value: 0.9)
         let env = makeEnv(
@@ -128,14 +129,18 @@ final class UnifiedScanCoversCategoriesTests: XCTestCase {
         let final = await vm.run(cancellation: CancellationToken())
         XCTAssertEqual(final, .completed(indexed: 3, partialCount: false))
 
-        // Un'unica passata ha calcolato TUTTE le categorie.
-        for category in CleanupCategory.allCases {
+        // Le categorie EAGER (economiche/limitate) sono cachate dalla scansione.
+        for category in CleanupCategory.allCases where category.runsInUnifiedScan {
             XCTAssertNotNil(vm.categoryResults[category],
-                            "la categoria \(category) deve essere calcolata dalla scansione")
+                            "la categoria eager \(category) deve essere calcolata dalla scansione")
         }
-        // I rilevatori hanno lavorato davvero: la nitidezza è stata misurata per le 3 foto.
-        let detectorCallsDuringScan = sharpness.count
-        XCTAssertEqual(detectorCallsDuringScan, 3)
+        // Le categorie DIFFERITE (per-foto pesanti) NON sono cachate: si calcolano al tap.
+        for category in CleanupCategory.allCases where !category.runsInUnifiedScan {
+            XCTAssertNil(vm.categoryResults[category],
+                         "la categoria differita \(category) non è calcolata eager (evita il crash)")
+        }
+        // Il rilevatore pesante (nitidezza/sfocate) NON è mai partito durante la scansione.
+        XCTAssertEqual(sharpness.count, 0, "il rilevatore differito non gira nella scansione")
 
         // La Home popola la cache sopra le view (stesso cablaggio di HomeView).
         let store = AnalysisResultsStore()
@@ -143,20 +148,18 @@ final class UnifiedScanCoversCategoriesTests: XCTestCase {
             store.set(data, for: .category(category.rawValue))
         }
 
-        // Aprire una categoria = leggere la cache (il ramo cache-hit della View,
-        // CategoryReviewView+Loading.swift:51): valore presente, nessuna composizione.
-        for category in CleanupCategory.allCases {
+        // Aprire una categoria EAGER = leggere la cache: valore presente, nessuna composizione.
+        for category in CleanupCategory.allCases where category.runsInUnifiedScan {
             let cached: CategoryReviewData? = store.value(for: .category(category.rawValue))
-            XCTAssertNotNil(cached, "la categoria \(category) deve essere in cache dopo la scansione")
+            XCTAssertNotNil(cached, "la categoria eager \(category) deve essere in cache dopo la scansione")
         }
-        XCTAssertEqual(sharpness.count, detectorCallsDuringScan,
-                       "leggere dalla cache non deve rieseguire alcun rilevatore (0 al tap)")
-
-        // Controllo: una composizione FRESCA (cache miss) rieseguirebbe il rilevatore —
-        // prova che il contatore traccia il lavoro reale e che il percorso cache l'ha evitato.
+        // Una categoria DIFFERITA non è in cache → al tap si compone dal vivo (cache-miss),
+        // e il rilevatore gira davvero (prova che il differimento non salta il lavoro,
+        // lo sposta al tap).
+        let deferredCached: CategoryReviewData? = store.value(for: .category(CleanupCategory.blurryPhotos.rawValue))
+        XCTAssertNil(deferredCached, "una categoria differita non è pre-cachata")
         _ = try CategoryReviewSource.reviewData(for: .blurryPhotos, from: env)
-        XCTAssertGreaterThan(sharpness.count, detectorCallsDuringScan,
-                             "una composizione fresca DEVE invocare il rilevatore")
+        XCTAssertGreaterThan(sharpness.count, 0, "al tap la categoria differita invoca il rilevatore")
     }
 
     // AC-FSE-F1-2 — una scansione cancellata a metà delle fasi rilevatore cacha SOLO le

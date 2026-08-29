@@ -97,6 +97,31 @@ public enum CleanupCategory: String, CaseIterable, Sendable {
         case .largeOldVideos: return .analyzingLargeOldVideos
         }
     }
+
+    /// FSE-F1 (rivisto dopo il device-test) — se questa categoria è calcolata EAGER
+    /// dentro la scansione unificata, o DIFFERITA al primo tap.
+    ///
+    /// I rilevatori per-foto pesanti — foto **simili** (un feature print Vision per
+    /// foto, trattenuto per il clustering greedy: O(N) osservazioni in memoria) e
+    /// **sfocate** (una decodifica per foto) — NON reggono la computazione eager
+    /// sull'INTERA libreria on-device: su migliaia di foto sono minuti di lavoro e, per
+    /// i simili, un picco di memoria che porta al **jetsam** (crash osservato al
+    /// device-test, fase «Cerco i duplicati…» → simili). Restano perciò DIFFERITI: si
+    /// calcolano al primo tap, con la loro barra di progresso e il loro annullamento —
+    /// mai un crash della scansione, mai un numero finto.
+    ///
+    /// Le categorie ECONOMICHE/limitate restano eager (aprirle è istantaneo dalla
+    /// cache): screenshot e grandi/vecchi sono filtri puri sull'indice; i duplicati
+    /// esatti sono limitati ai candidati di pari dimensione (insieme piccolo). Il
+    /// guadagno reale e i limiti restano device-only (§7).
+    var runsInUnifiedScan: Bool {
+        switch self {
+        case .screenshots, .exactDuplicates, .largeOldVideos:
+            return true
+        case .similarPhotos, .blurryPhotos:
+            return false
+        }
+    }
 }
 
 /// Soglie e parametri **dichiarati** dei rilevatori di categoria. Sono default

@@ -221,6 +221,19 @@ public final class ScanViewModel {
                 return
             }
             let stage = category.scanStage
+
+            // FSE-F1 (rivisto dopo il device-test) — i rilevatori per-foto PESANTI (foto
+            // simili, sfocate) NON si calcolano eager nella scansione: su una libreria
+            // reale sono minuti di lavoro e, per i simili, un picco di memoria fino al
+            // crash (jetsam). Restano DIFFERITI al primo tap (con progresso+annullamento
+            // propri). La barra avanza comunque attraverso la loro fase (monotòna) senza
+            // fabbricare lavoro; la categoria non entra in `categoryResults` → al tap si
+            // calcola dal vivo (cache-miss), mai un parziale spacciato per completo.
+            guard category.runsInUnifiedScan else {
+                report(stage, AnalysisProgress(processed: 1, total: 1))
+                continue
+            }
+
             let outcome: CategoryOutcome = signpost.measure(ScanSignpostPhase(stage)) {
                 do {
                     let data = try CategoryReviewSource.reviewData(
