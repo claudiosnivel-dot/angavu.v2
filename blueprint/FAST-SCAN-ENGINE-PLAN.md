@@ -964,12 +964,62 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
 
 > **Origine**: il 2° device-test ha rivelato che diversi pezzi costruiti+testati in CI
 > non sono mai stati collegati nell'app (dettaglio con prove in `blueprint/WIRING-CENSUS.md`).
-> **Definizione di "fatto" per TUTTO FSE-J (regola di processo)**: oltre al verde CI sul
-> seam testabile, ogni task è "fatto" solo dopo la **verifica on-device** dichiarata —
-> il gate "confine Apple = CI" non vede una UI scollegata. Ordine: J1 → J2 → J3 → J4 →
-> J5/J6 → J7.
+>
+> **Strategia di verifica del cablaggio a 3 livelli** (per NON dipendere dal device
+> dell'utente per ciò che è automatizzabile — il vero fix del difetto di metodo):
+> - **Livello A — CI attuale (nessuna nuova infra)**: test XCTest alla radice di
+>   composizione — `AppEnvironment.live()` costruisce l'adapter REALE (non il null-object)
+>   — e test del *seam* con spia — il ViewModel INVOCA davvero l'adapter iniettato su
+>   conferma. Questi da soli avrebbero beccato l'eliminazione e la compressione no-op.
+> - **Livello B — job Simulatore che ESEGUE l'app (nuovo, ma senza device utente)**:
+>   `xcodebuild test` con target UITest su un Simulatore concreto + foto seminate via
+>   `xcrun simctl addmedia`; `PHPhotoLibrary.performChanges` funziona sul Simulatore →
+>   verifica ciclo di vita (C6) ed eliminazione REALE (le foto spariscono / vanno in
+>   «Eliminati di recente»).
+> - **Livello C — irriducibilmente device dell'utente**: picco memoria/jetsam su ~25k,
+>   discriminazione dHash sulle foto reali, timing di performance, libreria iCloud.
+>
+> **Definizione di "fatto" per TUTTO FSE-J (regola di processo)**: ogni task è "fatto"
+> quando i suoi test di **Livello A** (e, dove indicato, **Livello B**) sono verdi in CI;
+> solo il **Livello C** resta a carico del device dell'utente, ed è dichiarato esplicitamente
+> per-task. Il gate "confine Apple = CI" torna a valere anche per il cablaggio.
+> **FSE-J0 costruisce l'harness** (convenzioni Livello A + job Simulatore Livello B) ed è
+> il PRIMO task. Ordine: J0 → J1 → J2 → J3 → J4 → J5/J6 → J7.
 
 ```yaml
+- id: FSE-J0
+  title: "Harness di verifica del cablaggio (Livello A test + Livello B job Simulatore)"
+  macrotask: "wiring_real"
+  depends_on: []
+  objective: >
+    Rendere il cablaggio verificabile in automatico, così i task FSE-J si chiudono in CI
+    e non sul device dell'utente. Costruisce (1) le convenzioni Livello A e (2) il job
+    Simulatore Livello B che ESEGUE l'app.
+  definition_of_done:
+    - "Livello A — helper di test riusabile per la radice di composizione: costruisce `AppEnvironment.live(container:)` (con un ModelContainer in-memory) e permette di asserire il TIPO CONCRETO dietro ogni port (reale vs null-object). Un primo test lo usa su un port già cablato (es. `enumerator`/`indexReader`) come esempio verde."
+    - "Livello A — convenzione del test del *seam*: un adapter-spia (protocollo del Data) che registra le invocazioni, per asserire che un ViewModel chiama davvero l'adapter iniettato. Documentata + un esempio verde."
+    - "Livello B — target UITest dell'app (`AngavuUITests`) generato da XcodeGen (`App/project.yml`) con uno scheme testabile; un primo UITest di fumo (lancia l'app, l'onboarding/Home compare) che passa."
+    - "Livello B — job CI `ios-uitest` (macos-15): `xcodebuild test` su un Simulatore CONCRETO (es. iPhone 16, iOS 18) + step `xcrun simctl addmedia` che semina foto di fixture PRIMA del test. Verde al primo giro col solo test di fumo."
+    - "`ci.yml` aggiornato con il nuovo job SENZA rompere i job esistenti (aggiunto, non sostituito); `paths-ignore` invariato"
+  acceptance_criteria:
+    - id: AC-FSE-J0-1
+      given: "l'helper di composizione"
+      when: "si costruisce `live()` e si ispeziona un port cablato"
+      then: "il test asserisce il tipo concreto reale (non il null-object) e passa in CI (Livello A dimostrato)"
+    - id: AC-FSE-J0-2
+      given: "il job `ios-uitest` con foto seminate via simctl"
+      when: "gira l'UITest di fumo sul Simulatore"
+      then: "l'app si avvia e il test passa: il CI ora ESEGUE l'app, non solo la compila (Livello B abilitato)"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/CompositionRootWiringTests.swift"
+      covers: [AC-FSE-J0-1]
+    - file: "App/AngavuUITests/SmokeTests.swift (+ job ci.yml ios-uitest)"
+      covers: [AC-FSE-J0-2]
+  security_notes:
+    - "Le foto di fixture sono immagini sintetiche seminate nel Simulatore (mai dati reali); zero rete."
+  out_of_scope:
+    - "I test di cablaggio delle singole feature (vivono nei rispettivi J1…J7, che RIUSANO questo harness)"
+
 - id: FSE-J1
   title: "Eliminazione reale cablata end-to-end (censimento C1, CRITICO)"
   macrotask: "wiring_real"
@@ -987,14 +1037,20 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
       when: "si conferma l'eliminazione"
       then: "il deleter è invocato con ESATTAMENTE gli id selezionati (mai i keep); su success gli id spariscono dalla review; su failed la review resta invariata e lo stato è errore; su cancelled nessuna rimozione"
     - id: AC-FSE-J1-2
-      given: "il grafo di produzione `live()`"
+      given: "il grafo di produzione `live()` (Livello A, harness FSE-J0)"
       when: "si ispeziona il deleter"
-      then: "NON è il null-object (device-only: l'eliminazione reale manda in «Eliminati di recente»)"
+      then: "NON è il null-object `NoAssetDeleter` — cablaggio verificato in CI, senza device"
+    - id: AC-FSE-J1-3
+      given: "il Simulatore con foto seminate (Livello B, job `ios-uitest`)"
+      when: "l'UITest seleziona ed elimina uno screenshot"
+      then: "l'asset sparisce dalla categoria e finisce in «Eliminati di recente» (conteggio libreria calato) — eliminazione reale verificata senza il device dell'utente"
   target_tests:
     - file: "Tests/AngavuFeaturesTests/CategoryDeletionWiringTests.swift"
       covers: [AC-FSE-J1-1]
-    - file: "N/A — device-only (§7): verifica che le foto finiscano davvero in «Eliminati di recente»"
+    - file: "Tests/AngavuFeaturesTests/CompositionRootWiringTests.swift"
       covers: [AC-FSE-J1-2]
+    - file: "App/AngavuUITests/DeletionUITests.swift (job ios-uitest, Livello B)"
+      covers: [AC-FSE-J1-3]
   security_notes:
     - "Solo id removable eleggibili (i keep protetti). Rete di sicurezza: delete via PhotoKit → «Eliminati di recente». Indice aggiornato SOLO su success reale."
   out_of_scope:
@@ -1046,14 +1102,20 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
       when: "si applica"
       then: "l'installer è invocato una volta (salva+elimina); su piano `.failure` non installa; su salvataggio fallito l'originale resta (nessuna delete)"
     - id: AC-FSE-J3-2
-      given: "il grafo `live()`"
+      given: "il grafo `live()` (Livello A, harness FSE-J0)"
       when: "si ispeziona l'installer"
-      then: "usa `PHAssetCreationRequest` reale (device-only)"
+      then: "NON è il null-object (installer reale con `PHAssetCreationRequest`) — cablaggio verificato in CI"
+    - id: AC-FSE-J3-3
+      given: "il Simulatore con un video seminato (Livello B, se l'export su Simulatore è praticabile; altrimenti Livello C dichiarato)"
+      when: "l'UITest comprime e sostituisce"
+      then: "il compresso è in libreria e l'originale è in «Eliminati di recente»"
   target_tests:
     - file: "Tests/AngavuFeaturesTests/CompressionReplacementWiringTests.swift"
       covers: [AC-FSE-J3-1]
-    - file: "N/A — device-only (§7): l'originale sparisce e il compresso è in libreria"
+    - file: "Tests/AngavuFeaturesTests/CompositionRootWiringTests.swift"
       covers: [AC-FSE-J3-2]
+    - file: "App/AngavuUITests/CompressionUITests.swift (Livello B) — o §7 device-only se l'export AVFoundation non è affidabile sul Simulatore"
+      covers: [AC-FSE-J3-3]
   security_notes:
     - "Onestà/rete di sicurezza: mai eliminare l'originale se il salvataggio del compresso non è verificato integro (T-082). L'originale eliminato va in «Eliminati di recente»."
 
@@ -1250,12 +1312,15 @@ La CI **non** misura la performance. Il guadagno si prova così, e solo così:
    progresso sull'intera fase) → I3 (copy dell'eliminazione: dove ripristinare). Il
    crash è risolto; questi tolgono le frustrazioni residue del retest.
 9. **FSE-J — cablaggio reale** (dal censimento `WIRING-CENSUS.md`, 2° device-test): i
-   pezzi costruiti+testati ma mai collegati nell'app. J1 (eliminazione reale, CRITICO) →
-   J2 (invalidazione chirurgica) → J3 (sostituzione compressa reale) → J4 (ciclo di vita
-   scenePhase + restore affidabile) → J5 (observer/invalidazione automatica) / J6
-   (persistenza derivati) → J7 (batch resolver + pulizia dead-code). **Regola di processo**:
-   ogni task FSE-J è "fatto" solo dopo la **verifica on-device** dichiarata, non col solo
-   verde CI (il gate CI non vede una UI scollegata).
+   pezzi costruiti+testati ma mai collegati nell'app. **J0 (harness di verifica: test di
+   cablaggio Livello A + job Simulatore Livello B) PER PRIMO** → J1 (eliminazione reale,
+   CRITICO) → J2 (invalidazione chirurgica) → J3 (sostituzione compressa reale) → J4
+   (ciclo di vita scenePhase + restore affidabile) → J5 (observer/invalidazione automatica)
+   / J6 (persistenza derivati) → J7 (batch resolver + pulizia dead-code). **Regola di
+   processo (aggiornata)**: grazie a J0, ogni task FSE-J è "fatto" col **verde CI** dei suoi
+   test di Livello A (e, dove indicato, Livello B su Simulatore); solo il **Livello C**
+   (memoria/jetsam su ~25k, dHash sulle foto reali, perf, libreria iCloud) resta al device
+   dell'utente, dichiarato per-task. Il gate CI torna a coprire anche il cablaggio.
 
 Ogni fase chiude al confine CI per la logica pura; il guadagno si valida on-device
 (§7) prima di dichiararlo.

@@ -109,5 +109,19 @@ contatti/calendari (instradano a `merger`/`remover` reali via `ExtraActionApplic
 > **Nota di processo (perché è successo)**: ogni macrotask si è chiuso su "CI verde"
 > della logica pura + adapter isolato, marcando il wiring come non-testabile in CI e
 > rimandandolo; quel rimando non è mai stato incassato. Il gate "confine Apple = CI" non
-> può vedere una UI scollegata. Serve un macrotask che possieda il **cablaggio end-to-end**
-> con verifica on-device dichiarata come parte della definizione di "fatto".
+> può vedere una UI scollegata. Serve un macrotask che possieda il **cablaggio end-to-end**.
+>
+> **Strategia di verifica a 3 livelli (fix del metodo)** — la maggior parte di questo
+> censimento NON era davvero "device-only"; era verificabile in automatico:
+> - **Livello A (CI attuale, nessuna nuova infra)**: test alla radice di composizione
+>   (`AppEnvironment.live()` costruisce l'adapter REALE, non il null-object) + test del
+>   *seam* con spia (il ViewModel INVOCA l'adapter iniettato su conferma). Da soli
+>   avrebbero beccato C1 (eliminazione) e C2 (compressione) no-op.
+> - **Livello B (nuovo job Simulatore, senza device utente)**: `xcodebuild test` con
+>   target UITest + `xcrun simctl addmedia`; `PHPhotoLibrary.performChanges` gira sul
+>   Simulatore → ciclo di vita (C6) ed eliminazione REALE (foto in «Eliminati di recente»).
+> - **Livello C (irriducibile, device utente)**: memoria/jetsam su ~25k, dHash sulle foto
+>   reali, timing di performance, libreria iCloud.
+>
+> **Formalizzato come `FSE-J0` (harness di verifica) — primo task di FSE-J**; da lì ogni
+> task è "fatto" col verde CI di Livello A/B, e solo il Livello C resta a carico del device.
