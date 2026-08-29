@@ -138,16 +138,25 @@ enum LibraryFiguresReader {
             )
         }
 
+        // FSE-J7 (leva 1) — Risoluzione dei PHAsset IN BATCH, una sola volta per l'intero
+        // gruppo, all'inizio della fase pesante: `handleResolver.resolve` chunka
+        // internamente (256/blocco) e restituisce la mappa `id → handle` viva per la
+        // durata di questa passata. Gli adapter riusano l'handle già risolto invece di
+        // rifetchare il `PHAsset` per ogni asset (fine dei 25k fetch singoli, §1.1). Il
+        // default `EmptyAssetHandleResolver` restituisce una mappa vuota → `handle(for:)`
+        // è `nil` → si ricade sul percorso per id (comportamento identico a prima del
+        // cablaggio, nessuna perdita di correttezza).
+        let resolvedHandles = environment.handleResolver.resolve(
+            localIdentifiers: assets.map(\.id)
+        )
+
         let sink = ResolveSink()
         sink.reserveCapacity(assets.count)
         let engine = ChunkedAnalysis<LibraryAsset, ResolveSink>(
             chunkSize: chunkSize,
             initial: sink
         ) { box, asset in
-            let size = environment.byteResolver.byteSize(
-                forLocalIdentifier: asset.id,
-                fallbackEstimate: fallbackEstimate(for: asset)
-            )
+            let size = resolvedByteSize(for: asset, using: resolvedHandles, environment: environment)
             let libraryBytes = size.bytes
             box.sized.append(SizedAsset(asset: asset, size: size))
             box.deleted.append(DeletedAssetSize(
@@ -174,6 +183,22 @@ enum LibraryFiguresReader {
         case .failed(let reason, let at):
             return .failed(reason: reason, at: at)
         }
+    }
+
+    /// FSE-J7 (leva 1) — byte di un asset RIUSANDO l'handle risolto in batch quando
+    /// presente; altrimenti fetch per id (fallback per l'asset non risolto in batch o per
+    /// il grafo non-cablato, `EmptyAssetHandleResolver` → mappa vuota). Nessuna perdita di
+    /// correttezza: il valore è lo stesso, cambia solo se il base paga un secondo fetch.
+    private static func resolvedByteSize(
+        for asset: LibraryAsset,
+        using handles: ResolvedAssetHandles,
+        environment: AppEnvironment
+    ) -> ByteSize {
+        let fallback = fallbackEstimate(for: asset)
+        if let handle = handles.handle(for: asset.id) {
+            return environment.byteResolver.byteSize(for: handle, fallbackEstimate: fallback)
+        }
+        return environment.byteResolver.byteSize(forLocalIdentifier: asset.id, fallbackEstimate: fallback)
     }
 
     /// Finalizza i numeri veri dai per-asset già risolti: aritmetica pura (aggregazione

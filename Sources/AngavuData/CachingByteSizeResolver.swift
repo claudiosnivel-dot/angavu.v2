@@ -55,6 +55,29 @@ public final class CachingByteSizeResolver: AssetByteSizeResolving {
         return resolved
     }
 
+    /// FSE-J7 — Percorso a handle già risolto in batch. La chiave della cache resta il
+    /// solo `assetLocalIdentifier` (identica a quella dell'id): un byte scaldato da qui
+    /// è un HIT per le categorie che poi chiedono per id, e viceversa (riuso FSE-B2
+    /// intatto). Sul MISS delega a `base.byteSize(for:)`, che riusa il `PHAsset`
+    /// incapsulato nell'handle senza rifetcharlo (leva 1) — l'unica differenza col
+    /// percorso per id è che qui il base non paga un secondo fetch.
+    public func byteSize(for handle: AssetHandle, fallbackEstimate: Int64) -> ByteSize {
+        let id = handle.assetLocalIdentifier
+        lock.lock()
+        let cached = cache[id]
+        lock.unlock()
+        if let cached {
+            return cached
+        }
+
+        let resolved = base.byteSize(for: handle, fallbackEstimate: fallbackEstimate)
+
+        lock.lock()
+        cache[id] = resolved
+        lock.unlock()
+        return resolved
+    }
+
     /// Numero di asset con byte già noti (per ispezione/diagnostica). Non usato in
     /// produzione per decisioni; utile a provare il riuso.
     public var knownCount: Int {

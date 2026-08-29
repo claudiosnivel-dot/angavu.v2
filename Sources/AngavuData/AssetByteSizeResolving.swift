@@ -11,6 +11,24 @@ import AngavuDomain
 public protocol AssetByteSizeResolving {
     /// Dimensione dell'asset, esatta o esplicitamente stimata.
     func byteSize(forLocalIdentifier localIdentifier: String, fallbackEstimate: Int64) -> ByteSize
+
+    /// FSE-J7 (leva 1) — Dimensione da un `AssetHandle` già risolto IN BATCH (dal
+    /// `handleResolver` all'inizio della scansione): l'adapter reale riusa il `PHAsset`
+    /// incapsulato invece di rifetcharlo per id. Requisito del port con un default che
+    /// delega all'id, così i conformer che non sfruttano l'handle (fake di test,
+    /// null-object) restano corretti senza modifiche — mai una perdita di correttezza,
+    /// solo la rinuncia al riuso.
+    func byteSize(for handle: AssetHandle, fallbackEstimate: Int64) -> ByteSize
+}
+
+public extension AssetByteSizeResolving {
+    /// Default: nessun riuso dell'handle — risolve per identificatore. Gli adapter che
+    /// incapsulano un asset di sistema già risolto (`PHAssetByteSizeResolver`) e il
+    /// decoratore cachante (`CachingByteSizeResolver`) lo sovrascrivono per evitare il
+    /// refetch per asset.
+    func byteSize(for handle: AssetHandle, fallbackEstimate: Int64) -> ByteSize {
+        byteSize(forLocalIdentifier: handle.assetLocalIdentifier, fallbackEstimate: fallbackEstimate)
+    }
 }
 
 #if canImport(Photos)
