@@ -89,21 +89,12 @@ public struct CategoryReviewView: View {
         .alert(previewAlertTitle, isPresented: isPreviewing) {
             Button("Annulla", role: .cancel) { vm.cancelDeletion() }
             Button("Elimina", role: .destructive) {
-                // FSE-J1: l'eliminazione ora è REALE (PhotoKit → «Eliminati di recente»),
-                // non più solo un avanzamento del gate (censimento C1). Attende l'esito
-                // reale prima di dichiarare qualcosa.
+                // FSE-J1: eliminazione REALE (PhotoKit → «Eliminati di recente»), non più solo il gate.
                 Task {
-                    let result = await vm.confirmAndDelete()
-                    switch result {
-                    case .success:
-                        // L'eliminazione ha cambiato conteggi/spazio → i numeri cachati
-                        // non sono più freschi. Si invalida (J2 renderà la potatura
-                        // chirurgica): mai un numero stantìo dopo un delete (numeri veri).
-                        store.invalidateAll()
-                    case .failed(let reason):
-                        deletionError = reason // errore onesto, mai un falso successo
-                    case .cancelled:
-                        break // l'utente ha annullato l'alert di sistema: nulla eliminato
+                    switch await vm.confirmAndDelete() {
+                    case .success: store.invalidateAll() // numeri cambiati → cache non fresca (J2: potatura)
+                    case .failed(let reason): deletionError = reason // errore onesto, mai un falso successo
+                    case .cancelled: break // annullato dall'alert di sistema: nulla eliminato
                     }
                 }
             }
