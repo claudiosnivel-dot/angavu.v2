@@ -11,12 +11,10 @@ import AngavuDomain
 // Algoritmo dHash classico: riduci a 9×8 in scala di grigi, poi per ogni riga
 // confronta i pixel adiacenti (8 confronti × 8 righe = 64 bit). Robusto a scala e
 // piccole variazioni. Solo on-device (`isNetworkAccessAllowed = false`, zero rete).
-// Cross-Apple: ImageIO + CoreGraphics (niente UIKit), così compila anche sull'host
+// Cross-Apple: CoreGraphics (niente UIKit), così compila anche sull'host
 // macOS della CI, non solo su iOS.
 
-#if canImport(Photos) && canImport(ImageIO) && canImport(CoreGraphics)
-import Photos
-import ImageIO
+#if canImport(Photos) && canImport(CoreGraphics)
 import CoreGraphics
 
 /// Produttore reale del dHash percettivo di un asset. `nil` se i pixel non sono
@@ -29,22 +27,6 @@ public struct PerceptualDHasher {
     private static let sampleHeight = 8
 
     public init() {}
-
-    /// dHash a 64 bit dell'asset, o `nil` se non calcolabile on-device.
-    ///
-    /// FSE-H2 — Questo è il percorso LEGACY che decodifica i byte originali (full-res)
-    /// prima di ridurli: resta come alternativa, ma il percorso di produzione è ora quello
-    /// C1 (`dHash(fromDownscaled:)`), che parte dalla miniatura piccola senza mai
-    /// materializzare l'originale intero (leva 2).
-    public func dHash(for asset: LibraryAsset) -> UInt64? {
-        guard
-            let data = imageData(for: asset),
-            let gray = grayscaleSamples(from: data)
-        else {
-            return nil
-        }
-        return Self.dHash(fromGray: gray)
-    }
 
     /// FSE-H2 — dHash a 64 bit da un'immagine GIÀ ridimensionata (miniatura C1,
     /// `.pixels(64)`): il percorso di produzione. Nessuna decodifica full-res — riduce a
@@ -60,43 +42,6 @@ public struct PerceptualDHasher {
             return nil
         }
         return Self.dHash(fromGray: gray)
-    }
-
-    /// Byte dell'immagine, letti SOLO on-device (zero rete).
-    private func imageData(for asset: LibraryAsset) -> Data? {
-        let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [asset.id], options: nil)
-        guard let phAsset = fetch.firstObject else { return nil }
-
-        let options = PHImageRequestOptions()
-        options.isNetworkAccessAllowed = false
-        options.isSynchronous = true
-        options.deliveryMode = .highQualityFormat
-
-        var result: Data?
-        _ = PHImageManager.default().requestImageDataAndOrientation(
-            for: phAsset,
-            options: options
-        ) { data, _, _, _ in
-            result = data
-        }
-        return result
-    }
-
-    /// Decodifica i byte, ne fa una miniatura e la riduce a 9×8 grigi (percorso legacy).
-    /// `nil` se la decodifica fallisce.
-    private func grayscaleSamples(from data: Data) -> [UInt8]? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        let thumbnailOptions: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 64
-        ]
-        guard
-            let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary)
-        else {
-            return nil
-        }
-        return grayscaleSamples(fromCGImage: thumbnail)
     }
 
     /// Ridimensiona a 9×8 in scala di grigi a 8 bit un `CGImage` (già piccolo),

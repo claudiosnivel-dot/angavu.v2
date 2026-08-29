@@ -39,7 +39,6 @@ public struct AppEnvironment {
     /// sfocate). Default null-object — una categoria senza il rilevatore reale resta
     /// vuota, mai numeri finti — finché `live()` non cabla gli adapter reali.
     public let contentHasher: any AssetContentHashing
-    public let featurePrinter: any FeaturePrinting
     /// FSE-H2: dHash percettivo per-asset (miniatura C1). È il percorso PRINCIPALE dei
     /// simili (memoria O(1) per foto); il feature print resta conferma opzionale. Default
     /// `NoPerceptualHasher` (nessun dHash → nessun raggruppamento) finché `live()` non
@@ -87,7 +86,6 @@ public struct AppEnvironment {
         residencyProbe: any AssetResidencyProbing = AssumeResidentResidencyProbe(),
         thumbnailProvider: any AssetThumbnailProviding = NoThumbnailProvider(),
         contentHasher: any AssetContentHashing = NoContentHasher(),
-        featurePrinter: any FeaturePrinting = NoFeaturePrinter(),
         perceptualHasher: any AssetPerceptualHashing = NoPerceptualHasher(),
         qualityScorer: any QualityScoring = NoQualityScorer(),
         sharpnessScorer: any SharpnessScoring = NoSharpnessScorer(),
@@ -111,7 +109,6 @@ public struct AppEnvironment {
         self.residencyProbe = residencyProbe
         self.thumbnailProvider = thumbnailProvider
         self.contentHasher = contentHasher
-        self.featurePrinter = featurePrinter
         self.perceptualHasher = perceptualHasher
         self.qualityScorer = qualityScorer
         self.sharpnessScorer = sharpnessScorer
@@ -197,7 +194,6 @@ extension AppEnvironment {
                 cache: derivedCache,
                 versioning: derivedVersioning
             ),
-            featurePrinter: liveFeaturePrinter(),
             perceptualHasher: livePerceptualHasher(),
             qualityScorer: liveQualityScorer(),
             sharpnessScorer: liveSharpnessScorer(),
@@ -243,14 +239,6 @@ extension AppEnvironment {
         return PHAssetContentHasher()
         #else
         return NoContentHasher()
-        #endif
-    }
-
-    private static func liveFeaturePrinter() -> any FeaturePrinting {
-        #if canImport(Vision) && canImport(Photos)
-        return VisionFeaturePrinter()
-        #else
-        return NoFeaturePrinter()
         #endif
     }
 

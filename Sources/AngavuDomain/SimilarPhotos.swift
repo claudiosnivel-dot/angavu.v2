@@ -28,19 +28,6 @@ public protocol FeaturePrinting {
     /// senza feature print non viene mai dichiarato simile per via semantica: il
     /// clustering ricadrà sul dHash (T-041), mai su un falso "via libera".
     func distance(between lhs: LibraryAsset, and rhs: LibraryAsset) throws -> Float?
-
-    /// FSE-D2 — Pre-calcola (e mette in cache) il feature print per-asset, così il
-    /// clustering greedy successivo trova la cache calda. Consente di parallelizzare
-    /// la fase DOMINANTE (Vision) fuori dal loop ordine-dipendente. Default no-op: un
-    /// provider senza cache (o un fake) non fa nulla e resta corretto — nessun cambio
-    /// agli AC già verdi.
-    func prepare(for asset: LibraryAsset) throws
-}
-
-public extension FeaturePrinting {
-    /// Default: nessun pre-calcolo. I provider con cache (adapter Vision reale) lo
-    /// sovrascrivono per scaldarla in parallelo (cache thread-safe, FSE-D2).
-    func prepare(for asset: LibraryAsset) throws {}
 }
 
 /// Interrogazione di dominio della distanza semantica fra due asset. È un seam

@@ -54,14 +54,6 @@ private struct FakeHasher: AssetContentHashing {
     }
 }
 
-/// Feature print fake: distanza per coppia NON ordinata; assente → `nil`.
-private struct FakeFeaturePrinter: FeaturePrinting {
-    let distancesByPair: [Set<String>: Float]
-    func distance(between lhs: LibraryAsset, and rhs: LibraryAsset) throws -> Float? {
-        distancesByPair[Set([lhs.id, rhs.id])]
-    }
-}
-
 /// dHash fake: valore percettivo per id; assente → `nil` (asset senza dHash → singleton).
 private struct FakePerceptualHasher: AssetPerceptualHashing {
     let dHashById: [String: UInt64]
@@ -90,7 +82,6 @@ private func makeEnvironment(
     assets: [LibraryAsset],
     bytesById: [String: Int64] = [:],
     digestsById: [String: String] = [:],
-    distancesByPair: [Set<String>: Float] = [:],
     dHashById: [String: UInt64] = [:],
     qualityById: [String: Double] = [:],
     sharpnessById: [String: Double] = [:]
@@ -104,7 +95,6 @@ private func makeEnvironment(
         byteResolver: MapByteResolver(bytesById: bytesById),
         deviceStorage: FakeDeviceStorage(),
         contentHasher: FakeHasher(digestsById: digestsById),
-        featurePrinter: FakeFeaturePrinter(distancesByPair: distancesByPair),
         perceptualHasher: FakePerceptualHasher(dHashById: dHashById),
         qualityScorer: FakeQuality(sharpnessById: qualityById),
         sharpnessScorer: FakeSharpness(sharpnessById: sharpnessById),

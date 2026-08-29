@@ -52,13 +52,6 @@ public final class VisionFeaturePrinter: FeaturePrinting, FeaturePrintVectorProd
         return distance
     }
 
-    /// FSE-D2 — Pre-calcola e mette in cache il feature print dell'asset, così il
-    /// clustering greedy successivo trova la cache calda. Chiamato in PARALLELO dal
-    /// motore concorrente (pre-warm), quindi la cache è protetta da lock.
-    public func prepare(for asset: LibraryAsset) throws {
-        _ = try featurePrint(for: asset)
-    }
-
     /// FSE-E3 — Produce il vettore feature print SERIALIZZATO (bytes opachi), così la
     /// cache dei derivati (FSE-E2) può persisterlo e riusarlo fra scansioni senza
     /// ricalcolare Vision. Il Domain vede solo `Data`: nessun tipo di Vision attraversa

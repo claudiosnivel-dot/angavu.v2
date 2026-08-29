@@ -15,13 +15,6 @@ public struct NoContentHasher: AssetContentHashing {
     public func digest(for asset: LibraryAsset) throws -> AssetDigest? { nil }
 }
 
-/// Nessun feature print: nessuna coppia è dichiarata simile per via semantica
-/// (il clustering ricadrebbe sul dHash, che qui non è fornito → nessun raggruppamento).
-public struct NoFeaturePrinter: FeaturePrinting {
-    public init() {}
-    public func distance(between lhs: LibraryAsset, and rhs: LibraryAsset) throws -> Float? { nil }
-}
-
 /// FSE-H2 — Nessun dHash percettivo: ogni candidato resta senza dHash (`nil`) → il
 /// clustering per vicinanza (`clustersByHash`) li lascia tutti singleton, nessuna coppia
 /// dichiarata simile. Usato finché `live()` non cabla l'adapter reale (miniatura C1).

@@ -8,8 +8,8 @@ import AngavuDomain
 // **duplicati esatti** (T-030/31/32), **foto simili** (T-040…43), **foto sfocate**
 // (T-070/71) e **video grandi/vecchi** (T-060/62). Il motore di dominio è già verde:
 // qui si aggancia soltanto — nessuna logica di dominio nuova. I rilevatori pesanti
-// (hashing SHA-256, feature print Vision, nitidezza Core Image) vivono dietro i port
-// dell'AppEnvironment (`contentHasher`/`featurePrinter`/`qualityScorer`/
+// (hashing SHA-256, dHash percettivo, qualità/nitidezza) vivono dietro i port
+// dell'AppEnvironment (`contentHasher`/`perceptualHasher`/`qualityScorer`/
 // `sharpnessScorer`), così questa mappa categoria→sorgente è testabile con dei fake
 // senza device (oracolo puro). Gli adapter reali restano compilati-non-testati sul
 // device (L-COL-006).
