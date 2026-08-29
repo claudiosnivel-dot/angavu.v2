@@ -857,6 +857,109 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
     - "Slider utente delle soglie (fuori piano); la conferma Vision resta opzionale, non un requisito"
 ```
 
+### FSE-I — Correzioni dal 2° device-test (ripristino stato, freeze simili, copy eliminazione)
+
+> **Origine**: retest dopo FSE-H (2026-08-29). Il crash è sparito (la scansione arriva
+> ai simili e completa), ma emergono tre difetti: **(C)** al ritorno da background l'app
+> **riparte dalla scansione** (iOS termina l'app memory-heavy → cold relaunch → stato
+> `.idle`, lo stato "già scansionato" non è ripristinato benché indice+cache derivata
+> siano su disco); **(A)** **freeze ~1 min** alla fase simili — dopo la composizione
+> dHash girano clustering + «tengo la migliore» (quality scorer Vision) **senza
+> progresso**, e il quality scorer legge ancora **full-res** invece della miniatura C1;
+> **(B)** il messaggio d'eliminazione dice «Eliminati di recente / 30 giorni» ma non
+> **dove** trovarli. Ordine consigliato: I1 (C) → I2 (A) → I3 (B).
+
+```yaml
+- id: FSE-I1
+  title: "Ripristino stato al lancio: niente ri-scansione forzata dopo il cold relaunch"
+  macrotask: "fast_scan_engine"
+  depends_on: [FSE-E3]
+  objective: >
+    Al lancio, se una scansione è già stata fatta (indice SwiftData non vuoto), NON
+    forzare una nuova scansione unificata: ripristinare direttamente dashboard/risultato
+    (numeri dai dati persistiti; categorie on-tap dalla cache derivata FSE-E), con
+    un'azione ESPLICITA «Ri-scansiona» quando l'utente la vuole davvero.
+  definition_of_done:
+    - "Policy pura `LaunchRestorePolicy` (Domain): dato l'indice persistito (vuoto/non vuoto) decide RESTORE (dashboard) | FRESH (tasto scansione)"
+    - "HomeView consulta la policy al lancio: se RESTORE, lo stato porta alla dashboard senza `run()` automatico; azione «Ri-scansiona» esplicita disponibile"
+    - "Nessun numero stantìo: se l'observer di libreria (T-013) ha segnalato un cambio, il ripristino resta onesto (ricalcolo/caveat), mai una cifra vecchia spacciata per fresca"
+  acceptance_criteria:
+    - id: AC-FSE-I1-1
+      given: "un indice persistito NON vuoto (una scansione precedente esiste)"
+      when: "si valuta la policy di lancio"
+      then: "restituisce RESTORE (dashboard), non FRESH — l'utente non è costretto a ri-scansionare"
+    - id: AC-FSE-I1-2
+      given: "un indice VUOTO (primo avvio)"
+      when: "si valuta la policy"
+      then: "restituisce FRESH (tasto di scansione): la prima scansione è necessaria"
+    - id: AC-FSE-I1-3
+      given: "un ripristino (RESTORE)"
+      when: "si apre una categoria"
+      then: "si compone dalla cache/derivati (FSE-E) o on-tap, MAI una nuova scansione unificata forzata"
+  target_tests:
+    - file: "Tests/AngavuDomainTests/LaunchRestorePolicyTests.swift"
+      covers: [AC-FSE-I1-1, AC-FSE-I1-2]
+    - file: "Tests/AngavuFeaturesTests/LaunchRestoreWiringTests.swift"
+      covers: [AC-FSE-I1-3]
+  security_notes:
+    - "Il ripristino mostra i numeri persistiti solo se validi; su cambio libreria l'invalidazione (FSE-E3) resta attiva. Zero rete."
+  out_of_scope:
+    - "Persistenza della composizione CategoryReviewData tra avvii (le categorie si ricompongono on-tap dai derivati persistiti, veloce)"
+
+- id: FSE-I2
+  title: "Freeze dei simili: quality scorer ridimensionato (C1) + progresso sull'intera fase"
+  macrotask: "fast_scan_engine"
+  depends_on: [FSE-C1, FSE-H4]
+  objective: >
+    Eliminare il freeze di ~1 min alla fase «Confronto le foto simili…»: il quality
+    scorer del keep-best legge la miniatura C1 (~224px) invece del full-res (più veloce,
+    meno memoria → meno terminazioni in background), e il progresso copre anche
+    clustering + keep-best, non solo la composizione dHash.
+  definition_of_done:
+    - "Il percorso qualità (`VisionQualityScorer`/keep-best) consuma `DownscaledImageProviding` (~224px) dentro `autoreleasepool`, non `OnDeviceImageBytes.data` full-res"
+    - "`similarPhotosReview` riporta progresso monotòno durante clustering + keep-best (o un sotto-titolo di fase onesto): la barra non resta ferma a N/N"
+  acceptance_criteria:
+    - id: AC-FSE-I2-1
+      given: "un provider di immagine spione"
+      when: "il quality scorer chiede i pixel"
+      then: "richiede la taglia PICCOLA dichiarata (es. 224px), mai la piena risoluzione (come AC-FSE-C1-1)"
+    - id: AC-FSE-I2-2
+      given: "la fase simili con composizione + clustering + keep-best"
+      when: "si osserva la sequenza di progresso"
+      then: "è monotòna non decrescente FINO al completamento, senza un tratto finale a progresso fermo (nessuna frazione fabbricata)"
+  target_tests:
+    - file: "Tests/AngavuDataTests/QualityScorerDownscaledSizeTests.swift"
+      covers: [AC-FSE-I2-1]
+    - file: "Tests/AngavuFeaturesTests/SimilarPhaseProgressTests.swift"
+      covers: [AC-FSE-I2-2]
+  security_notes:
+    - "isNetworkAccessAllowed=false invariante (miniatura on-device). La soglia di qualità/nitidezza resta dichiarata alla taglia (coerente con FSE-C2)."
+  out_of_scope:
+    - "Parallelizzazione del keep-best (già possibile via FSE-D2, opzionale)"
+
+- id: FSE-I3
+  title: "Copy dell'eliminazione: dove ritrovare/ripristinare le foto"
+  macrotask: "fast_scan_engine"
+  depends_on: []
+  objective: >
+    Il messaggio della rete di sicurezza dice DOVE ritrovare gli elementi eliminati
+    (app Foto → Album → Eliminati di recente), non solo che restano ~30 giorni.
+  definition_of_done:
+    - "`safetyNote` (CategoryReviewPresentation) indica il percorso dell'album Foto → Album → «Eliminati di recente» e i ~30 giorni"
+  acceptance_criteria:
+    - id: AC-FSE-I3-1
+      given: "la nota di sicurezza dell'eliminazione"
+      when: "si legge il testo"
+      then: "nomina «Foto», «Album», «Eliminati di recente» e la finestra di ~30 giorni (onestà: dove e per quanto)"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/CategoryReviewPresentationTests.swift"
+      covers: [AC-FSE-I3-1]
+  security_notes:
+    - "Solo copy; nessun cambio di comportamento. Rete di sicurezza invariata (delete via PhotoKit → Eliminati di recente)."
+  out_of_scope:
+    - "Un deep-link all'album Foto (non c'è un'API pubblica affidabile; il testo indica il percorso)"
+```
+
 ---
 
 ## 6. Onestà & privacy (baseline invariata)
@@ -945,6 +1048,10 @@ La CI **non** misura la performance. Il guadagno si prova così, e solo così:
    → H4 (re-inclusione eager). Aggiunto dopo il device-test (crash jetsam alla fase
    simili). Con FSE-H l'obiettivo di FSE-F1 («aprire una categoria è istantaneo») vale
    per TUTTE le categorie anche su una libreria reale.
+8. **FSE-I** (correzioni dal 2° device-test): I1 (ripristino stato, niente ri-scansione
+   forzata dopo il background) → I2 (freeze dei simili: quality scorer su miniatura C1 +
+   progresso sull'intera fase) → I3 (copy dell'eliminazione: dove ripristinare). Il
+   crash è risolto; questi tolgono le frustrazioni residue del retest.
 
 Ogni fase chiude al confine CI per la logica pura; il guadagno si valida on-device
 (§7) prima di dichiararlo.
