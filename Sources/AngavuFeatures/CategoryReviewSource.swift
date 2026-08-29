@@ -98,28 +98,25 @@ public enum CleanupCategory: String, CaseIterable, Sendable {
         }
     }
 
-    /// FSE-F1 (rivisto dopo il device-test) — se questa categoria è calcolata EAGER
-    /// dentro la scansione unificata, o DIFFERITA al primo tap.
+    /// Se questa categoria è calcolata EAGER dentro la scansione unificata, o DIFFERITA
+    /// al primo tap. Knob della policy (mantenuto per poter differire di nuovo se serve).
     ///
-    /// I rilevatori per-foto pesanti — foto **simili** (un feature print Vision per
-    /// foto, trattenuto per il clustering greedy: O(N) osservazioni in memoria) e
-    /// **sfocate** (una decodifica per foto) — NON reggono la computazione eager
-    /// sull'INTERA libreria on-device: su migliaia di foto sono minuti di lavoro e, per
-    /// i simili, un picco di memoria che porta al **jetsam** (crash osservato al
-    /// device-test, fase «Cerco i duplicati…» → simili). Restano perciò DIFFERITI: si
-    /// calcolano al primo tap, con la loro barra di progresso e il loro annullamento —
-    /// mai un crash della scansione, mai un numero finto.
+    /// Storia: dopo il device-test i rilevatori per-foto pesanti — foto **simili** e
+    /// **sfocate** — furono DIFFERITI perché il clustering greedy sul feature print
+    /// Vision era O(N²) confronti + O(N) osservazioni Vision trattenute → **jetsam**
+    /// (crash osservato, fase «Cerco i duplicati…» → simili).
     ///
-    /// Le categorie ECONOMICHE/limitate restano eager (aprirle è istantaneo dalla
-    /// cache): screenshot e grandi/vecchi sono filtri puri sull'indice; i duplicati
-    /// esatti sono limitati ai candidati di pari dimensione (insieme piccolo). Il
-    /// guadagno reale e i limiti restano device-only (§7).
+    /// **FSE-H** ha reso quel percorso a MEMORIA LIMITATA: burst nativi (gratis) → dHash
+    /// 64-bit (`UInt64` per foto) → BK-tree O(N·log N) (`clustersByHash`, nessuna immagine
+    /// trattenuta) → feature print Vision demoto a conferma opzionale; `autoreleasepool`
+    /// per foto (FSE-H3). Le sfocate calcolano una nitidezza per foto (memoria O(1), pool
+    /// per foto). Ora reggono la scansione eager sull'intera libreria: **tutte le
+    /// categorie sono EAGER** → aprirne una è istantaneo dalla cache (obiettivo FSE-F1
+    /// ripristinato per tutte). Il guadagno/limite reale resta device-only (§7).
     var runsInUnifiedScan: Bool {
         switch self {
-        case .screenshots, .exactDuplicates, .largeOldVideos:
+        case .screenshots, .exactDuplicates, .largeOldVideos, .similarPhotos, .blurryPhotos:
             return true
-        case .similarPhotos, .blurryPhotos:
-            return false
         }
     }
 }

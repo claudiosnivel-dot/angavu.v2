@@ -118,15 +118,14 @@ final class ScanSignpostTests: XCTestCase {
     /// (strategia B): la MISURA della residenza (`measuringDeviceSpace`) è uscita dalla
     /// barra (differita), quindi non compare nella sequenza.
     ///
-    /// Fix crash on-device (device-test): i rilevatori per-foto PESANTI — foto simili e
-    /// sfocate — sono DIFFERITI al primo tap (evitano il jetsam da O(N) feature print in
-    /// scansione), quindi NON eseguono lavoro nella scansione e NON emettono un
-    /// intervallo signpost (telemetria onesta: si misura solo il lavoro reale, mai una
-    /// fase fantasma). Restano misurate le fasi EAGER: indice, byte, screenshot,
-    /// duplicati, grandi/vecchi.
+    /// FSE-H4: i rilevatori per-foto (simili, sfocate) — resi a memoria limitata da
+    /// FSE-H (dHash+BK-tree, autoreleasepool) — tornano EAGER nella scansione, quindi
+    /// eseguono lavoro reale e riemettono il loro intervallo signpost. La sequenza copre
+    /// di nuovo TUTTE le categorie (7 fasi: indice, byte, + 5 rilevatori).
     private let expectedPhases: [ScanSignpostPhase] = [
         .indexing, .resolvingSizes,
-        .analyzingScreenshots, .analyzingExactDuplicates, .analyzingLargeOldVideos
+        .analyzingScreenshots, .analyzingExactDuplicates, .analyzingSimilarPhotos,
+        .analyzingBlurryPhotos, .analyzingLargeOldVideos
     ]
 
     // AC-FSE-A1-1: ogni fase apre e chiude esattamente un intervallo, in ordine,

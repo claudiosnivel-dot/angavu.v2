@@ -222,13 +222,12 @@ public final class ScanViewModel {
             }
             let stage = category.scanStage
 
-            // FSE-F1 (rivisto dopo il device-test) — i rilevatori per-foto PESANTI (foto
-            // simili, sfocate) NON si calcolano eager nella scansione: su una libreria
-            // reale sono minuti di lavoro e, per i simili, un picco di memoria fino al
-            // crash (jetsam). Restano DIFFERITI al primo tap (con progresso+annullamento
-            // propri). La barra avanza comunque attraverso la loro fase (monotòna) senza
-            // fabbricare lavoro; la categoria non entra in `categoryResults` → al tap si
-            // calcola dal vivo (cache-miss), mai un parziale spacciato per completo.
+            // Knob EAGER/DIFFERITO (`runsInUnifiedScan`). Dopo FSE-H (simili/sfocate a
+            // memoria limitata: dHash+BK-tree, autoreleasepool) TUTTE le categorie sono
+            // eager → questa guardia non scatta più; resta come knob per poter differire
+            // di nuovo una categoria senza toccare il coordinatore. Una categoria
+            // differita avanzerebbe la barra attraverso la sua fase senza calcolarla (si
+            // calcolerebbe al tap, cache-miss), mai un parziale spacciato per completo.
             guard category.runsInUnifiedScan else {
                 report(stage, AnalysisProgress(processed: 1, total: 1))
                 continue
