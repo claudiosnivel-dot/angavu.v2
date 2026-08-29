@@ -242,18 +242,26 @@ enum CategoryReviewSource {
         progress: (AnalysisProgress) -> Void
     ) throws -> CategoryReviewData {
         let photos = try environment.indexReader.assets(matching: .all).filter { $0.kind == .photo }
-        // Il dHash percettivo (fallback) non è ancora cablato in C-1: il clustering usa
-        // la distanza semantica del feature print reale (Vision) sul device; un asset
-        // non confrontabile resta nel proprio cluster (mai un falso "simile").
-        let candidates = photos.map { SimilarityCandidate(asset: $0, dHash: nil) }
-        let allClusters = try completed(SimilarClustering.clusters(
-            of: candidates,
-            provider: environment.featurePrinter,
-            thresholds: CategoryDetectionDefaults.similarity,
-            chunkSize: CategoryDetectionDefaults.chunkSize,
+        // FSE-H2 — Percorso PRINCIPALE: il dHash percettivo REALE (miniatura C1), cablato
+        // dietro il port. La composizione è la fase costosa (una decodifica piccola per
+        // foto) → riporta progresso ed è cancellabile; trattiene solo un `UInt64` per
+        // candidato (memoria O(1) per foto), mai un feature print Vision. Un asset senza
+        // dHash resta `nil` → singleton nel clustering (mai un falso "simile").
+        let candidates = try completed(SimilarCandidateComposition.candidates(
+            for: photos,
+            hashing: environment.perceptualHasher,
+            analysis: .serial(chunkSize: CategoryDetectionDefaults.chunkSize),
             cancellation: cancellation,
             progress: progress
         ))
+        // Clustering a MEMORIA LIMITATA per vicinanza dHash (BK-tree, FSE-H1): O(N·log N)
+        // senza trattenere immagini. Il feature print Vision è demoto a conferma opzionale
+        // delle coppie borderline (mai il percorso principale) — non gira qui, così sparisce
+        // la ritenzione O(N) di osservazioni Vision che causava il jetsam.
+        let allClusters = SimilarClustering.clustersByHash(
+            of: candidates,
+            maxHammingDistance: CategoryDetectionDefaults.similarity.hamming
+        )
         // Solo i gruppi REALI di simili (≥ 2): un singleton non ha nulla da proporre e
         // non deve comparire come "da tenere" (eviterebbe di elencare tutta la libreria).
         let realClusters = allClusters.filter { $0.members.count > 1 }

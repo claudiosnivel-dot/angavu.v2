@@ -62,6 +62,12 @@ private struct FakeFeaturePrinter: FeaturePrinting {
     }
 }
 
+/// dHash fake: valore percettivo per id; assente → `nil` (asset senza dHash → singleton).
+private struct FakePerceptualHasher: AssetPerceptualHashing {
+    let dHashById: [String: UInt64]
+    func dHash(for asset: LibraryAsset) -> UInt64? { dHashById[asset.id] }
+}
+
 /// Qualità fake: solo nitidezza (più alta = migliore); assente → 0.
 private struct FakeQuality: QualityScoring {
     let sharpnessById: [String: Double]
@@ -85,6 +91,7 @@ private func makeEnvironment(
     bytesById: [String: Int64] = [:],
     digestsById: [String: String] = [:],
     distancesByPair: [Set<String>: Float] = [:],
+    dHashById: [String: UInt64] = [:],
     qualityById: [String: Double] = [:],
     sharpnessById: [String: Double] = [:]
 ) -> AppEnvironment {
@@ -98,6 +105,7 @@ private func makeEnvironment(
         deviceStorage: FakeDeviceStorage(),
         contentHasher: FakeHasher(digestsById: digestsById),
         featurePrinter: FakeFeaturePrinter(distancesByPair: distancesByPair),
+        perceptualHasher: FakePerceptualHasher(dHashById: dHashById),
         qualityScorer: FakeQuality(sharpnessById: qualityById),
         sharpnessScorer: FakeSharpness(sharpnessById: sharpnessById),
         videoExporter: NoopVideoExporter(),
@@ -158,15 +166,16 @@ final class CategoryReviewSourceTests: XCTestCase {
 
     // MARK: Foto simili
 
-    // Due foto entro soglia ⇒ cluster; si tiene la più nitida (qualità), l'altra
-    // removable. Una foto lontana resta singleton e NON compare (né keep né removable).
+    // FSE-H2 — Il percorso principale è il dHash REALE (vicinanza Hamming, BK-tree), non
+    // più il feature print. Due foto entro soglia Hamming ⇒ cluster; si tiene la più
+    // nitida (qualità), l'altra removable. Una foto lontana resta singleton e NON compare.
     func test_similarPhotos_keepsBestOfCluster() throws {
         let env = makeEnvironment(
             assets: [photo("P1"), photo("P2"), photo("P3")],
-            distancesByPair: [
-                Set(["P1", "P2"]): 0.1,  // simili (≤ 0.5)
-                Set(["P1", "P3"]): 1.0,  // lontane
-                Set(["P2", "P3"]): 1.0
+            dHashById: [
+                "P1": 0x0000_0000_0000_0000,
+                "P2": 0x0000_0000_0000_0003,  // 2 bit da P1 → simili (≤ 10)
+                "P3": 0xFFFF_FFFF_FFFF_FFFF   // 64 bit da P1/P2 → lontana
             ],
             qualityById: ["P1": 0.9, "P2": 0.2, "P3": 0.5]
         )
@@ -183,12 +192,34 @@ final class CategoryReviewSourceTests: XCTestCase {
     func test_similarPhotos_noSimilars_isEmpty() throws {
         let env = makeEnvironment(
             assets: [photo("P1"), photo("P2")],
-            distancesByPair: [Set(["P1", "P2"]): 1.0], // oltre soglia
+            dHashById: [
+                "P1": 0x0000_0000_0000_0000,
+                "P2": 0xFFFF_FFFF_FFFF_FFFF   // 64 bit di distanza → oltre soglia
+            ],
             qualityById: ["P1": 0.5, "P2": 0.5]
         )
         let review = try CategoryReviewSource.review(for: .similarPhotos, from: env)
         XCTAssertTrue(review.keepIds.isEmpty)
         XCTAssertTrue(review.removableIds.isEmpty)
+    }
+
+    // Un asset senza dHash (non calcolabile on-device) resta singleton: mai dichiarato
+    // simile per costruzione, anche accanto a una coppia realmente simile.
+    func test_similarPhotos_assetWithoutDHash_staysSingleton() throws {
+        let env = makeEnvironment(
+            assets: [photo("P1"), photo("P2"), photo("X")],
+            dHashById: [
+                "P1": 0x0000_0000_0000_0000,
+                "P2": 0x0000_0000_0000_0001   // 1 bit → simili
+                // "X" assente → dHash nil → singleton, mai un falso "simile"
+            ],
+            qualityById: ["P1": 0.9, "P2": 0.2]
+        )
+        let review = try CategoryReviewSource.review(for: .similarPhotos, from: env)
+        XCTAssertEqual(review.keepIds, ["P1"])
+        XCTAssertEqual(review.removableIds, ["P2"])
+        XCTAssertFalse(review.keepIds.contains("X"))
+        XCTAssertFalse(review.removableIds.contains("X"))
     }
 
     // MARK: Foto sfocate

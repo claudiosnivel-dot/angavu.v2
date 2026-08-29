@@ -22,6 +22,14 @@ public struct NoFeaturePrinter: FeaturePrinting {
     public func distance(between lhs: LibraryAsset, and rhs: LibraryAsset) throws -> Float? { nil }
 }
 
+/// FSE-H2 — Nessun dHash percettivo: ogni candidato resta senza dHash (`nil`) → il
+/// clustering per vicinanza (`clustersByHash`) li lascia tutti singleton, nessuna coppia
+/// dichiarata simile. Usato finché `live()` non cabla l'adapter reale (miniatura C1).
+public struct NoPerceptualHasher: AssetPerceptualHashing {
+    public init() {}
+    public func dHash(for asset: LibraryAsset) -> UInt64? { nil }
+}
+
 /// Nessun punteggio di qualità reale: punteggio neutro (tutti i termini a zero/assenti).
 /// A parità di punteggio il keep di un cluster ricade sul tie-break deterministico per
 /// id (T-042): scelta stabile, mai arbitraria. Usato solo finché `live()` non cabla

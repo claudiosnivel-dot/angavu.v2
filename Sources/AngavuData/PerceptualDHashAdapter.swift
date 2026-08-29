@@ -31,10 +31,31 @@ public struct PerceptualDHasher {
     public init() {}
 
     /// dHash a 64 bit dell'asset, o `nil` se non calcolabile on-device.
+    ///
+    /// FSE-H2 — Questo è il percorso LEGACY che decodifica i byte originali (full-res)
+    /// prima di ridurli: resta come alternativa, ma il percorso di produzione è ora quello
+    /// C1 (`dHash(fromDownscaled:)`), che parte dalla miniatura piccola senza mai
+    /// materializzare l'originale intero (leva 2).
     public func dHash(for asset: LibraryAsset) -> UInt64? {
         guard
             let data = imageData(for: asset),
             let gray = grayscaleSamples(from: data)
+        else {
+            return nil
+        }
+        return Self.dHash(fromGray: gray)
+    }
+
+    /// FSE-H2 — dHash a 64 bit da un'immagine GIÀ ridimensionata (miniatura C1,
+    /// `.pixels(64)`): il percorso di produzione. Nessuna decodifica full-res — riduce a
+    /// 9×8 grigi la miniatura piccola e ne calcola i 64 bit. `nil` se l'immagine non
+    /// proviene da questo Data layer o il contesto grafico fallisce (mai un valore
+    /// fabbricato). Delega la matematica dei bit alla STESSA `dHash(fromGray:)` del
+    /// percorso legacy: una sola fonte di verità sull'algoritmo.
+    public func dHash(fromDownscaled image: DownscaledImage) -> UInt64? {
+        guard
+            let cgImage = image.resolvedCGImage,
+            let gray = grayscaleSamples(fromCGImage: cgImage)
         else {
             return nil
         }
@@ -61,8 +82,8 @@ public struct PerceptualDHasher {
         return result
     }
 
-    /// Decodifica e ridimensiona a 9×8 in scala di grigi a 8 bit, restituendo i
-    /// campioni riga per riga. `nil` se la decodifica o il contesto grafico falliscono.
+    /// Decodifica i byte, ne fa una miniatura e la riduce a 9×8 grigi (percorso legacy).
+    /// `nil` se la decodifica fallisce.
     private func grayscaleSamples(from data: Data) -> [UInt8]? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let thumbnailOptions: [CFString: Any] = [
@@ -75,7 +96,14 @@ public struct PerceptualDHasher {
         else {
             return nil
         }
+        return grayscaleSamples(fromCGImage: thumbnail)
+    }
 
+    /// Ridimensiona a 9×8 in scala di grigi a 8 bit un `CGImage` (già piccolo),
+    /// restituendo i campioni riga per riga. `nil` se il contesto grafico fallisce.
+    /// Condiviso dal percorso legacy (miniatura da byte) e da quello C1 (miniatura
+    /// ridimensionata dal provider): una sola riduzione, un solo ordine dei bit.
+    private func grayscaleSamples(fromCGImage cgImage: CGImage) -> [UInt8]? {
         let width = Self.sampleWidth
         let height = Self.sampleHeight
         let colorSpace = CGColorSpaceCreateDeviceGray()
@@ -92,7 +120,7 @@ public struct PerceptualDHasher {
         }
 
         context.interpolationQuality = .medium
-        context.draw(thumbnail, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
         guard let pixels = context.data else { return nil }
 
         let buffer = pixels.bindMemory(to: UInt8.self, capacity: width * height)
@@ -115,6 +143,38 @@ public struct PerceptualDHasher {
             }
         }
         return hash
+    }
+}
+
+/// FSE-H2 — Adapter reale del port `AssetPerceptualHashing` che riusa la miniatura C1
+/// (`.pixels(64)`, `isNetworkAccessAllowed = false` nel provider) invece di decodificare
+/// l'originale full-res. Ogni calcolo gira dentro un `autoreleasepool`: i temporanei
+/// della decodifica di quella foto si rilasciano PRIMA della successiva (dieta memoria
+/// per-foto, come il motore concorrente FSE-D1/H3), così comporre i dHash su tutta la
+/// libreria trattiene solo `UInt64`, mai immagini. La matematica del dHash è delegata a
+/// `PerceptualDHasher` (una sola fonte di verità sull'algoritmo).
+///
+/// Onestà/privacy (§6): un originale solo in iCloud con rete disabilitata → il provider
+/// restituisce `nil` → dHash `nil` (mai un download, mai un valore fabbricato). Adapter
+/// Apple-only → compilato in CI, il calcolo reale dai pixel è device-only (AC-FSE-H2-3,
+/// §7): la LOGICA di composizione/clustering è provata dagli oracoli con provider fake.
+public struct DownscaledPerceptualHasher: AssetPerceptualHashing {
+    private let imageProvider: any DownscaledImageProviding
+    private let hasher = PerceptualDHasher()
+
+    /// FSE-C1: default al provider ridimensionato reale (miniatura piccola, zero rete).
+    public init(imageProvider: any DownscaledImageProviding = PHImageDownscaledProvider()) {
+        self.imageProvider = imageProvider
+    }
+
+    public func dHash(for asset: LibraryAsset) -> UInt64? {
+        autoreleasepool {
+            let handle = IdentifierAssetHandle(asset.id)
+            guard let image = imageProvider.downscaledImage(for: handle, size: .pixels(64)) else {
+                return nil
+            }
+            return hasher.dHash(fromDownscaled: image)
+        }
     }
 }
 #endif

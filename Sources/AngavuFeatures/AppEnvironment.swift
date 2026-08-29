@@ -40,6 +40,11 @@ public struct AppEnvironment {
     /// vuota, mai numeri finti — finché `live()` non cabla gli adapter reali.
     public let contentHasher: any AssetContentHashing
     public let featurePrinter: any FeaturePrinting
+    /// FSE-H2: dHash percettivo per-asset (miniatura C1). È il percorso PRINCIPALE dei
+    /// simili (memoria O(1) per foto); il feature print resta conferma opzionale. Default
+    /// `NoPerceptualHasher` (nessun dHash → nessun raggruppamento) finché `live()` non
+    /// cabla l'adapter reale.
+    public let perceptualHasher: any AssetPerceptualHashing
     public let qualityScorer: any QualityScoring
     public let sharpnessScorer: any SharpnessScoring
     public let videoExporter: any VideoExporting
@@ -61,6 +66,7 @@ public struct AppEnvironment {
         thumbnailProvider: any AssetThumbnailProviding = NoThumbnailProvider(),
         contentHasher: any AssetContentHashing = NoContentHasher(),
         featurePrinter: any FeaturePrinting = NoFeaturePrinter(),
+        perceptualHasher: any AssetPerceptualHashing = NoPerceptualHasher(),
         qualityScorer: any QualityScoring = NoQualityScorer(),
         sharpnessScorer: any SharpnessScoring = NoSharpnessScorer(),
         videoExporter: any VideoExporting,
@@ -79,6 +85,7 @@ public struct AppEnvironment {
         self.thumbnailProvider = thumbnailProvider
         self.contentHasher = contentHasher
         self.featurePrinter = featurePrinter
+        self.perceptualHasher = perceptualHasher
         self.qualityScorer = qualityScorer
         self.sharpnessScorer = sharpnessScorer
         self.videoExporter = videoExporter
@@ -137,6 +144,7 @@ extension AppEnvironment {
             thumbnailProvider: liveThumbnailProvider(),
             contentHasher: liveContentHasher(),
             featurePrinter: liveFeaturePrinter(),
+            perceptualHasher: livePerceptualHasher(),
             qualityScorer: liveQualityScorer(),
             sharpnessScorer: liveSharpnessScorer(),
             videoExporter: AVFoundationVideoExporter(),
@@ -173,6 +181,17 @@ extension AppEnvironment {
         return VisionFeaturePrinter()
         #else
         return NoFeaturePrinter()
+        #endif
+    }
+
+    /// FSE-H2 — dHash percettivo reale dalla miniatura C1 quando i framework grafici
+    /// sono disponibili; altrimenti il null-object (nessun dHash, nessun raggruppamento).
+    /// La guardia ricalca quella del `PerceptualDHashAdapter`.
+    private static func livePerceptualHasher() -> any AssetPerceptualHashing {
+        #if canImport(Photos) && canImport(ImageIO) && canImport(CoreGraphics)
+        return DownscaledPerceptualHasher()
+        #else
+        return NoPerceptualHasher()
         #endif
     }
 
