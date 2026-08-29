@@ -21,6 +21,9 @@ targets:
       - path: .
         excludes:
           - project.yml
+          # FSE-J0 — il target UITest (Livello B) ha le sue sorgenti: NON vanno
+          # compilate nel bundle dell'app (importano XCTest e girano nel test bundle).
+          - AngavuUITests
           # L'Info.plist NON va tra le risorse: se copiato grezzo nel bundle
           # scavalca il "Process Info.plist" (niente sostituzione di $(...) né
           # iniezione di CFBundleExecutable/MinimumOSVersion/UIDeviceFamily) →
@@ -44,3 +47,23 @@ targets:
         product: AngavuDomain
       - package: Angavu
         product: AngavuData
+
+  # FSE-J0 (Livello B) — target UITest che ESEGUE l'app sul Simulatore in CI.
+  # XcodeGen aggancia automaticamente i test target che dipendono dall'app allo
+  # scheme auto-generato dell'app: `xcodebuild test -scheme Angavu` esegue questi
+  # UITest senza dover definire uno scheme esplicito (lo scheme `Angavu` usato da
+  # ipa/release resta intatto). `TEST_TARGET_NAME` lega il bundle UI all'app sotto test.
+  AngavuUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AngavuUITests
+    dependencies:
+      - target: Angavu
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.angavu.uitests
+        TEST_TARGET_NAME: Angavu
+        # Nessuna firma in CI (come il job ios-app): il Simulatore non la richiede.
+        CODE_SIGNING_ALLOWED: NO

@@ -78,3 +78,55 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+  # FSE-J0 (Livello B) — ESEGUE l'app su un Simulatore CONCRETO: `xcodebuild test` col
+  # target UITest + foto seminate via `xcrun simctl addmedia`. È ciò che rende il
+  # cablaggio (eliminazione reale, ciclo di vita) verificabile in CI SENZA il device
+  # dell'utente. Più pesante (avvia il Simulatore ed esegue l'app): come `ios-app`,
+  # separato e disattivabile per risparmiare minuti macOS.
+  ios-uitest:
+    name: UITest app (iOS Simulator)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Genera progetto Xcode (XcodeGen)
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          make app
+
+      - name: Crea e avvia il Simulatore
+        id: sim
+        run: |
+          set -euo pipefail
+          # Runtime iOS più recente disponibile sul runner (Xcode preinstallato).
+          RUNTIME=$(xcrun simctl list runtimes | grep -Eo 'com.apple.CoreSimulator.SimRuntime.iOS-[0-9-]+' | tail -1)
+          echo "Runtime scelto: $RUNTIME"
+          # Device concreto (es. iPhone 16); fallback al primo iPhone disponibile.
+          DEVICE_TYPE="iPhone 16"
+          if ! xcrun simctl list devicetypes | grep -q "$DEVICE_TYPE"; then
+            DEVICE_TYPE=$(xcrun simctl list devicetypes | grep -Eo 'iPhone [0-9]+' | tail -1)
+          fi
+          echo "Device scelto: $DEVICE_TYPE"
+          UDID=$(xcrun simctl create "angavu-uitest" "$DEVICE_TYPE" "$RUNTIME")
+          echo "UDID: $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Semina foto di fixture (simctl addmedia)
+        run: |
+          set -euo pipefail
+          # Immagine sintetica di fixture (mai dati reali); zero rete. Riusata dai
+          # test end-to-end di FSE-J1 (eliminazione reale).
+          xcrun simctl addmedia "${{ steps.sim.outputs.udid }}" fixtures/uitest-seed.png
+
+      - name: xcodebuild test (UITest sul Simulatore)
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project App/Angavu.xcodeproj \
+            -scheme Angavu \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
