@@ -1,3 +1,4 @@
+import AngavuData
 import AngavuDomain
 import Observation
 
@@ -46,6 +47,17 @@ public struct CategoryReview: Equatable, Sendable {
     public var rows: [CategoryReviewRow] {
         keepIds.map { CategoryReviewRow(id: $0, disposition: .keep) }
             + removableIds.map { CategoryReviewRow(id: $0, disposition: .removable) }
+    }
+
+    /// FSE-J1/J2 — Toglie gli id dati da keep e removable (ordine stabile del resto).
+    /// Usata da FSE-J1 per aggiornare la review dopo un'eliminazione REALE riuscita, e
+    /// riusata da FSE-J2 per la potatura chirurgica della cache. No-op su insieme vuoto.
+    public func removing(ids: Set<String>) -> CategoryReview {
+        guard !ids.isEmpty else { return self }
+        return CategoryReview(
+            keepIds: keepIds.filter { !ids.contains($0) },
+            removableIds: removableIds.filter { !ids.contains($0) }
+        )
     }
 
     // MARK: - Normalizzazione dalle proposte dei rilevatori
@@ -102,11 +114,20 @@ public final class CategoryReviewViewModel {
     /// `beginDeleting()` a valle della conferma. Il delete reale (adapter) è fuori
     /// scope qui.
     public private(set) var flow: DeletionFlow = DeletionFlow()
+    /// FSE-J1 — Eliminazione reale iniettata (censimento C1). Default null-object
+    /// `NoAssetDeleter` (i vecchi test costruiscono senza deleter e non lo invocano); la
+    /// View reale passa `environment.assetDeleter` (PhotoKit + allineamento indice).
+    private let deleter: any AssetDeleting
 
-    public init(review: CategoryReview, assets: [String: LibraryAsset] = [:]) {
+    public init(
+        review: CategoryReview,
+        assets: [String: LibraryAsset] = [:],
+        deleter: any AssetDeleting = NoAssetDeleter()
+    ) {
         self.review = review
         self.assets = assets
         self.selection = CategorySelectionPolicy.initialSelection(for: review)
+        self.deleter = deleter
     }
 
     /// Righe presentabili (keep vs removable).
@@ -198,6 +219,32 @@ public final class CategoryReviewViewModel {
     public func confirmDeletion() -> Bool {
         guard flow.acceptPreview() else { return false }
         return flow.confirm()
+    }
+
+    /// FSE-J1 — Conferma il gate e ESEGUE l'eliminazione REALE (censimento C1: prima
+    /// `confirmDeletion()` avanzava solo il gate e nessuna foto veniva eliminata). Passi:
+    /// (1) autorizza il gate (preview→confirm); (2) invoca `deleter.delete(ids:)` sugli id
+    /// selezionati (mai i keep); (3) su `success` toglie gli id dalla review e dalla
+    /// selezione (le righe eliminate spariscono subito); su `cancelled`/`failed` la review
+    /// resta invariata (mai un falso successo). Il gate è ripristinato in ogni caso.
+    /// Restituisce l'esito PhotoKit reale così la View mostra un errore onesto su `failed`.
+    @discardableResult
+    public func confirmAndDelete() async -> BatchDeletionResult {
+        guard confirmDeletion() else { return .cancelled }
+        let ids = selectedRemovableIds
+        guard !ids.isEmpty else {
+            flow = DeletionFlow()
+            return .cancelled
+        }
+        let result = await deleter.delete(ids: ids)
+        if case .success = result {
+            let removed = Set(ids)
+            review = review.removing(ids: removed)
+            selection.subtract(removed)
+            for id in removed { assets[id] = nil }
+        }
+        flow = DeletionFlow() // consuma il gate: torna a rivedere (successo o meno)
+        return result
     }
 
     /// L'utente annulla: azzera il gate e torna a rivedere (nessuna eliminazione).

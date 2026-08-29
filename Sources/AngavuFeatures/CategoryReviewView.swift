@@ -47,6 +47,9 @@ public struct CategoryReviewView: View {
 
     @State var vm = CategoryReviewViewModel(review: CategoryReview(keepIds: [], removableIds: []))
     @State var loadPhase: LoadPhase = .loading(nil)
+    /// FSE-J1 — Motivo dell'eliminazione REALE fallita (mai un falso successo). `nil`
+    /// quando non c'è errore; presente → alert onesto.
+    @State var deletionError: String?
 
     public init(environment: AppEnvironment, category: CleanupCategory, store: AnalysisResultsStore) {
         self.environment = environment
@@ -86,14 +89,31 @@ public struct CategoryReviewView: View {
         .alert(previewAlertTitle, isPresented: isPreviewing) {
             Button("Annulla", role: .cancel) { vm.cancelDeletion() }
             Button("Elimina", role: .destructive) {
-                vm.confirmDeletion()
-                // D-1: l'eliminazione autorizzata cambia conteggi/spazio → i numeri
-                // cachati (dashboard, report, categorie) non sono più freschi. Si
-                // invalida tutto: mai un numero stantìo dopo un delete (numeri veri).
-                store.invalidateAll()
+                // FSE-J1: l'eliminazione ora è REALE (PhotoKit → «Eliminati di recente»),
+                // non più solo un avanzamento del gate (censimento C1). Attende l'esito
+                // reale prima di dichiarare qualcosa.
+                Task {
+                    let result = await vm.confirmAndDelete()
+                    switch result {
+                    case .success:
+                        // L'eliminazione ha cambiato conteggi/spazio → i numeri cachati
+                        // non sono più freschi. Si invalida (J2 renderà la potatura
+                        // chirurgica): mai un numero stantìo dopo un delete (numeri veri).
+                        store.invalidateAll()
+                    case .failed(let reason):
+                        deletionError = reason // errore onesto, mai un falso successo
+                    case .cancelled:
+                        break // l'utente ha annullato l'alert di sistema: nulla eliminato
+                    }
+                }
             }
         } message: {
             Text(presentation.safetyNote)
+        }
+        .alert("Eliminazione non riuscita", isPresented: showsDeletionError) {
+            Button("OK", role: .cancel) { deletionError = nil }
+        } message: {
+            Text(deletionError ?? "")
         }
         .task { await loadIfNeeded() }
         // D-1: pull-to-refresh = «Ri-analizza» manuale. Invalida la cache e ricalcola
@@ -369,6 +389,12 @@ extension CategoryReviewView {
     /// tra l'azione del pulsante e la dismissal di sistema.
     var isPreviewing: Binding<Bool> {
         Binding(get: { presentation.phase == .previewing }, set: { _ in })
+    }
+
+    /// FSE-J1 — Vero quando c'è un errore di eliminazione da mostrare. Il `set` a `false`
+    /// (OK / dismissal) azzera il motivo.
+    var showsDeletionError: Binding<Bool> {
+        Binding(get: { deletionError != nil }, set: { if !$0 { deletionError = nil } })
     }
 
 }

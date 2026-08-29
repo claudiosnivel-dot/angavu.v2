@@ -49,6 +49,40 @@ public struct BatchDeletionCoordinator {
     }
 }
 
+/// FSE-J1 — Deleter cablabile nell'`AppEnvironment` che, conformandosi a `AssetDeleting`,
+/// esegue l'eliminazione reale e allinea l'indice all'esito. Riporta SEMPRE l'esito
+/// PhotoKit onesto (ciò che è davvero successo alle foto): l'aggiornamento dell'indice è
+/// best-effort — un suo fallimento lascia un record stantìo che il prossimo scan (o
+/// l'observer) riconcilia, MAI un falso `failed` su foto realmente eliminate.
+public struct IndexAligningDeleter: AssetDeleting {
+    private let base: any AssetDeleting
+    private let index: any AssetIndexWriting
+
+    public init(base: any AssetDeleting, index: any AssetIndexWriting) {
+        self.base = base
+        self.index = index
+    }
+
+    public func delete(ids: [String]) async -> BatchDeletionResult {
+        let result = await base.delete(ids: ids)
+        if case .success = result {
+            try? index.remove(ids: ids) // best-effort: la libreria è la verità, l'indice una cache
+        }
+        return result
+    }
+}
+
+/// Null-object dell'eliminazione: default dell'`AppEnvironment` finché `live()` non cabla
+/// il deleter reale. NON finge un successo — riporta `failed`, così un uso accidentale in
+/// produzione è visibile (e il test della radice di composizione, AC-FSE-J1-2, garantisce
+/// che `live()` NON lo usi).
+public struct NoAssetDeleter: AssetDeleting {
+    public init() {}
+    public func delete(ids: [String]) async -> BatchDeletionResult {
+        .failed(reason: "nessun deleter configurato")
+    }
+}
+
 #if canImport(Photos)
 import Photos
 

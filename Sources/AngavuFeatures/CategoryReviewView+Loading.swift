@@ -49,7 +49,11 @@ extension CategoryReviewView {
         if force { store.invalidate(cacheKey) }
         // D-1 cache hit: rientro istantaneo, nessun ricalcolo (niente rianalisi da capo).
         if !force, let cached: CategoryReviewData = store.value(for: cacheKey) {
-            vm = CategoryReviewViewModel(review: cached.review, assets: cached.assets)
+            vm = CategoryReviewViewModel(
+                review: cached.review,
+                assets: cached.assets,
+                deleter: environment.assetDeleter
+            )
             loadPhase = .loaded
             return
         }
@@ -58,7 +62,11 @@ extension CategoryReviewView {
             let data = try await CategoryReviewView.composeReviewData(for: category, from: environment)
             // Memorizza col timestamp per il badge di freschezza (D-1).
             store.set(data, for: cacheKey, at: Date())
-            vm = CategoryReviewViewModel(review: data.review, assets: data.assets)
+            vm = CategoryReviewViewModel(
+                review: data.review,
+                assets: data.assets,
+                deleter: environment.assetDeleter
+            )
             loadPhase = .loaded
         } catch {
             loadPhase = .failed(String(describing: error))

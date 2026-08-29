@@ -81,6 +81,22 @@ final class CompositionRootWiringTests: XCTestCase {
             "handleResolver NON deve essere il null-object nel grafo live()"
         )
     }
+
+    // AC-FSE-J1-2: nel grafo `live()`, il deleter è l'adapter REALE (allinea l'indice e
+    // usa PhotoKit), NON il null-object `NoAssetDeleter`. Questa asserzione FALLIREBBE se
+    // FSE-J1 avesse dimenticato di cablare il deleter — esattamente il bug del censimento
+    // C1 (eliminazione no-op perché nessun deleter era in `AppEnvironment`).
+    func test_liveGraph_wiresRealDeleterNotNullObject() throws {
+        let env = try LiveCompositionRoot.make()
+        XCTAssertTrue(
+            env.assetDeleter is IndexAligningDeleter,
+            "assetDeleter deve essere il deleter reale che allinea l'indice nel grafo live()"
+        )
+        XCTAssertFalse(
+            env.assetDeleter is NoAssetDeleter,
+            "assetDeleter NON deve essere il null-object nel grafo live() (censimento C1)"
+        )
+    }
 }
 #endif
 
