@@ -23,6 +23,12 @@ struct ContentView: View {
     // navigazione e al ciclo background→foreground (non è `@State` di una schermata,
     // che verrebbe azzerato a ogni ricomparsa). Iniettata nella Home e a valle.
     @State private var resultsStore = AnalysisResultsStore()
+    // FSE-J5 (censimento C4): possiede il sink + l'observer PhotoKit dei cambi libreria
+    // (l'observer trattiene il sink solo `weak`, quindi il possesso forte vive qui, per
+    // l'intera sessione). Costruito e avviato una volta quando la Home appare; la
+    // registrazione reale è device-only (AC-FSE-J5-2), la logica d'invalidazione è
+    // oracolata in CI (AC-FSE-J5-1).
+    @State private var libraryObserver: LibraryObservationCoordinator?
 
     var body: some View {
         NavigationStack {
@@ -38,7 +44,20 @@ struct ContentView: View {
         } else {
             HomeView(environment: .live(container: modelContext.container), store: resultsStore)
                 .transition(.opacity)
+                .task { startLibraryObservation() }
         }
+    }
+
+    /// FSE-J5 — Avvia (una volta) l'osservazione dei cambi libreria: al variare della
+    /// libreria il sink pota gli id toccati dalle categorie in cache e invalida gli
+    /// aggregati (invalidazione chirurgica, mai il nuke). Idempotente.
+    private func startLibraryObservation() {
+        guard libraryObserver == nil else { return }
+        let coordinator = LibraryObservationCoordinator(store: resultsStore)
+        #if canImport(Photos)
+        coordinator.start()
+        #endif
+        libraryObserver = coordinator
     }
 
     private func finishOnboarding() {
