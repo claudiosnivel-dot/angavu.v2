@@ -26,7 +26,8 @@ struct AngavuApp: App {
                 .preferredColorScheme(theme.preferredColorScheme)
         }
         // Indice SwiftData on-device (zero backend): il ModelContext creato qui
-        // alimenta l'`AppEnvironment.live` costruito in ContentView.
-        .modelContainer(for: AssetRecord.self)
+        // alimenta l'`AppEnvironment.live` costruito in ContentView. FSE-J6: lo schema
+        // include anche `DerivedRecord` così i derivati (digest…) persistono fra i lanci.
+        .modelContainer(for: [AssetRecord.self, DerivedRecord.self])
     }
 }

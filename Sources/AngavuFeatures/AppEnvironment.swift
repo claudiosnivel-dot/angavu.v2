@@ -56,6 +56,19 @@ public struct AppEnvironment {
     /// `SystemCompressedAssetInstaller` (`PHAssetCreationRequest` per salvare + il
     /// deleter di J1 per eliminare l'originale, solo dopo un salvataggio verificato).
     public let compressedInstaller: any CompressedAssetInstalling
+    /// FSE-J6 (censimento C3): persistenza dei derivati fra i lanci. Default null-object
+    /// `NoDerivedResultStore` (nessun derivato persistito → la scansione ricalcola sempre)
+    /// finché `live()` non cabla `SwiftDataDerivedStore(container:)`.
+    public let derivedStore: any DerivedResultStoring
+    /// FSE-J6: cache in memoria dei derivati sopra lo store persistito, CONDIVISA dalla
+    /// scansione (get-or-compute del digest via `CachingContentDigests`) e dall'observer
+    /// dei cambi libreria (FSE-J5, invalidazione per-asset). `nil` finché `live()` non la
+    /// costruisce: senza cache la scansione ricalcola e l'observer non ha nulla da potare.
+    public let derivedCache: DerivedResultCache?
+    /// FSE-J6: risolutore PURO della versione del contenuto per chiavare i derivati. È la
+    /// STESSA istanza che alimenta sia il decoratore della scansione sia il `warm` della
+    /// cache, così le chiavi combaciano. `nil` quando la cache non è cablata.
+    public let derivedVersioning: (any AssetContentVersioning)?
     public let videoExporter: any VideoExporting
     public let videoSpecProvider: any VideoSpecProviding
     /// Porte dei domini extra-foto (contatti, calendari). `nil` finché non cablate
@@ -80,6 +93,9 @@ public struct AppEnvironment {
         sharpnessScorer: any SharpnessScoring = NoSharpnessScorer(),
         assetDeleter: any AssetDeleting = NoAssetDeleter(),
         compressedInstaller: any CompressedAssetInstalling = NoCompressedInstaller(),
+        derivedStore: any DerivedResultStoring = NoDerivedResultStore(),
+        derivedCache: DerivedResultCache? = nil,
+        derivedVersioning: (any AssetContentVersioning)? = nil,
         videoExporter: any VideoExporting,
         videoSpecProvider: any VideoSpecProviding,
         extraDomains: ExtraDomainsPorts? = nil
@@ -101,6 +117,9 @@ public struct AppEnvironment {
         self.sharpnessScorer = sharpnessScorer
         self.assetDeleter = assetDeleter
         self.compressedInstaller = compressedInstaller
+        self.derivedStore = derivedStore
+        self.derivedCache = derivedCache
+        self.derivedVersioning = derivedVersioning
         self.videoExporter = videoExporter
         self.videoSpecProvider = videoSpecProvider
         self.extraDomains = extraDomains
@@ -146,6 +165,16 @@ extension AppEnvironment {
         // compressa (l'installer elimina l'originale con lo STESSO deleter → «Eliminati di
         // recente», indice allineato). Un'unica definizione, nessuna divergenza.
         let deleter = IndexAligningDeleter(base: SystemAssetDeleter(), index: index)
+        // FSE-J6 (censimento C3): persistenza dei derivati cablata nel grafo reale.
+        // Un'UNICA cache in memoria (`DerivedResultCache`) sopra lo store SwiftData:
+        // la scansione la consulta (get-or-compute del digest, sotto) e l'observer dei
+        // cambi libreria (FSE-J5) la invalida per-asset. Devono essere la STESSA istanza
+        // — costruita qui una volta, condivisa a valle — o l'invalidazione non toccherebbe
+        // la cache che la scansione legge. Il versioning è puro (nessun fetch): la stessa
+        // istanza chiava il decoratore e il `warm`.
+        let derivedStore = SwiftDataDerivedStore(container: container)
+        let derivedCache = DerivedResultCache(store: derivedStore)
+        let derivedVersioning = AssetFieldContentVersioning()
         return AppEnvironment(
             authorizer: SystemPhotoLibraryAuthorizer(),
             enumerator: SystemPhotoAssetEnumerator(),
@@ -160,7 +189,14 @@ extension AppEnvironment {
             deviceCapacity: SystemDeviceCapacityReader(),
             residencyProbe: PHAssetResidencyProbe(),
             thumbnailProvider: liveThumbnailProvider(),
-            contentHasher: liveContentHasher(),
+            // FSE-J6: get-or-compute del digest sopra la cache persistita. Il rilevatore
+            // dei duplicati esatti chiede il digest a QUESTO adapter → una seconda scansione
+            // riusa i digest persistiti (0 riletture/ri-hash), mai un digest fabbricato.
+            contentHasher: CachingContentDigests(
+                base: liveContentHasher(),
+                cache: derivedCache,
+                versioning: derivedVersioning
+            ),
             featurePrinter: liveFeaturePrinter(),
             perceptualHasher: livePerceptualHasher(),
             qualityScorer: liveQualityScorer(),
@@ -175,6 +211,12 @@ extension AppEnvironment {
             compressedInstaller: SafeCompressedAssetInstaller(
                 saver: PHAssetCreationSaver(), deleter: deleter
             ),
+            // FSE-J6: store reale + cache/versioning condivisi esposti a valle (scansione
+            // per il `warm`, observer FSE-J5 per l'invalidazione per-asset). NON i default
+            // null-object → i derivati sopravvivono ai lanci (censimento C3).
+            derivedStore: derivedStore,
+            derivedCache: derivedCache,
+            derivedVersioning: derivedVersioning,
             videoExporter: AVFoundationVideoExporter(),
             videoSpecProvider: AVFoundationVideoSpecProvider(),
             extraDomains: liveExtraDomains()

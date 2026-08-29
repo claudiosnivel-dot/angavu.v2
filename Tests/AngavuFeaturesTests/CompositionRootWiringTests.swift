@@ -43,7 +43,11 @@ import SwiftData
 enum LiveCompositionRoot {
     static func make() throws -> AppEnvironment {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: AssetRecord.self, configurations: configuration)
+        // FSE-J6: lo schema rispecchia la produzione (indice + derivati), così il grafo
+        // costruito qui è quello reale.
+        let container = try ModelContainer(
+            for: AssetRecord.self, DerivedRecord.self, configurations: configuration
+        )
         return AppEnvironment.live(container: container)
     }
 }
@@ -112,6 +116,38 @@ final class CompositionRootWiringTests: XCTestCase {
         XCTAssertFalse(
             env.compressedInstaller is NoCompressedInstaller,
             "compressedInstaller NON deve essere il null-object nel grafo live() (censimento C2)"
+        )
+    }
+
+    // AC-FSE-J6-2 (parte cablabile in CI): nel grafo `live()`, lo store dei derivati è
+    // l'adapter SwiftData REALE (non il null-object `NoDerivedResultStore`), il rilevatore
+    // dei duplicati esatti chiede il digest al DECORATORE cachante (`CachingContentDigests`,
+    // get-or-compute) e la cache/versioning condivisi sono presenti così l'observer FSE-J5
+    // può invalidare la STESSA cache che la scansione consulta. Questa asserzione fallirebbe
+    // se FSE-J6 avesse lasciato lo store sul null-object o l'hasher senza cache — il bug del
+    // censimento C3 (derivati ricalcolati a ogni scansione perché mai persistiti). La
+    // PERSISTENZA reale fra lanci resta device-only/integrazione (AC-FSE-J6-2, §7).
+    func test_liveGraph_wiresRealDerivedStoreAndCachingHasher() throws {
+        let env = try LiveCompositionRoot.make()
+        XCTAssertTrue(
+            env.derivedStore is SwiftDataDerivedStore,
+            "derivedStore deve essere lo store SwiftData reale nel grafo live()"
+        )
+        XCTAssertFalse(
+            env.derivedStore is NoDerivedResultStore,
+            "derivedStore NON deve essere il null-object nel grafo live() (censimento C3)"
+        )
+        XCTAssertTrue(
+            env.contentHasher is CachingContentDigests,
+            "contentHasher deve essere il decoratore get-or-compute del digest (FSE-J6)"
+        )
+        XCTAssertNotNil(
+            env.derivedCache,
+            "la cache derivata condivisa deve esistere (la scansione la scalda, FSE-J5 la invalida)"
+        )
+        XCTAssertNotNil(
+            env.derivedVersioning,
+            "il versioning condiviso deve esistere per chiavare i derivati (warm + decoratore)"
         )
     }
 }

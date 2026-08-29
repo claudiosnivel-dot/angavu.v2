@@ -29,6 +29,12 @@ struct ContentView: View {
     // registrazione reale è device-only (AC-FSE-J5-2), la logica d'invalidazione è
     // oracolata in CI (AC-FSE-J5-1).
     @State private var libraryObserver: LibraryObservationCoordinator?
+    // FSE-J6 (censimento C3): l'`AppEnvironment.live` di produzione è costruito UNA volta e
+    // condiviso dalla Home (scansione) e dall'observer FSE-J5 — così il sink invalida la
+    // STESSA cache dei derivati che la scansione consulta (prima era `nil`: l'invalidazione
+    // per-asset di J5 era un no-op). Costruito quando la Home appare, per non toccare
+    // `modelContext.container` fuori dal ciclo di vista.
+    @State private var environment: AppEnvironment?
 
     var body: some View {
         NavigationStack {
@@ -42,18 +48,33 @@ struct ContentView: View {
             OnboardingManifestoView(onContinue: finishOnboarding)
                 .transition(.opacity)
         } else {
-            HomeView(environment: .live(container: modelContext.container), store: resultsStore)
-                .transition(.opacity)
-                .task { startLibraryObservation() }
+            Group {
+                if let environment {
+                    HomeView(environment: environment, store: resultsStore)
+                } else {
+                    // Un solo frame mentre il grafo si costruisce (dentro la dissolvenza
+                    // dall'onboarding): `activateHome()` lo popola immediatamente in `.task`.
+                    Color.clear
+                }
+            }
+            .transition(.opacity)
+            .task { activateHome() }
         }
     }
 
-    /// FSE-J5 — Avvia (una volta) l'osservazione dei cambi libreria: al variare della
-    /// libreria il sink pota gli id toccati dalle categorie in cache e invalida gli
-    /// aggregati (invalidazione chirurgica, mai il nuke). Idempotente.
-    private func startLibraryObservation() {
+    /// FSE-J5/J6 — Costruisce (una volta) il grafo di produzione e avvia l'osservazione
+    /// dei cambi libreria, condividendo la STESSA `AppEnvironment` (e quindi la stessa
+    /// cache dei derivati) fra Home e observer: al variare della libreria il sink pota gli
+    /// id toccati dalle categorie in cache, invalida gli aggregati e invalida i derivati
+    /// per-asset (invalidazione chirurgica, mai il nuke). Idempotente.
+    private func activateHome() {
+        let environment = self.environment ?? .live(container: modelContext.container)
+        self.environment = environment
         guard libraryObserver == nil else { return }
-        let coordinator = LibraryObservationCoordinator(store: resultsStore)
+        let coordinator = LibraryObservationCoordinator(
+            store: resultsStore,
+            derivedCache: environment.derivedCache
+        )
         #if canImport(Photos)
         coordinator.start()
         #endif
@@ -69,5 +90,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: AssetRecord.self, inMemory: true)
+        .modelContainer(for: [AssetRecord.self, DerivedRecord.self], inMemory: true)
 }

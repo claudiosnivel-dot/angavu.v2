@@ -126,14 +126,20 @@ public final class ScanViewModel {
             return state
         }
 
+        // FSE-J6 — scalda la cache dei derivati con gli asset correnti PRIMA dei rilevatori:
+        // i derivati validi persistiti (digest…) tornano in memoria e quelli di asset non
+        // più presenti vengono potati; così il rilevatore dei duplicati esatti (che chiede
+        // il digest a `environment.contentHasher` = il decoratore cachante) riusa i digest
+        // di una scansione precedente invece di rileggere i byte. No-op quando la cache non
+        // è cablata (grafo di test/senza `live()`).
+        warmDerivedCache(for: assets)
+
         // FASE 2 — numeri veri di libreria (byte per-asset + aggregazione), stessa barra.
         // La residenza device è differita (FSE-G1, strategia B): non è più una fase
         // obbligatoria. Un fallimento QUI non annulla la scansione: l'indice è scritto
         // (fatto reale), i numeri restano non calcolati e la dashboard li ricalcolerà.
         // Una cancellazione, invece, è volontà dell'utente → esito `cancelled`.
-        computeFigures(cancellation: cancellation) { cancelledAt in
-            self.state = .cancelled(cancelledAt)
-        }
+        computeFigures(cancellation: cancellation) { self.state = .cancelled($0) }
         if case .cancelled = state { return state }
 
         // FASI 4-8 — rilevatori di categoria (FSE-F1): la STESSA passata calcola anche
@@ -141,13 +147,24 @@ public final class ScanViewModel {
         // aprire una categoria è istantaneo. Un rilevatore che fallisce lascia la SUA
         // categoria non-cachata (verrà calcolata al tap) senza abortire la scansione;
         // una cancellazione, invece, è volontà dell'utente → esito `cancelled`.
-        computeCategoryResults(cancellation: cancellation) { cancelledAt in
-            self.state = .cancelled(cancelledAt)
-        }
+        computeCategoryResults(cancellation: cancellation) { self.state = .cancelled($0) }
         if case .cancelled = state { return state }
 
         state = .completed(indexed: assets.count, partialCount: decision.isPartialCount)
         return state
+    }
+
+    /// FSE-J6 — Ripopola la cache dei derivati (in memoria) dai persistiti validi per gli
+    /// asset correnti, e pota dallo store i derivati di asset non più presenti (mai numeri
+    /// di fantasmi). Best-effort: un `warm` fallito significa solo che si ricalcola questa
+    /// volta — mai un derivato stantìo servito. Il versioning è puro (nessun fetch
+    /// per-asset), quindi la chiave qui combacia con quella del decoratore in `live()`.
+    private func warmDerivedCache(for assets: [LibraryAsset]) {
+        guard let cache = environment.derivedCache, let versioning = environment.derivedVersioning else {
+            return
+        }
+        let keys = assets.map { DerivedKey(id: $0.id, contentVersion: versioning.contentVersion(for: $0)) }
+        try? cache.warm(current: keys)
     }
 
     /// Aggiorna lo stato con un progresso di fase, come parte dell'unica barra.
