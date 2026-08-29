@@ -32,7 +32,8 @@ final class PerItemAnalysisAutoreleaseTests: XCTestCase {
         let items = Array(0..<200)
         var samples: [AnalysisProgress] = []
         let outcome = serial.map(items, cancellation: CancellationToken(),
-                                 progress: { samples.append($0) }) { $0 }
+                                 progress: { samples.append($0) },
+                                 transform: { $0 })
 
         guard case .completed = outcome else { return XCTFail("atteso completed") }
         XCTAssertFalse(samples.isEmpty, "il progresso deve essere riportato")
