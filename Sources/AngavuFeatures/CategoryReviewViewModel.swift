@@ -157,6 +157,16 @@ public final class CategoryReviewViewModel {
     /// selezione (le righe eliminate spariscono subito); su `cancelled`/`failed` la review
     /// resta invariata (mai un falso successo). Il gate è ripristinato in ogni caso.
     /// Restituisce l'esito PhotoKit reale così la View mostra un errore onesto su `failed`.
+    ///
+    /// FSE-J1-fix (crash device sui duplicati): `@MainActor` OBBLIGATORIO. Senza, essendo
+    /// un metodo `async` di una classe non isolata, l'intero corpo gira sul generic executor
+    /// (fuori dal main) → le mutazioni di `review`/`selection`/`assets` (stato `@Observable`
+    /// osservato da SwiftUI) avvenivano OFF-MAIN. Sugli screenshot la review si svuotava (0
+    /// righe, nessun ridisegno rischioso); sui duplicati restavano i `keepIds` e SwiftUI
+    /// ridisegnava la lista durante una mutazione off-main → crash. Con `@MainActor` le
+    /// mutazioni tornano sul main; l'`await deleter.delete` salta comunque fuori per il
+    /// lavoro PhotoKit e rientra sul main per l'aggiornamento di stato.
+    @MainActor
     @discardableResult
     public func confirmAndDelete() async -> BatchDeletionResult {
         guard confirmDeletion() else { return .cancelled }
