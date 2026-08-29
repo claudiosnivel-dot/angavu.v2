@@ -14,7 +14,8 @@ final class CompressedReplacementTests: XCTestCase {
     // AC-082-1: export success verificato + anteprima confermata → originale
     // eliminato via DeletionFlow (portato a confirmed) e compresso pronto all'indice.
     func test_replacement_approvedRoutesOriginalThroughDeletionFlow() {
-        let outcome = VideoExportOutcome.success(outputBytes: 80_000_000, metadata: meta)
+        let url = URL(fileURLWithPath: "/tmp/out.mov")
+        let outcome = VideoExportOutcome.success(outputBytes: 80_000_000, outputURL: url, metadata: meta)
 
         let result = CompressedReplacementPlanner.plan(
             outcome: outcome,
@@ -35,7 +36,8 @@ final class CompressedReplacementTests: XCTestCase {
 
     // AC-082-2: export non verificato integro → sostituzione rifiutata, originale intatto.
     func test_replacement_refusedWhenExportNotVerified() {
-        let outcome = VideoExportOutcome.success(outputBytes: 80_000_000, metadata: meta)
+        let url = URL(fileURLWithPath: "/tmp/out.mov")
+        let outcome = VideoExportOutcome.success(outputBytes: 80_000_000, outputURL: url, metadata: meta)
 
         let result = CompressedReplacementPlanner.plan(
             outcome: outcome,
@@ -61,7 +63,8 @@ final class CompressedReplacementTests: XCTestCase {
     // Senza conferma dell'anteprima la sostituzione è rifiutata, prima ancora
     // di guardare l'export.
     func test_replacement_refusedWhenPreviewNotConfirmed() {
-        let outcome = VideoExportOutcome.success(outputBytes: 80_000_000, metadata: meta)
+        let url = URL(fileURLWithPath: "/tmp/out.mov")
+        let outcome = VideoExportOutcome.success(outputBytes: 80_000_000, outputURL: url, metadata: meta)
         let result = CompressedReplacementPlanner.plan(
             outcome: outcome,
             exportVerifiedIntegral: true,

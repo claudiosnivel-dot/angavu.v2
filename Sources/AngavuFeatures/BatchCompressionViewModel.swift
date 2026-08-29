@@ -1,5 +1,6 @@
 import AngavuDomain
 import AngavuData
+import Foundation
 import Observation
 
 // B-2d — Driver del BATCH di compressione (guscio UI, async).
@@ -44,6 +45,10 @@ public final class BatchCompressionViewModel {
     public private(set) var estimatedCount = 0
 
     private let coordinator: VideoExportCoordinator
+    /// FSE-J3: installer della sostituzione reale (salva il compresso + elimina
+    /// l'originale, solo dopo un salvataggio verificato). Iniettato dalla radice di
+    /// composizione; i test iniettano una spia.
+    private let installer: any CompressedAssetInstalling
     private var optIn = CompressionOptIn()
     private var cancellation = CancellationToken()
     /// Spec risolte off-device dell'ultimo `computeEstimate`, per ricalcolare la
@@ -51,8 +56,9 @@ public final class BatchCompressionViewModel {
     /// dipendono dal preset; solo il fattore di bitrate cambia).
     private var resolvedItems: [BatchCompressionItem] = []
 
-    public init(exporter: any VideoExporting) {
+    public init(exporter: any VideoExporting, installer: any CompressedAssetInstalling) {
         self.coordinator = VideoExportCoordinator(exporter: exporter)
+        self.installer = installer
     }
 
     // MARK: - Candidati e selezione
@@ -145,7 +151,7 @@ public final class BatchCompressionViewModel {
                 preset: preset,
                 cancellation: cancellation
             )
-            apply(outcome, at: index, id: id, to: &current)
+            await apply(outcome, at: index, id: id, to: &current)
             publish(current, phase: .running)
         }
 
@@ -169,33 +175,59 @@ public final class BatchCompressionViewModel {
 
     // MARK: - Passi privati
 
-    /// Traduce l'esito dell'export nell'esito di coda, instradando ogni successo
-    /// alla rete di sicurezza (originale via DeletionFlow). Tiene corto il corpo del
-    /// loop (function_body_length) senza cambiare il comportamento.
+    /// Traduce l'esito dell'export nell'esito di coda. Su export riuscito il piano puro
+    /// (`CompressedReplacementPlanner`) fa da gate e, se approva, la sostituzione è
+    /// ESEGUITA DAVVERO (FSE-J3): l'installer salva il compresso in libreria e, solo dopo
+    /// un salvataggio verificato, elimina l'originale (→ «Eliminati di recente»). Se il
+    /// salvataggio fallisce, l'originale resta intatto (mai perdita di dati).
     private func apply(
         _ outcome: VideoExportOutcome,
         at index: Int,
         id: String,
         to run: inout BatchCompressionRun
-    ) {
+    ) async {
         switch outcome {
         case .cancelled:
             run.cancel()
         case .failed(let reason):
             run.record(.failed(reason: reason), at: index)
-        case .success(let outputBytes, _):
-            let planned = CompressedReplacementPlanner.plan(
-                outcome: outcome,
-                exportVerifiedIntegral: true,
-                previewConfirmed: true,
-                originalId: id
-            )
-            switch planned {
-            case .success:
-                run.record(.succeeded(outputBytes: outputBytes), at: index)
-            case .failure(let error):
+        case .success:
+            await applySuccess(outcome, at: index, id: id, to: &run)
+        }
+    }
+
+    /// Passo di sostituzione reale su export riuscito. Estratto per tenere corto il corpo
+    /// del loop (function_body_length) senza cambiare il comportamento.
+    private func applySuccess(
+        _ outcome: VideoExportOutcome,
+        at index: Int,
+        id: String,
+        to run: inout BatchCompressionRun
+    ) async {
+        guard case .success(let outputBytes, let outputURL, let metadata) = outcome else { return }
+        let planned = CompressedReplacementPlanner.plan(
+            outcome: outcome,
+            exportVerifiedIntegral: true,
+            previewConfirmed: true,
+            originalId: id
+        )
+        guard case .success = planned else {
+            if case .failure(let error) = planned {
                 run.record(.failed(reason: String(describing: error)), at: index)
             }
+            return
+        }
+        // Piano approvato → ESEGUI la sostituzione reale (salva compresso + elimina originale).
+        let installed = await installer.install(
+            compressedAt: outputURL, originalId: id, metadata: metadata
+        )
+        switch installed {
+        case .installed:
+            run.record(.succeeded(outputBytes: outputBytes), at: index)
+        case .saveFailed(let reason), .deleteFailed(let reason):
+            // Salvataggio/eliminazione non completati → non è un successo onesto.
+            // Su `saveFailed` l'originale è intatto; su `deleteFailed` entrambi restano.
+            run.record(.failed(reason: reason), at: index)
         }
     }
 

@@ -36,7 +36,8 @@ final class HEVCExportTests: XCTestCase {
 
     // AC-081-1: export success → l'output conserva i metadati (data/luogo) del sorgente.
     func test_success_preservesMetadata() async {
-        let fake = FakeExporter(outcome: .success(outputBytes: 50_000_000, metadata: meta))
+        let outputURL = URL(fileURLWithPath: "/tmp/out.mov")
+        let fake = FakeExporter(outcome: .success(outputBytes: 50_000_000, outputURL: outputURL, metadata: meta))
         let coordinator = VideoExportCoordinator(exporter: fake)
 
         let outcome = await coordinator.run(
@@ -45,7 +46,7 @@ final class HEVCExportTests: XCTestCase {
             cancellation: CancellationToken()
         )
 
-        guard case .success(let bytes, let metadata) = outcome else {
+        guard case .success(let bytes, _, let metadata) = outcome else {
             return XCTFail("atteso success, ottenuto \(outcome)")
         }
         XCTAssertEqual(bytes, 50_000_000)
@@ -56,7 +57,8 @@ final class HEVCExportTests: XCTestCase {
     // AC-081-2: cancellazione richiesta prima dell'avvio → esito cancelled, senza
     // nemmeno invocare l'exporter (nessun blocco a 0%).
     func test_cancellationBeforeStart_yieldsCancelledAndSkipsExport() async {
-        let fake = FakeExporter(outcome: .success(outputBytes: 1, metadata: meta))
+        let outputURL = URL(fileURLWithPath: "/tmp/out.mov")
+        let fake = FakeExporter(outcome: .success(outputBytes: 1, outputURL: outputURL, metadata: meta))
         let coordinator = VideoExportCoordinator(exporter: fake)
         let token = CancellationToken()
         token.cancel()

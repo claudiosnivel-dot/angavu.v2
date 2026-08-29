@@ -57,7 +57,7 @@ public enum CompressedReplacementPlanner {
         originalId: String
     ) -> Result<CompressedReplacement, ReplacementError> {
         guard previewConfirmed else { return .failure(.previewNotConfirmed) }
-        guard case .success(let outputBytes, let metadata) = outcome, exportVerifiedIntegral else {
+        guard case .success(let outputBytes, _, let metadata) = outcome, exportVerifiedIntegral else {
             return .failure(.exportNotVerified)
         }
 

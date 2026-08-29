@@ -22,7 +22,11 @@ private final class FakeExporter: VideoExporting {
     ) async -> VideoExportOutcome {
         exportCalls.append(sourceLocalIdentifier)
         return outcomes[sourceLocalIdentifier]
-            ?? .success(outputBytes: 100, metadata: VideoMetadata(creationDate: nil, latitude: nil, longitude: nil))
+            ?? .success(
+                outputBytes: 100,
+                outputURL: URL(fileURLWithPath: "/tmp/\(sourceLocalIdentifier).mov"),
+                metadata: VideoMetadata(creationDate: nil, latitude: nil, longitude: nil)
+            )
     }
 }
 
@@ -46,7 +50,7 @@ final class BatchCompressionFlowTests: XCTestCase {
     // Senza conferma dell'anteprima: l'exporter NON è invocato; ogni item è failed.
     func test_start_withoutPreviewConfirmed_neverExports() async {
         let exporter = FakeExporter()
-        let vm = BatchCompressionViewModel(exporter: exporter)
+        let vm = BatchCompressionViewModel(exporter: exporter, installer: SpyCompressedInstaller())
         vm.setCandidates([candidate("a", bytes: 300), candidate("b", bytes: 200)])
         vm.selectAll()
 
@@ -60,7 +64,7 @@ final class BatchCompressionFlowTests: XCTestCase {
     // Selezione vuota (opt-in): niente coda, niente export.
     func test_start_emptySelection_isNoop() async {
         let exporter = FakeExporter()
-        let vm = BatchCompressionViewModel(exporter: exporter)
+        let vm = BatchCompressionViewModel(exporter: exporter, installer: SpyCompressedInstaller())
         vm.setCandidates([candidate("a", bytes: 300)])
 
         let run = await vm.start(previewConfirmed: true)
@@ -73,7 +77,7 @@ final class BatchCompressionFlowTests: XCTestCase {
     // Batch 3 con 1 fallimento al 2°: la coda prosegue → {ok, failed, ok}.
     func test_start_perItemFailure_doesNotAbort() async {
         let exporter = FakeExporter(outcomes: ["b": .failed(reason: "export non riuscito")])
-        let vm = BatchCompressionViewModel(exporter: exporter)
+        let vm = BatchCompressionViewModel(exporter: exporter, installer: SpyCompressedInstaller())
         // Ordine per dimensione desc: a(300) > b(200) > c(100).
         vm.setCandidates([candidate("a", bytes: 300), candidate("b", bytes: 200), candidate("c", bytes: 100)])
         vm.selectAll()
@@ -90,7 +94,7 @@ final class BatchCompressionFlowTests: XCTestCase {
     // Solo i selezionati sono compressi (subset).
     func test_start_compressesOnlySelectedSubset() async {
         let exporter = FakeExporter()
-        let vm = BatchCompressionViewModel(exporter: exporter)
+        let vm = BatchCompressionViewModel(exporter: exporter, installer: SpyCompressedInstaller())
         vm.setCandidates([candidate("a", bytes: 300), candidate("b", bytes: 200), candidate("c", bytes: 100)])
         vm.toggle("a")
         vm.toggle("c")
@@ -105,7 +109,7 @@ final class BatchCompressionFlowTests: XCTestCase {
 
     // La stima copre i top-N; una spec assente resta dichiarata non stimabile.
     func test_computeEstimate_capAndUnestimable() async {
-        let vm = BatchCompressionViewModel(exporter: FakeExporter())
+        let vm = BatchCompressionViewModel(exporter: FakeExporter(), installer: SpyCompressedInstaller())
         vm.setCandidates([
             candidate("a", bytes: 300), candidate("b", bytes: 200), candidate("c", bytes: 100)
         ])

@@ -109,7 +109,9 @@ public struct AVFoundationVideoExporter: VideoExporting {
                 latitude: asset.location?.coordinate.latitude,
                 longitude: asset.location?.coordinate.longitude
             )
-            return .success(outputBytes: outputBytes, metadata: metadata)
+            // FSE-J3: l'`outputURL` (file compresso su disco) viaggia con l'esito, così
+            // la sostituzione può salvarlo in libreria PRIMA di eliminare l'originale.
+            return .success(outputBytes: outputBytes, outputURL: outputURL, metadata: metadata)
         } catch {
             return .failed(reason: String(describing: error))
         }

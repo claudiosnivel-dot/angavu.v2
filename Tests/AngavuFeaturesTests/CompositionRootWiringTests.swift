@@ -97,6 +97,23 @@ final class CompositionRootWiringTests: XCTestCase {
             "assetDeleter NON deve essere il null-object nel grafo live() (censimento C1)"
         )
     }
+
+    // AC-FSE-J3-2: nel grafo `live()`, l'installer della sostituzione compressa è l'adapter
+    // REALE (`SafeCompressedAssetInstaller`, che salva via `PHAssetCreationRequest` ed elimina
+    // l'originale col deleter di J1), NON il null-object `NoCompressedInstaller`. Questa
+    // asserzione fallirebbe se FSE-J3 avesse dimenticato di cablarlo — il bug del censimento
+    // C2 (sostituzione no-op: l'export girava ma nessun `PHAssetCreationRequest`).
+    func test_liveGraph_wiresRealCompressedInstallerNotNullObject() throws {
+        let env = try LiveCompositionRoot.make()
+        XCTAssertTrue(
+            env.compressedInstaller is SafeCompressedAssetInstaller,
+            "compressedInstaller deve essere l'installer reale nel grafo live()"
+        )
+        XCTAssertFalse(
+            env.compressedInstaller is NoCompressedInstaller,
+            "compressedInstaller NON deve essere il null-object nel grafo live() (censimento C2)"
+        )
+    }
 }
 #endif
 

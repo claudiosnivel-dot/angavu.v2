@@ -103,8 +103,12 @@ public struct VideoMetadata: Equatable, Sendable {
 
 /// Esito esplicito di un export: mai un blocco muto, sempre uno di questi tre.
 public enum VideoExportOutcome: Equatable, Sendable {
-    /// Ricodifica riuscita: byte dell'output e metadati preservati.
-    case success(outputBytes: Int64, metadata: VideoMetadata)
+    /// Ricodifica riuscita: byte dell'output, **posizione del file compresso** e
+    /// metadati preservati. L'`outputURL` è il file su disco prodotto dall'export:
+    /// FSE-J3 lo consuma per salvare il compresso in libreria (`PHAssetCreationRequest`)
+    /// prima di eliminare l'originale. È solo un `URL` Foundation (nessuna dipendenza di
+    /// piattaforma: l'altitudine resta intatta, come per `Date` nei metadati).
+    case success(outputBytes: Int64, outputURL: URL, metadata: VideoMetadata)
     /// Cancellata (stop cooperativo): nessun output valido, sorgente intatto.
     case cancelled
     /// Fallita: motivo ispezionabile; il sorgente resta intatto.

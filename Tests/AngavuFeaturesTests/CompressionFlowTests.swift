@@ -21,7 +21,11 @@ private final class FakeExporter: VideoExporting {
 }
 
 private func successOutcome(_ bytes: Int64) -> VideoExportOutcome {
-    .success(outputBytes: bytes, metadata: VideoMetadata(creationDate: nil, latitude: nil, longitude: nil))
+    .success(
+        outputBytes: bytes,
+        outputURL: URL(fileURLWithPath: "/tmp/out.mov"),
+        metadata: VideoMetadata(creationDate: nil, latitude: nil, longitude: nil)
+    )
 }
 
 final class CompressionFlowTests: XCTestCase {

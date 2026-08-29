@@ -12,6 +12,7 @@ final class CompressionPresentationTests: XCTestCase {
     private func doneReplacement(outputBytes: Int64) -> CompressedReplacement {
         let outcome = VideoExportOutcome.success(
             outputBytes: outputBytes,
+            outputURL: URL(fileURLWithPath: "/tmp/out.mov"),
             metadata: VideoMetadata(creationDate: nil, latitude: nil, longitude: nil)
         )
         let planned = CompressedReplacementPlanner.plan(

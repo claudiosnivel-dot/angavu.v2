@@ -48,7 +48,10 @@ public struct CompressionView: View {
 
     public init(environment: AppEnvironment) {
         self.environment = environment
-        _vm = State(initialValue: BatchCompressionViewModel(exporter: environment.videoExporter))
+        _vm = State(initialValue: BatchCompressionViewModel(
+            exporter: environment.videoExporter,
+            installer: environment.compressedInstaller
+        ))
     }
 
     public var body: some View {

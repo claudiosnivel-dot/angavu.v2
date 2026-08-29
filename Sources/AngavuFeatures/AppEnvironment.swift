@@ -51,6 +51,11 @@ public struct AppEnvironment {
     /// `NoAssetDeleter` (mai un falso successo) finché `live()` non cabla
     /// `SystemAssetDeleter` (PhotoKit → «Eliminati di recente») che allinea l'indice.
     public let assetDeleter: any AssetDeleting
+    /// FSE-J3 (censimento C2): sostituzione compressa reale. Default null-object
+    /// `NoCompressedInstaller` (mai un falso successo) finché `live()` non cabla
+    /// `SystemCompressedAssetInstaller` (`PHAssetCreationRequest` per salvare + il
+    /// deleter di J1 per eliminare l'originale, solo dopo un salvataggio verificato).
+    public let compressedInstaller: any CompressedAssetInstalling
     public let videoExporter: any VideoExporting
     public let videoSpecProvider: any VideoSpecProviding
     /// Porte dei domini extra-foto (contatti, calendari). `nil` finché non cablate
@@ -74,6 +79,7 @@ public struct AppEnvironment {
         qualityScorer: any QualityScoring = NoQualityScorer(),
         sharpnessScorer: any SharpnessScoring = NoSharpnessScorer(),
         assetDeleter: any AssetDeleting = NoAssetDeleter(),
+        compressedInstaller: any CompressedAssetInstalling = NoCompressedInstaller(),
         videoExporter: any VideoExporting,
         videoSpecProvider: any VideoSpecProviding,
         extraDomains: ExtraDomainsPorts? = nil
@@ -94,6 +100,7 @@ public struct AppEnvironment {
         self.qualityScorer = qualityScorer
         self.sharpnessScorer = sharpnessScorer
         self.assetDeleter = assetDeleter
+        self.compressedInstaller = compressedInstaller
         self.videoExporter = videoExporter
         self.videoSpecProvider = videoSpecProvider
         self.extraDomains = extraDomains
@@ -134,6 +141,11 @@ extension AppEnvironment {
     /// così la scrittura della scansione (fuori dal main actor) non blocca la UI.
     public static func live(container: ModelContainer) -> AppEnvironment {
         let index = SwiftDataAssetIndex(container: container)
+        // FSE-J1/J3: lo stesso deleter reale (struct value, con lo stesso indice condiviso)
+        // alimenta sia l'eliminazione delle categorie (`assetDeleter`) sia la sostituzione
+        // compressa (l'installer elimina l'originale con lo STESSO deleter → «Eliminati di
+        // recente», indice allineato). Un'unica definizione, nessuna divergenza.
+        let deleter = IndexAligningDeleter(base: SystemAssetDeleter(), index: index)
         return AppEnvironment(
             authorizer: SystemPhotoLibraryAuthorizer(),
             enumerator: SystemPhotoAssetEnumerator(),
@@ -155,7 +167,14 @@ extension AppEnvironment {
             sharpnessScorer: liveSharpnessScorer(),
             // FSE-J1: eliminazione reale (PhotoKit → «Eliminati di recente») che allinea
             // l'indice all'esito. NON il null-object → l'app elimina davvero (censimento C1).
-            assetDeleter: IndexAligningDeleter(base: SystemAssetDeleter(), index: index),
+            assetDeleter: deleter,
+            // FSE-J3: sostituzione compressa reale — orchestrazione pura che salva il
+            // compresso (`PHAssetCreationSaver` → `PHAssetCreationRequest`) e, solo dopo un
+            // salvataggio verificato, elimina l'originale con lo stesso deleter di J1. NON il
+            // null-object → l'app libera davvero spazio (censimento C2).
+            compressedInstaller: SafeCompressedAssetInstaller(
+                saver: PHAssetCreationSaver(), deleter: deleter
+            ),
             videoExporter: AVFoundationVideoExporter(),
             videoSpecProvider: AVFoundationVideoSpecProvider(),
             extraDomains: liveExtraDomains()
