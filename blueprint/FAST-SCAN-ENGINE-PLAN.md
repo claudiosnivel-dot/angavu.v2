@@ -203,6 +203,12 @@ FSE-A (fondazioni: signpost + protocollo di misura + baseline)
        └─ FSE-E (persistenza dei derivati; chiave id+modDate; invalidazione)
             └─ FSE-F
   FSE-G (ripensamento residenza) dipende da FSE-B (+ FSE-D se resta nel motore)
+
+  FSE-H (simili/sfocate a memoria limitata → re-inclusi nella scansione), post-F1:
+    FSE-H1 (BK-tree + clustering per dHash, Domain puro; depends_on: [])
+    FSE-H2 (dHash reale + burst; feature print → conferma) depends_on: [H1, C1]
+    FSE-H3 (autoreleasepool nel seriale + rimozione pre-warm) depends_on: [D2]
+    FSE-H4 (re-inclusione simili/sfocate eager) depends_on: [H1, H2, H3]
 ```
 
 Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
@@ -690,6 +696,167 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
     - "La rimozione del probe P0-2b (resta l'unico modo onesto di avere il numero preciso); qui si decide DOVE eseguirlo"
 ```
 
+### FSE-H — Simili/sfocate a memoria limitata, re-inclusi nella scansione unificata
+
+> **Origine**: bugfix del device-test (2026-08-29). La scansione unificata (FSE-F1)
+> crashava alla fase «simili» perché il clustering greedy sul feature print Vision è
+> **O(N²) confronti + O(N) osservazioni Vision trattenute** (+ decodifiche senza
+> `autoreleasepool` nel percorso seriale) → **jetsam**. Fix immediato: simili/sfocate
+> **differite** al tap (`CleanupCategory.runsInUnifiedScan == false`). FSE-H le
+> re-include con un algoritmo a **memoria limitata e O(N·log N)**, così l'obiettivo di
+> FSE-F1 («un'unica scansione fa tutto») vale anche su una libreria reale.
+>
+> **Ricerca (deep search + Apple docs, §11)**: funnel a stadi dal più economico al più
+> costoso — (0) **burst nativi** PhotoKit (gratis), (1) **dHash** a 64 bit (8 byte/foto),
+> (2) **BK-tree** sui dHash (O(N·log N), non O(N²)), (3) **feature print Vision solo come
+> conferma** rilasciata subito, (4) **`autoreleasepool`** per foto. Il codebase ha già
+> `PerceptualDHasher`, `SimilarityCandidate.dHash`, `SimilarClustering.hammingDistance`
+> e la miniatura C1: FSE-H **cabla e ri-architetta**, non riscrive da zero.
+
+```yaml
+- id: FSE-H1
+  title: "BK-tree sui dHash + clustering simili a memoria limitata (Domain puro)"
+  macrotask: "fast_scan_engine"
+  depends_on: []
+  objective: >
+    Sostituire il clustering greedy O(N²) sul feature print con un clustering
+    O(N·log N) a memoria limitata sui dHash a 64 bit, via BK-tree con distanza di
+    Hamming. Nessuna ritenzione O(N) di osservazioni Vision: solo interi a 64 bit.
+  definition_of_done:
+    - "`BKTree` (Domain, puro Foundation): insert(id, hash) + query(hash, maxDistance) → id entro Hamming ≤ maxDistance, sfruttando la disuguaglianza triangolare"
+    - "`SimilarClustering.clustersByHash` (Domain): raggruppa i candidati per vicinanza dHash via BK-tree; un candidato senza dHash resta singleton (mai un falso simile)"
+    - "Il clustering per dHash NON trattiene immagini/feature print: solo i 64-bit + la struttura ad albero"
+  acceptance_criteria:
+    - id: AC-FSE-H1-1
+      given: "un insieme di dHash e una soglia di Hamming d"
+      when: "si interroga il BK-tree con query(h, d)"
+      then: "restituisce ESATTAMENTE gli id entro Hamming ≤ d (parità con la ricerca lineare a forza bruta), provato su fixture"
+    - id: AC-FSE-H1-2
+      given: "un dataset di dHash raggruppato (cluster ben separati)"
+      when: "si eseguono le query"
+      then: "il numero di confronti di Hamming è STRETTAMENTE MINORE della ricerca lineare (< N per query), provato con un contatore — l'efficienza è un fatto, non una frase"
+    - id: AC-FSE-H1-3
+      given: "due candidati con dHash entro soglia e uno oltre soglia"
+      when: "si esegue clustersByHash"
+      then: "i primi due sono nello stesso cluster, il terzo in un cluster distinto; un candidato con dHash nil resta singleton (mai dichiarato simile)"
+    - id: AC-FSE-H1-4
+      given: "lo stesso input di candidati e soglia"
+      when: "si confronta clustersByHash con un clustering di riferimento a forza bruta sulla distanza di Hamming"
+      then: "i cluster sono IDENTICI (parità di comportamento): il BK-tree accelera, non cambia il risultato"
+  target_tests:
+    - file: "Tests/AngavuDomainTests/BKTreeTests.swift"
+      covers: [AC-FSE-H1-1, AC-FSE-H1-2]
+    - file: "Tests/AngavuDomainTests/DHashClusteringTests.swift"
+      covers: [AC-FSE-H1-3, AC-FSE-H1-4]
+  security_notes:
+    - "Aritmetica pura (Hamming su UInt64): zero rete, zero piattaforma. Il dHash è percettivo, non contenuto d'immagine esportabile."
+  out_of_scope:
+    - "Il calcolo reale del dHash (FSE-H2); la conferma Vision (FSE-H2); la re-inclusione nella scansione (FSE-H4)"
+
+- id: FSE-H2
+  title: "dHash reale cablato dalla miniatura + raggruppamento burst; feature print demoto a conferma"
+  macrotask: "fast_scan_engine"
+  depends_on: [FSE-H1, FSE-C1]
+  objective: >
+    Calcolare il dHash per-asset dalla miniatura piccola (C1, non i byte full-res),
+    dietro un port; raggruppare le raffiche via PhotoKit (`burstIdentifier`, gratis);
+    comporre i candidati col dHash REALE (non più nil). Il feature print Vision è
+    demoto a CONFERMA opzionale delle sole coppie borderline, calcolata on-demand e
+    rilasciata subito (mai una cache O(N)).
+  definition_of_done:
+    - "Port `AssetPerceptualHashing` (Domain) + adapter reale (Data) che riusa la miniatura C1 (`.pixels(64)`), `isNetworkAccessAllowed=false`, dentro `autoreleasepool`"
+    - "Raggruppamento burst: asset con lo stesso `burstIdentifier` formano un cluster nativo (Tier 0), senza Vision; il `.userPick`/`.autoPick` guida il keep"
+    - "`similarPhotosReview` compone i candidati col dHash reale; il feature print resta opzionale (conferma), mai il percorso principale"
+  acceptance_criteria:
+    - id: AC-FSE-H2-1
+      given: "un provider di dHash fake e un asset con/senza dHash"
+      when: "si compongono i candidati per la review dei simili"
+      then: "il candidato porta il dHash quando disponibile; un asset senza dHash resta senza (nil), mai un valore fabbricato — provato con fake, CI"
+    - id: AC-FSE-H2-2
+      given: "una lista di asset con `burstIdentifier` (alcuni condivisi)"
+      when: "si raggruppano i burst (logica pura, id finti)"
+      then: "gli asset con lo stesso burstIdentifier sono nello stesso cluster, senza alcun calcolo Vision/dHash; id unici restano singleton"
+    - id: AC-FSE-H2-3
+      given: "due scatti quasi identici e due foto diverse (device-only, §7)"
+      when: "si calcola il dHash reale dalla miniatura"
+      then: "i quasi-identici sono entro soglia Hamming, i diversi oltre — validato on-device (Instruments/fixture reali), dichiarato non coperto in CI"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/SimilarCandidatesUseDHashTests.swift"
+      covers: [AC-FSE-H2-1]
+    - file: "Tests/AngavuDomainTests/BurstGroupingTests.swift"
+      covers: [AC-FSE-H2-2]
+  security_notes:
+    - "isNetworkAccessAllowed=false invariante (dHash dalla miniatura on-device, mai iCloud). Il burstIdentifier è metadato locale. Il feature print di conferma è rilasciato subito (nessuna ritenzione O(N))."
+  out_of_scope:
+    - "La struttura BK-tree (FSE-H1); la dieta memoria del seriale (FSE-H3)"
+
+- id: FSE-H3
+  title: "Dieta memoria del percorso seriale + rimozione del pre-warm eager dei feature print"
+  macrotask: "fast_scan_engine"
+  depends_on: [FSE-D2]
+  objective: >
+    Eliminare la causa diretta del jetsam: avvolgere ogni elemento del percorso
+    per-item SERIALE in `autoreleasepool` (parità col motore concorrente D2, che già
+    lo fa), e rimuovere il pre-warm eager dei feature print in `SimilarClustering`
+    (che pre-calcolava tutti i feature print su tutta la libreria senza riportare
+    progresso — barra congelata + memoria eager).
+  definition_of_done:
+    - "`PerItemAnalysis.serialMap` avvolge ogni `transform` in `autoreleasepool` (i temporanei di decodifica/Vision si rilasciano per elemento, non si accumulano)"
+    - "Rimosso il pre-warm eager in `SimilarClustering.clusters`: il clustering non pre-calcola più tutti i feature print"
+  acceptance_criteria:
+    - id: AC-FSE-H3-1
+      given: "lo stesso input dei test seriali esistenti"
+      when: "si esegue serialMap con l'autoreleasepool per elemento"
+      then: "output, progresso monotòno e cancellazione sono INVARIATI (parità): l'autoreleasepool non cambia il risultato, solo il profilo di memoria"
+    - id: AC-FSE-H3-2
+      given: "una scansione reale su libreria grande (device-only, §7)"
+      when: "si profila con Instruments Allocations"
+      then: "il picco di memoria resta sotto la soglia di jetsam durante le fasi per-foto — dichiarato device-only, non oracolabile in CI"
+  target_tests:
+    - file: "Tests/AngavuDomainTests/PerItemAnalysisAutoreleaseTests.swift"
+      covers: [AC-FSE-H3-1]
+  security_notes:
+    - "Nessun cambio di comportamento osservabile oltre la memoria; nessuna nuova API di piattaforma."
+  out_of_scope:
+    - "La re-inclusione nella scansione (FSE-H4)"
+
+- id: FSE-H4
+  title: "Re-inclusione di simili/sfocate nella scansione unificata"
+  macrotask: "fast_scan_engine"
+  depends_on: [FSE-H1, FSE-H2, FSE-H3]
+  objective: >
+    Ora che i simili (burst + dHash + BK-tree, memoria O(N)×8 byte) e le sfocate
+    (`autoreleasepool` + miniatura piccola, memoria O(1) per foto) sono a memoria
+    limitata, ri-attivarle come fasi EAGER della scansione unificata — l'obiettivo di
+    FSE-F1 («aprire una categoria è istantaneo») torna valido per TUTTE le categorie.
+  definition_of_done:
+    - "`CleanupCategory.runsInUnifiedScan` torna true per similarPhotos e blurryPhotos"
+    - "La scansione le calcola e cacha; il progresso è quello REALE della fase (non un flash istantaneo)"
+    - "Le fasi signpost tornano a coprire tutte le categorie (attribuzione tempi 1:1)"
+  acceptance_criteria:
+    - id: AC-FSE-H4-1
+      given: "una scansione unificata completata (fake dei port)"
+      when: "si apre una qualsiasi categoria, incluse simili/sfocate"
+      then: "il dato viene dalla cache senza invocare i rilevatori (contatore = 0 al tap) — si ripristina l'AC-FSE-F1-1 originale per TUTTE le categorie"
+    - id: AC-FSE-H4-2
+      given: "una scansione completa"
+      when: "si osservano gli intervalli signpost"
+      then: "ogni categoria (incl. simili/sfocate) apre e chiude esattamente un intervallo, in ordine, senza orfani — si ripristinano le fasi rilevatore in ScanSignpostTests"
+    - id: AC-FSE-H4-3
+      given: "una scansione unificata su libreria reale (~25k, device-only §7)"
+      when: "si esegue con simili/sfocate re-incluse"
+      then: "completa SENZA crash entro il budget di memoria (Instruments) — dichiarato device-only, la prova definitiva del fix"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/UnifiedScanCoversCategoriesTests.swift"
+      covers: [AC-FSE-H4-1]
+    - file: "Tests/AngavuFeaturesTests/ScanSignpostTests.swift"
+      covers: [AC-FSE-H4-2]
+  security_notes:
+    - "Nessuna eliminazione in scansione (proposte soltanto). Zero rete. Nessun falso simile/sfocato su asset non verificabile."
+  out_of_scope:
+    - "Slider utente delle soglie (fuori piano); la conferma Vision resta opzionale, non un requisito"
+```
+
 ---
 
 ## 6. Onestà & privacy (baseline invariata)
@@ -752,6 +919,7 @@ La CI **non** misura la performance. Il guadagno si prova così, e solo così:
 | **Non-determinismo** dei risultati per parallelismo | Output per-indice pre-assegnato + ordinamento stabile; AC di determinismo (FSE-D1-1) e di parità (FSE-D2). |
 | **Soglie sballate** cambiando risoluzione | FSE-C2 ri-tara con fixture; se non reggono, si rivede la taglia — mai un falso "sfocato". |
 | **Prima scansione più lunga** (fa tutto) | Barra unificata + carosello (FSE-F2); persistenza (FSE-E) rende immediate le successive; residenza ripensata (FSE-G) toglie il peso maggiore dal percorso obbligatorio se necessario. |
+| **Simili: O(N²) confronti + O(N) feature print Vision trattenuti → jetsam** (crash osservato al device-test) | Funnel a memoria limitata **FSE-H**: burst nativi (gratis) → dHash 64-bit (8 byte/foto) → BK-tree (O(N·log N)) → feature print Vision solo come conferma rilasciata subito; `autoreleasepool` per foto. Fino a FSE-H, simili/sfocate restano differite al tap (`runsInUnifiedScan == false`). |
 | **Regressione di onestà** (rete/numeri finti) | Invarianti §6 come `security_notes` per-task; AC che provano `nil` su non-residente e caveat su misura incompleta. |
 
 ## 9. Cosa NON è in questo piano (out of scope)
@@ -772,6 +940,34 @@ La CI **non** misura la performance. Il guadagno si prova così, e solo così:
 4. **FSE-E** (persistenza): rende immediate le scansioni successive.
 5. **FSE-F** (un'unica scansione fa tutto): l'obiettivo dell'utente, ora sostenibile.
 6. **FSE-G** (residenza): togliere/alleggerire il peso maggiore, con onestà invariata.
+7. **FSE-H** (simili/sfocate a memoria limitata → re-inclusi nella scansione):
+   H1 (BK-tree, Domain puro) → H2 (dHash reale + burst) + H3 (autoreleasepool seriale)
+   → H4 (re-inclusione eager). Aggiunto dopo il device-test (crash jetsam alla fase
+   simili). Con FSE-H l'obiettivo di FSE-F1 («aprire una categoria è istantaneo») vale
+   per TUTTE le categorie anche su una libreria reale.
 
 Ogni fase chiude al confine CI per la logica pura; il guadagno si valida on-device
 (§7) prima di dichiararlo.
+
+## 11. Ricerca (deep search + Apple docs) alla base di FSE-H
+
+Il funnel a stadi di FSE-H è fondato su ricerca esterna (2026-08-29), non su intuizione:
+
+- **dHash (difference hash) + BK-tree** — l'algoritmo concreto (miniatura 9×8 in scala
+  di grigi → 64 bit; distanza di Hamming; BK-tree sfrutta la disuguaglianza triangolare
+  per trovare i vicini in ~O(log N) invece di O(N²); soglia ~2 bit per quasi-duplicato,
+  più alta per «simile»):
+  [Ben Hoyt, *Duplicate image detection with perceptual hashing*](https://benhoyt.com/writings/duplicate-image-detection/)
+  · [image-ndd-lsh (GitHub)](https://github.com/mendesk/image-ndd-lsh)
+  · [*A Survey on Locality Sensitive Hashing* (arXiv 2102.08942)](https://arxiv.org/pdf/2102.08942)
+- **Burst nativi PhotoKit** — `PHAsset.burstIdentifier`, `mediaSubtypes.photoBurst`,
+  `burstSelectionTypes` (`.userPick`/`.autoPick`), `fetchAssets(withBurstIdentifier:)`:
+  [Apple Developer — fetchAssets(withBurstIdentifier:)](https://developer.apple.com/documentation/photokit/phasset/1624723-fetchassetswithburstidentifier)
+- **Feature print Vision + memoria** — usarlo solo come conferma, rilasciato subito:
+  [Apple Developer — VNGenerateImageFeaturePrintRequest](https://developer.apple.com/documentation/vision/vngenerateimagefeatureprintrequest)
+- **`autoreleasepool` per il processing di molte foto** (la causa «crash dopo N foto» è
+  l'accumulo di temporanei senza pool) e picco memoria di `PHImageManager`:
+  [autorelease pool per il memory management](https://ruslandzhafarov.medium.com/using-autorelease-pool-for-efficient-memory-management-d0cfa7e51698)
+  · [PHImageManager memory spike (Apple Forums)](https://developer.apple.com/forums/thread/730134)
+- **Limiti di memoria / jetsam** (il foreground scatta ben prima della RAM totale):
+  [jetsam per-process limit (Apple Forums)](https://developer.apple.com/forums/thread/688973)
