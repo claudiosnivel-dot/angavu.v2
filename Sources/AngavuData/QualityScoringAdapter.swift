@@ -14,27 +14,51 @@ import AngavuDomain
 // Il termine assente (volti non rilevati, aesthetics su iOS 17) non fa fallire il
 // punteggio: `QualityScore.overall` somma i soli termini disponibili.
 //
-// Solo on-device: i pixel si leggono con `OnDeviceImageBytes` (zero rete).
+// FSE-I2: i pixel arrivano dal provider RIDIMENSIONATO (`DownscaledImageProviding`,
+// ≈224px `.featurePrint`) dentro un `autoreleasepool`, NON più dall'originale full-res
+// (`OnDeviceImageBytes.data`). Il keep-best dei simili chiama questo scorer una volta per
+// membro di cluster: a piena risoluzione erano una decodifica pesante per foto → il
+// freeze di ~1 min osservato al 2° device-test alla fase «simili». La qualità è RELATIVA
+// (ranking dentro un cluster, mai un valore assoluto pubblicato), quindi ≈224px basta.
+// `isNetworkAccessAllowed = false` resta invariante (miniatura on-device, zero rete):
+// un originale solo in iCloud → `nil` → punteggio neutro esplicito, mai un download.
 
 #if canImport(Vision) && canImport(Photos) && canImport(ImageIO) && canImport(CoreGraphics)
 import Vision
+import CoreGraphics
 
 /// Adapter reale del punteggio di qualità. Sincrono verso il chiamante (off-main).
 public struct VisionQualityScorer: QualityScoring {
-    public init() {}
+    private let imageProvider: any DownscaledImageProviding
+
+    /// FSE-I2: default al provider ridimensionato reale, come nitidezza (`.sharpness`)
+    /// e feature print (`.featurePrint`). Iniettabile per l'oracolo della taglia.
+    public init(imageProvider: any DownscaledImageProviding = PHImageDownscaledProvider()) {
+        self.imageProvider = imageProvider
+    }
 
     public func score(for asset: LibraryAsset) throws -> QualityScore {
-        guard let data = OnDeviceImageBytes.data(for: asset) else {
-            // Nessun pixel on-device: punteggio esplicito e neutro, senza crash.
-            return QualityScore(sharpness: 0, faceQuality: nil, aesthetics: nil)
+        let handle = IdentifierAssetHandle(asset.id)
+        // Un solo decode piccolo (≈224px) per membro, rilasciato SUBITO: `autoreleasepool`
+        // impedisce l'accumulo dei temporanei di decodifica/Vision fra un membro e il
+        // successivo (dieta memoria del keep-best, coerente con FSE-C1/H3).
+        return try autoreleasepool {
+            guard
+                let image = imageProvider.downscaledImage(for: handle, size: .featurePrint),
+                let cgImage = image.resolvedCGImage
+            else {
+                // Nessun pixel on-device (originale solo in iCloud / decodifica fallita):
+                // punteggio esplicito e neutro, senza crash e senza valore fabbricato.
+                return QualityScore(sharpness: 0, faceQuality: nil, aesthetics: nil)
+            }
+            let sharpnessValue = SharpnessKernel.normalizedSharpness(from: cgImage) ?? 0
+            let vision = try computeVisionScores(from: cgImage)
+            return QualityScore(
+                sharpness: sharpnessValue,
+                faceQuality: vision.faceQuality,
+                aesthetics: vision.aesthetics
+            )
         }
-        let sharpnessValue = SharpnessKernel.normalizedSharpness(from: data) ?? 0
-        let vision = try computeVisionScores(from: data)
-        return QualityScore(
-            sharpness: sharpnessValue,
-            faceQuality: vision.faceQuality,
-            aesthetics: vision.aesthetics
-        )
     }
 
     // MARK: - Vision (volti + aesthetics)
@@ -44,8 +68,8 @@ public struct VisionQualityScorer: QualityScoring {
         let aesthetics: Double?
     }
 
-    private func computeVisionScores(from data: Data) throws -> VisionScores {
-        let handler = VNImageRequestHandler(data: data, options: [:])
+    private func computeVisionScores(from cgImage: CGImage) throws -> VisionScores {
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         let faceRequest = VNDetectFaceCaptureQualityRequest()
 
         var requests: [VNRequest] = [faceRequest]

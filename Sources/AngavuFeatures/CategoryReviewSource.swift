@@ -239,17 +239,30 @@ enum CategoryReviewSource {
         progress: (AnalysisProgress) -> Void
     ) throws -> CategoryReviewData {
         let photos = try environment.indexReader.assets(matching: .all).filter { $0.kind == .photo }
+        let photoCount = photos.count
+        // FSE-I2 — La fase «simili» ha DUE sotto-fasi costose per-foto: la composizione
+        // dHash (una decodifica piccola per foto) e il keep-best (il quality scorer per
+        // membro di cluster). Prima FSE-I2 solo la composizione riportava progresso, così
+        // la barra toccava N/N e RESTAVA FERMA per tutto il keep-best (il ~1 min osservato
+        // al 2° device-test). Ora un'unica frazione monotòna copre entrambe:
+        //   • composizione → [0, 0.5): totale `2·N` (headroom per il keep-best, i cui
+        //     membri sono al più N — ogni candidato sta in un solo cluster); ogni unità è
+        //     una foto realmente composta, mai una frazione fabbricata;
+        //   • keep-best   → [~0.5, 1.0]: totale `N + M` (M = membri dei cluster reali,
+        //     M ≤ N), `processed = N + membri scorati`. Al confine N/(N+M) ≥ 0.5 (M ≤ N):
+        //     monotòna non decrescente; raggiunge 1.0 quando l'ultimo membro è scorato.
         // FSE-H2 — Percorso PRINCIPALE: il dHash percettivo REALE (miniatura C1), cablato
-        // dietro il port. La composizione è la fase costosa (una decodifica piccola per
-        // foto) → riporta progresso ed è cancellabile; trattiene solo un `UInt64` per
-        // candidato (memoria O(1) per foto), mai un feature print Vision. Un asset senza
-        // dHash resta `nil` → singleton nel clustering (mai un falso "simile").
+        // dietro il port. Trattiene solo un `UInt64` per candidato (memoria O(1) per foto),
+        // mai un feature print Vision. Un asset senza dHash resta `nil` → singleton.
+        let compositionTotal = 2 * photoCount
         let candidates = try completed(SimilarCandidateComposition.candidates(
             for: photos,
             hashing: environment.perceptualHasher,
             analysis: .serial(chunkSize: CategoryDetectionDefaults.chunkSize),
             cancellation: cancellation,
-            progress: progress
+            progress: { local in
+                progress(AnalysisProgress(processed: local.processed, total: compositionTotal))
+            }
         ))
         // Clustering a MEMORIA LIMITATA per vicinanza dHash (BK-tree, FSE-H1): O(N·log N)
         // senza trattenere immagini. Il feature print Vision è demoto a conferma opzionale
@@ -262,7 +275,17 @@ enum CategoryReviewSource {
         // Solo i gruppi REALI di simili (≥ 2): un singleton non ha nulla da proporre e
         // non deve comparire come "da tenere" (eviterebbe di elencare tutta la libreria).
         let realClusters = allClusters.filter { $0.members.count > 1 }
-        let proposals = try SimilarDeletionProposal.proposals(for: realClusters, scoring: environment.qualityScorer)
+        let keepBestMembers = realClusters.reduce(0) { $0 + $1.members.count }
+        let keepBestTotal = photoCount + keepBestMembers
+        // FSE-I2 — il keep-best continua la stessa barra: dai N già "spesi" dalla
+        // composizione (headroom) fino a N+M. La barra si muove per tutto lo scoring.
+        let proposals = try SimilarDeletionProposal.proposals(
+            for: realClusters,
+            scoring: environment.qualityScorer,
+            progress: { local in
+                progress(AnalysisProgress(processed: photoCount + local.processed, total: keepBestTotal))
+            }
+        )
         let review = CategoryReview(
             keepIds: proposals.map(\.keep.asset.id),
             removableIds: proposals.flatMap { $0.removable.map(\.asset.id) }

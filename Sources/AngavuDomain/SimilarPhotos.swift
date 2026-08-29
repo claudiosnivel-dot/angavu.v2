@@ -235,14 +235,25 @@ public enum ClusterQualityRanking {
     /// (regola pura, tiebreak per id). Col motore concorrente ogni punteggio gira in
     /// parallelo e il ranking è IDENTICO al seriale (stessi punteggi, stesso ordine) —
     /// così keep/removable non dipendono dalla taglia del parallelismo (AC-FSE-D2-1).
+    ///
+    /// FSE-I2 — `progress` inoltra il progresso PER-MEMBRO del motore (X/N membri
+    /// scorati): il quality scorer è la fase costosa del keep-best (una decodifica per
+    /// membro), quindi la barra si muove mentre gira, invece di restare ferma. Default
+    /// no-op: i chiamanti esistenti restano invariati.
     public static func ranked(
         _ cluster: SimilarCluster,
         scoring: QualityScoring,
-        analysis: PerItemAnalysis = .serial()
+        analysis: PerItemAnalysis = .serial(),
+        progress: (AnalysisProgress) -> Void = { _ in }
     ) throws -> [ScoredCandidate] {
-        let outcome = analysis.map(cluster.members, cancellation: CancellationToken()) { member in
-            ScoredCandidate(candidate: member, score: try scoring.score(for: member.asset))
-        }
+        let outcome = analysis.map(
+            cluster.members,
+            cancellation: CancellationToken(),
+            progress: progress,
+            transform: { member in
+                ScoredCandidate(candidate: member, score: try scoring.score(for: member.asset))
+            }
+        )
         let scored: [ScoredCandidate]
         switch outcome {
         case .completed(let value):
@@ -288,9 +299,12 @@ public enum SimilarDeletionProposal {
     public static func compose(
         for cluster: SimilarCluster,
         scoring: QualityScoring,
-        analysis: PerItemAnalysis = .serial()
+        analysis: PerItemAnalysis = .serial(),
+        progress: (AnalysisProgress) -> Void = { _ in }
     ) throws -> DeletionProposal? {
-        let ranked = try ClusterQualityRanking.ranked(cluster, scoring: scoring, analysis: analysis)
+        let ranked = try ClusterQualityRanking.ranked(
+            cluster, scoring: scoring, analysis: analysis, progress: progress
+        )
         guard let best = ranked.first else { return nil }
         return DeletionProposal(
             keep: best.candidate,
@@ -300,11 +314,33 @@ public enum SimilarDeletionProposal {
 
     /// Comodità: una proposta per ogni cluster (i cluster vuoti sono omessi).
     /// FSE-D2 — `analysis` inoltrato al ranking di qualità (parallelo su richiesta).
+    ///
+    /// FSE-I2 — `progress` riporta il keep-best come un'unica passata CUMULATIVA sui
+    /// membri di tutti i cluster reali: `total` = somma dei membri, `processed` = membri
+    /// già scorati. Monotòno non decrescente fino a `total/total` (mai una frazione
+    /// fabbricata: ogni unità è un membro realmente valutato dal quality scorer). Così la
+    /// fase «simili» non resta ferma mentre gira il keep-best (il ~1 min del device-test).
     public static func proposals(
         for clusters: [SimilarCluster],
         scoring: QualityScoring,
-        analysis: PerItemAnalysis = .serial()
+        analysis: PerItemAnalysis = .serial(),
+        progress: (AnalysisProgress) -> Void = { _ in }
     ) throws -> [DeletionProposal] {
-        try clusters.compactMap { try compose(for: $0, scoring: scoring, analysis: analysis) }
+        let totalMembers = clusters.reduce(0) { $0 + $1.members.count }
+        // Partenza esplicita: la barra si àncora a 0/N prima di scorare (no salto muto).
+        progress(AnalysisProgress(processed: 0, total: totalMembers))
+        var scoredSoFar = 0
+        var result: [DeletionProposal] = []
+        result.reserveCapacity(clusters.count)
+        for cluster in clusters {
+            let base = scoredSoFar
+            let proposal = try compose(for: cluster, scoring: scoring, analysis: analysis) { local in
+                // Cumulativo reale: membri già scorati dei cluster precedenti + questo cluster.
+                progress(AnalysisProgress(processed: base + local.processed, total: totalMembers))
+            }
+            if let proposal { result.append(proposal) }
+            scoredSoFar += cluster.members.count
+        }
+        return result
     }
 }
