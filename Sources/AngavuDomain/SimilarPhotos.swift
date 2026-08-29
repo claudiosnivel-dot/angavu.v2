@@ -233,12 +233,22 @@ public enum ClusterQualityRanking {
         analysis: PerItemAnalysis = .serial(),
         progress: (AnalysisProgress) -> Void = { _ in }
     ) throws -> [ScoredCandidate] {
+        // RESILIENZA (device): il quality scorer PUÒ lanciare (Vision/decodifica falliscono
+        // per un asset, spec. sotto pressione di memoria durante la scansione piena). Un
+        // SINGOLO fallimento NON deve far fallire l'INTERA categoria «foto simili» (prima
+        // `try` propagava → `.failed` → categoria non cachata → ricalcolo allo spinner al
+        // tap). Un membro non scorabile degrada a un `QualityScore` neutro (assenza dei
+        // termini = non concorrono, coerente col manifesto): il cluster resta valido e la
+        // categoria si cacha. La rete di sicurezza (anteprima + conferma iOS + 30 gg) copre
+        // un eventuale near-duplicate proposto per un membro non valutabile.
         let outcome = analysis.map(
             cluster.members,
             cancellation: CancellationToken(),
             progress: progress,
             transform: { member in
-                ScoredCandidate(candidate: member, score: try scoring.score(for: member.asset))
+                let score = (try? scoring.score(for: member.asset))
+                    ?? QualityScore(sharpness: 0, faceQuality: nil, aesthetics: nil)
+                return ScoredCandidate(candidate: member, score: score)
             }
         )
         let scored: [ScoredCandidate]

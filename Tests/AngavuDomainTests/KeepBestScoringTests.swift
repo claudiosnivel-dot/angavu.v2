@@ -13,6 +13,20 @@ private struct FakeQualityScorer: QualityScoring {
     }
 }
 
+private struct ScorerFailure: Error {}
+
+/// Fake scorer che LANCIA per gli id indicati (simula un fallimento Vision/decodifica
+/// on-device), altrimenti restituisce lo score dato.
+private struct PartiallyFailingScorer: QualityScoring {
+    let scores: [String: QualityScore]
+    let failingIds: Set<String>
+
+    func score(for asset: LibraryAsset) throws -> QualityScore {
+        if failingIds.contains(asset.id) { throw ScorerFailure() }
+        return scores[asset.id] ?? QualityScore(sharpness: 0, faceQuality: nil, aesthetics: nil)
+    }
+}
+
 final class KeepBestScoringTests: XCTestCase {
 
     private func candidate(_ id: String) -> SimilarityCandidate {
@@ -64,5 +78,28 @@ final class KeepBestScoringTests: XCTestCase {
 
         let noFaces = QualityScore(sharpness: 0.4, faceQuality: nil, aesthetics: nil)
         XCTAssertEqual(noFaces.overall, 0.4, accuracy: 1e-9)
+    }
+
+    // RESILIENZA (fix crash device «foto simili» non cachate): se il quality scorer LANCIA
+    // per UN membro, la categoria NON deve fallire. Il ranking degrada quel membro a score
+    // neutro (overall 0 → ultimo) e restituisce comunque TUTTI i membri, così la scansione
+    // unificata cacha «foto simili» invece di lasciarla non-cachata (ricalcolo al tap).
+    func test_ranking_survivesPerMemberScoringFailure() throws {
+        let cluster = SimilarCluster(members: [candidate("a"), candidate("b"), candidate("c")])
+        let scorer = PartiallyFailingScorer(
+            scores: [
+                "a": QualityScore(sharpness: 0.9, faceQuality: 0.5, aesthetics: 0.3), // overall 1.7 (migliore)
+                "c": QualityScore(sharpness: 0.5, faceQuality: nil, aesthetics: nil)  // overall 0.5
+            ],
+            failingIds: ["b"] // "b" lancia → degradato a neutro (overall 0)
+        )
+
+        // NON deve lanciare: la categoria sopravvive al fallimento del singolo membro.
+        let ranked = try ClusterQualityRanking.ranked(cluster, scoring: scorer)
+
+        // Tutti i membri presenti; il membro non scorabile ("b") è ultimo (neutro).
+        XCTAssertEqual(ranked.count, 3)
+        XCTAssertEqual(ranked.map(\.candidate.asset.id), ["a", "c", "b"])
+        XCTAssertEqual(ranked.first?.candidate.asset.id, "a", "il keep resta il migliore realmente scorato")
     }
 }
