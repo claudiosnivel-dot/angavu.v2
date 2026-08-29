@@ -114,15 +114,19 @@ final class ScanSignpostTests: XCTestCase {
 
     /// Ordine atteso delle fasi in una scansione completa, ognuna aperta e poi chiusa
     /// prima della successiva (nessuna sovrapposizione). FSE-F1 estende la scansione
-    /// unificata alle cinque fasi dei rilevatori (allineamento 1:1 con la barra): la
-    /// telemetria le misura tutte, in ordine di categoria. FSE-G1 (strategia B): la
-    /// MISURA della residenza (`measuringDeviceSpace`) è uscita dalla barra (differita),
-    /// quindi non compare più nella sequenza della scansione — la si misura, differita,
-    /// dal passo di dashboard.
+    /// unificata alle fasi dei rilevatori (allineamento 1:1 con la barra). FSE-G1
+    /// (strategia B): la MISURA della residenza (`measuringDeviceSpace`) è uscita dalla
+    /// barra (differita), quindi non compare nella sequenza.
+    ///
+    /// Fix crash on-device (device-test): i rilevatori per-foto PESANTI — foto simili e
+    /// sfocate — sono DIFFERITI al primo tap (evitano il jetsam da O(N) feature print in
+    /// scansione), quindi NON eseguono lavoro nella scansione e NON emettono un
+    /// intervallo signpost (telemetria onesta: si misura solo il lavoro reale, mai una
+    /// fase fantasma). Restano misurate le fasi EAGER: indice, byte, screenshot,
+    /// duplicati, grandi/vecchi.
     private let expectedPhases: [ScanSignpostPhase] = [
         .indexing, .resolvingSizes,
-        .analyzingScreenshots, .analyzingExactDuplicates, .analyzingSimilarPhotos,
-        .analyzingBlurryPhotos, .analyzingLargeOldVideos
+        .analyzingScreenshots, .analyzingExactDuplicates, .analyzingLargeOldVideos
     ]
 
     // AC-FSE-A1-1: ogni fase apre e chiude esattamente un intervallo, in ordine,
