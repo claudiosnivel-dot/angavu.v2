@@ -113,6 +113,11 @@ public final class BatchCompressionViewModel {
 
     // MARK: - Esecuzione della coda
 
+    // @MainActor: stessa ragione del fix crash di `confirmAndDelete` — `publish()` muta
+    // `run`/`phase` (stato @Observable). Senza, questo metodo async di una classe non
+    // isolata girerebbe off-main e le mutazioni osservabili avverrebbero fuori dal main
+    // thread (crash SwiftUI durante il ridisegno). Gli `await` interni (export, install)
+    // saltano comunque fuori per il lavoro pesante e rientrano sul main per il `publish`.
     /// Avvia la compressione dei video selezionati, in ordine.
     ///
     /// GATE (opt-in + rete di sicurezza): senza `previewConfirmed` (la conferma
@@ -121,11 +126,6 @@ public final class BatchCompressionViewModel {
     /// export → (su success) sostituzione via `DeletionFlow` (originale a «Eliminati
     /// di recente»). Un FALLIMENTO per-item non aborta il batch; la CANCELLAZIONE
     /// lascia i residui non processati. Il progresso è pubblicato dopo ogni item.
-    // @MainActor: stessa ragione del fix crash di `confirmAndDelete` — `publish()` muta
-    // `run`/`phase` (stato @Observable). Senza, questo metodo async di una classe non
-    // isolata girerebbe off-main e le mutazioni osservabili avverrebbero fuori dal main
-    // thread (crash SwiftUI durante il ridisegno). Gli `await` interni (export, install)
-    // saltano comunque fuori per il lavoro pesante e rientrano sul main per il `publish`.
     @MainActor
     @discardableResult
     public func start(previewConfirmed: Bool) async -> BatchCompressionRun {
