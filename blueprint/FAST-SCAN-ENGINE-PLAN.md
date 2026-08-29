@@ -960,6 +960,203 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
     - "Un deep-link all'album Foto (non c'è un'API pubblica affidabile; il testo indica il percorso)"
 ```
 
+### FSE-J — Cablaggio reale (dal censimento `WIRING-CENSUS.md`, 2° device-test)
+
+> **Origine**: il 2° device-test ha rivelato che diversi pezzi costruiti+testati in CI
+> non sono mai stati collegati nell'app (dettaglio con prove in `blueprint/WIRING-CENSUS.md`).
+> **Definizione di "fatto" per TUTTO FSE-J (regola di processo)**: oltre al verde CI sul
+> seam testabile, ogni task è "fatto" solo dopo la **verifica on-device** dichiarata —
+> il gate "confine Apple = CI" non vede una UI scollegata. Ordine: J1 → J2 → J3 → J4 →
+> J5/J6 → J7.
+
+```yaml
+- id: FSE-J1
+  title: "Eliminazione reale cablata end-to-end (censimento C1, CRITICO)"
+  macrotask: "wiring_real"
+  depends_on: []
+  objective: >
+    Collegare l'eliminazione reale: oggi `confirmDeletion()` avanza solo il gate e
+    `SystemAssetDeleter` è usato solo nei test → nessuna foto viene eliminata.
+  definition_of_done:
+    - "`AppEnvironment` espone `assetDeleter` (port); default null-object `NoAssetDeleter`; `live()` → `SystemAssetDeleter` dietro `BatchDeletionCoordinator` (allinea l'indice all'esito reale)"
+    - "`CategoryReviewViewModel` riceve il deleter e su conferma invoca `delete(ids: selectedRemovableIds)` off-main; l'esito guida lo stato; su success rimuove gli id dalla review; mai i keep; mai un falso successo"
+    - "La View attende l'esito reale (async) e mostra errore su `failed`/`cancelled`"
+  acceptance_criteria:
+    - id: AC-FSE-J1-1
+      given: "un deleter fake e una selezione di id removable"
+      when: "si conferma l'eliminazione"
+      then: "il deleter è invocato con ESATTAMENTE gli id selezionati (mai i keep); su success gli id spariscono dalla review; su failed la review resta invariata e lo stato è errore; su cancelled nessuna rimozione"
+    - id: AC-FSE-J1-2
+      given: "il grafo di produzione `live()`"
+      when: "si ispeziona il deleter"
+      then: "NON è il null-object (device-only: l'eliminazione reale manda in «Eliminati di recente»)"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/CategoryDeletionWiringTests.swift"
+      covers: [AC-FSE-J1-1]
+    - file: "N/A — device-only (§7): verifica che le foto finiscano davvero in «Eliminati di recente»"
+      covers: [AC-FSE-J1-2]
+  security_notes:
+    - "Solo id removable eleggibili (i keep protetti). Rete di sicurezza: delete via PhotoKit → «Eliminati di recente». Indice aggiornato SOLO su success reale."
+  out_of_scope:
+    - "L'invalidazione chirurgica della cache (FSE-J2)"
+
+- id: FSE-J2
+  title: "Invalidazione chirurgica al posto del nuke (censimento B1/C4)"
+  macrotask: "wiring_real"
+  depends_on: [FSE-J1]
+  objective: >
+    Dopo un delete reale, potare i soli id eliminati dalle categorie in cache invece di
+    `store.invalidateAll()` (che oggi fa ripartire l'analisi di tutte le categorie).
+  definition_of_done:
+    - "`CategoryReview.removing(ids:)` (Domain puro) toglie gli id da keep/removable"
+    - "`AnalysisResultsStore` pota tutte le entry `.category(...)` dagli id eliminati; dashboard/report invalidati (aggregati)"
+    - "`CategoryReviewView` al delete usa la potatura, non `invalidateAll`"
+  acceptance_criteria:
+    - id: AC-FSE-J2-1
+      given: "una review con keep+removable"
+      when: "si tolgono degli id"
+      then: "spariscono da keep e removable, il resto resta, ordine stabile, no-op su insieme vuoto"
+    - id: AC-FSE-J2-2
+      given: "cache popolata per più categorie"
+      when: "si eliminano id in una categoria"
+      then: "le altre categorie restano in cache SENZA gli id eliminati (nessun ricalcolo del rilevatore); dashboard/report invalidati"
+  target_tests:
+    - file: "Tests/AngavuDomainTests/CategoryReviewRemovingIdsTests.swift"
+      covers: [AC-FSE-J2-1]
+    - file: "Tests/AngavuFeaturesTests/SurgicalInvalidationTests.swift"
+      covers: [AC-FSE-J2-2]
+  out_of_scope:
+    - "La registrazione dell'observer PhotoKit (FSE-J5)"
+
+- id: FSE-J3
+  title: "Sostituzione compressa reale cablata (censimento C2)"
+  macrotask: "wiring_real"
+  depends_on: [FSE-J1]
+  objective: >
+    Oggi l'export gira ma `apply()` calcola solo il piano `CompressedReplacementPlanner`:
+    nessun `PHAssetCreationRequest`, nessuna eliminazione dell'originale → niente spazio
+    liberato. Cablare la sostituzione reale (salva compresso + elimina originale) dopo
+    verifica d'integrità (T-082).
+  definition_of_done:
+    - "Port `CompressedAssetInstalling` (Data: `PHAssetCreationRequest` per il salvataggio + deleter di J1 per l'originale) esposto e cablato in `live()`"
+    - "`BatchCompressionViewModel.apply` ESEGUE il piano su `.success`; su fallimento del salvataggio l'originale NON è eliminato (mai perdita di dati)"
+  acceptance_criteria:
+    - id: AC-FSE-J3-1
+      given: "un installer fake, un export riuscito e piano `.success`"
+      when: "si applica"
+      then: "l'installer è invocato una volta (salva+elimina); su piano `.failure` non installa; su salvataggio fallito l'originale resta (nessuna delete)"
+    - id: AC-FSE-J3-2
+      given: "il grafo `live()`"
+      when: "si ispeziona l'installer"
+      then: "usa `PHAssetCreationRequest` reale (device-only)"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/CompressionReplacementWiringTests.swift"
+      covers: [AC-FSE-J3-1]
+    - file: "N/A — device-only (§7): l'originale sparisce e il compresso è in libreria"
+      covers: [AC-FSE-J3-2]
+  security_notes:
+    - "Onestà/rete di sicurezza: mai eliminare l'originale se il salvataggio del compresso non è verificato integro (T-082). L'originale eliminato va in «Eliminati di recente»."
+
+- id: FSE-J4
+  title: "Ciclo di vita: scenePhase + restore affidabile (censimento C6)"
+  macrotask: "wiring_real"
+  depends_on: [FSE-I1]
+  objective: >
+    L'app non gestisce `scenePhase`: al ritorno da background riparte dal tasto gigante
+    e il restore FSE-I1 (solo `.task` al cold-launch) è fragile e non copre il
+    resume-da-sospensione. Aggiungere gestione esplicita del ciclo di vita.
+  definition_of_done:
+    - "Policy pura `ScenePhaseRestorePolicy` (Domain): data la transizione di fase + lo stato dell'indice, decide PERSIST (su background) e RESTORE|FRESH (su active)"
+    - "`ContentView`/`HomeView` osservano `@Environment(\\.scenePhase)` e applicano la policy; il ripristino al foreground NON dipende dal solo `.task` del primo appear"
+  acceptance_criteria:
+    - id: AC-FSE-J4-1
+      given: "transizione active→background→active con indice non vuoto"
+      when: "si valuta la policy al ritorno"
+      then: "RESTORE (dashboard); con indice vuoto → FRESH"
+    - id: AC-FSE-J4-2
+      given: "transizione verso background"
+      when: "si valuta la policy"
+      then: "azione di persistenza dello stato (marker schermata/scansione)"
+  target_tests:
+    - file: "Tests/AngavuDomainTests/ScenePhaseRestorePolicyTests.swift"
+      covers: [AC-FSE-J4-1, AC-FSE-J4-2]
+    - file: "N/A — device-only (§7): nessun tasto gigante né re-scan al ritorno da background/chiusura"
+      covers: [AC-FSE-J4-1]
+  out_of_scope:
+    - "Categorie istantanee dopo il relaunch (dipende da FSE-J6 persistenza derivati)"
+
+- id: FSE-J5
+  title: "Observer cambio libreria registrato + invalidazione automatica (censimento C4)"
+  macrotask: "wiring_real"
+  depends_on: [FSE-J2]
+  objective: >
+    `StoreInvalidatingLibrarySink` non è mai registrato: registrarlo sull'observer
+    PhotoKit, con invalidazione chirurgica (riusa J2) invece del nuke.
+  definition_of_done:
+    - "Il sink è istanziato in `ContentView`/`App` e registrato su `PhotoLibraryChangeObserver`"
+    - "Su delta: pota gli id (J2) e invalida gli aggregati; su `added` ricalcola i numeri"
+  acceptance_criteria:
+    - id: AC-FSE-J5-1
+      given: "un delta finto (removed/changed)"
+      when: "il sink lo osserva"
+      then: "pota gli id dalle categorie e invalida dashboard/report, senza nuke"
+    - id: AC-FSE-J5-2
+      given: "il grafo `live()`"
+      when: "si osserva l'app"
+      then: "l'observer PhotoKit è registrato (device-only)"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/StoreInvalidatingLibrarySinkTests.swift"
+      covers: [AC-FSE-J5-1]
+    - file: "N/A — device-only (§7): registrazione observer PhotoKit"
+      covers: [AC-FSE-J5-2]
+
+- id: FSE-J6
+  title: "Persistenza cache derivati cablata (censimento C3)"
+  macrotask: "wiring_real"
+  depends_on: []
+  objective: >
+    `SwiftDataDerivedStore`/`DerivedResultCache` (FSE-E) non sono mai costruiti in `live()`:
+    i derivati si ricalcolano a ogni scansione. Cablarli così sopravvivono ai lanci.
+  definition_of_done:
+    - "Schema del ModelContainer esteso a `[AssetRecord.self, DerivedRecord.self]`"
+    - "`AppEnvironment` espone il derived store/cache; `live()` lo costruisce dal container; la scansione lo consulta (get-or-compute, FSE-E3) e la sink lo invalida per-asset (J5)"
+  acceptance_criteria:
+    - id: AC-FSE-J6-1
+      given: "un derived store in memoria con derivati validi"
+      when: "una seconda scansione gira"
+      then: "riusa i derivati validi (0 ricalcoli), coerente con FSE-E3"
+    - id: AC-FSE-J6-2
+      given: "il grafo `live()`"
+      when: "si ispeziona la scansione"
+      then: "il derived store SwiftData reale è iniettato (device-only/integrazione)"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/DerivedCacheWiringTests.swift"
+      covers: [AC-FSE-J6-1]
+    - file: "N/A — device-only/integrazione (§7): persistenza reale fra lanci"
+      covers: [AC-FSE-J6-2]
+
+- id: FSE-J7
+  title: "Batch resolver cablato + pulizia iniezioni/dead-code morti (censimento C5, C7)"
+  macrotask: "wiring_real"
+  depends_on: []
+  objective: >
+    Cablare `handleResolver` (batch PHAsset, leva 1) nelle fasi di scansione; elencare e
+    (con l'utente) rimuovere le iniezioni/dead-code morti — mai in autonomia.
+  definition_of_done:
+    - "La scansione risolve i PHAsset via `environment.handleResolver` in batch, non per-asset"
+    - "Elenco confermato dei dead-code (`featurePrinter` non consumato, `PerceptualDHasher.dHash(for:)`, `FeaturePrinting.prepare`, `OnDeviceImageBytes`, `SharpnessKernel.normalizedSharpness(from:data)`) per la rimozione approvata"
+  acceptance_criteria:
+    - id: AC-FSE-J7-1
+      given: "un resolver spione"
+      when: "gira una fase di scansione"
+      then: "gli handle sono chiesti in batch (una richiesta per il gruppo), non uno per asset"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/BatchResolverWiringTests.swift"
+      covers: [AC-FSE-J7-1]
+  out_of_scope:
+    - "Rimozione autonoma del dead-code (L-COL-005/021): solo con approvazione dell'utente"
+```
+
 ---
 
 ## 6. Onestà & privacy (baseline invariata)
@@ -1052,6 +1249,13 @@ La CI **non** misura la performance. Il guadagno si prova così, e solo così:
    forzata dopo il background) → I2 (freeze dei simili: quality scorer su miniatura C1 +
    progresso sull'intera fase) → I3 (copy dell'eliminazione: dove ripristinare). Il
    crash è risolto; questi tolgono le frustrazioni residue del retest.
+9. **FSE-J — cablaggio reale** (dal censimento `WIRING-CENSUS.md`, 2° device-test): i
+   pezzi costruiti+testati ma mai collegati nell'app. J1 (eliminazione reale, CRITICO) →
+   J2 (invalidazione chirurgica) → J3 (sostituzione compressa reale) → J4 (ciclo di vita
+   scenePhase + restore affidabile) → J5 (observer/invalidazione automatica) / J6
+   (persistenza derivati) → J7 (batch resolver + pulizia dead-code). **Regola di processo**:
+   ogni task FSE-J è "fatto" solo dopo la **verifica on-device** dichiarata, non col solo
+   verde CI (il gate CI non vede una UI scollegata).
 
 Ogni fase chiude al confine CI per la logica pura; il guadagno si valida on-device
 (§7) prima di dichiararlo.
