@@ -17,6 +17,14 @@ import Observation
 // invalida dopo un'eliminazione eseguita o quando la libreria cambia
 // (`LibraryChangeObserver`, T-013). Senza invalidazione il valore resta valido.
 
+/// FSE-J2 — Un valore cachato che sa produrre una copia senza certi id (potatura
+/// chirurgica dopo un'eliminazione reale). Le review di categoria vi conformano, così
+/// lo store può togliere gli id eliminati SENZA rieseguire il rilevatore. No-op
+/// (ritorna sé stesso) su insieme vuoto.
+public protocol IdentifierPrunable {
+    func removing(ids: Set<String>) -> Self
+}
+
 /// Chiave di un risultato cachato. Tipizza cosa è memorizzato, così get/set non si
 /// confondono tra schermate.
 public enum AnalysisResultKey: Hashable, Sendable {
@@ -71,6 +79,23 @@ public final class AnalysisResultsStore {
     public func invalidateAll() {
         storage.removeAll()
         timestamps.removeAll()
+    }
+
+    /// FSE-J2 — Potatura CHIRURGICA dopo un'eliminazione reale (censimento B1/C4).
+    /// Toglie gli id eliminati da OGNI entry `.category(...)` prunabile — le categorie
+    /// non toccate restano in cache così com'erano (nessun ricalcolo del rilevatore, il
+    /// nuke di `invalidateAll` le faceva ripartire tutte) — e invalida gli aggregati
+    /// (`.dashboard`/`.honestReport`), i cui numeri dipendono dall'intera libreria e
+    /// vanno ricalcolati onestamente. No-op su insieme vuoto: nulla cambia, nulla si
+    /// invalida.
+    public func pruneDeleted(ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        for (key, value) in storage {
+            guard case .category = key, let prunable = value as? any IdentifierPrunable else { continue }
+            storage[key] = prunable.removing(ids: ids)
+        }
+        invalidate(.dashboard)
+        invalidate(.honestReport)
     }
 
     /// Vero quando non c'è nulla in cache (utile ai test e come guardia).

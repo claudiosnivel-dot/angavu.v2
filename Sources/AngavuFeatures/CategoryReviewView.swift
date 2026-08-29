@@ -90,9 +90,11 @@ public struct CategoryReviewView: View {
             Button("Annulla", role: .cancel) { vm.cancelDeletion() }
             Button("Elimina", role: .destructive) {
                 // FSE-J1: eliminazione REALE (PhotoKit → «Eliminati di recente»), non più solo il gate.
+                // FSE-J2: cattura gli id proposti PRIMA della delete (il VM li toglie dalla selezione su success).
+                let deleted = Set(vm.selectedRemovableIds)
                 Task {
                     switch await vm.confirmAndDelete() {
-                    case .success: store.invalidateAll() // numeri cambiati → cache non fresca (J2: potatura)
+                    case .success: store.pruneDeleted(ids: deleted) // J2: potatura chirurgica, non nuke
                     case .failed(let reason): deletionError = reason // errore onesto, mai un falso successo
                     case .cancelled: break // annullato dall'alert di sistema: nulla eliminato
                     }

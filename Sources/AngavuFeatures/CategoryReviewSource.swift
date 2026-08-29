@@ -153,6 +153,20 @@ struct CategoryReviewData {
     let assets: [String: LibraryAsset]
 }
 
+/// FSE-J2 — Potatura chirurgica: dopo un'eliminazione reale, togliere gli id eliminati
+/// dalla review E dai metadati per-id, così una categoria in cache resta valida senza
+/// far ripartire il rilevatore. `AnalysisResultsStore.pruneDeleted` la usa via il
+/// protocollo su ogni entry `.category(...)`.
+extension CategoryReviewData: IdentifierPrunable {
+    func removing(ids: Set<String>) -> CategoryReviewData {
+        guard !ids.isEmpty else { return self }
+        return CategoryReviewData(
+            review: review.removing(ids: ids),
+            assets: assets.filter { !ids.contains($0.key) }
+        )
+    }
+}
+
 /// Produttore delle review reali dall'indice. `throws`: la lettura dell'indice o il
 /// fallimento di un rilevatore non vanno mai mascherati con un verde finto (un errore
 /// è uno stato d'errore esplicito nella schermata, mai una lista vuota spacciata per
