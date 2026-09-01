@@ -1284,7 +1284,7 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
     - "La validità dei record (K2) e l'idratazione al lancio (K3)"
 
 - id: FSE-K2
-  title: "Change token persistito + delta al rilancio (PHPersistentChangeToken) + policy di validità pura"
+  title: "Change token persistito + delta al rilancio (PHPersistentChangeToken) + policy di validità pura — ✅ DONE 2026-09-01 (commit 008a402, CI #124 verde, 3 job macos-15)"
   macrotask: "persistent_results"
   depends_on: [FSE-K1]
   objective: >
