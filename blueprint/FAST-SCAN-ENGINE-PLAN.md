@@ -1219,6 +1219,192 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
     - "Rimozione autonoma del dead-code (L-COL-005/021): solo con approvazione dell'utente"
 ```
 
+### FSE-K — Risultati persistenti + change token (chiude il bug RICORRENTE «le categorie pesanti riscansionano all'ingresso»)
+
+> **Origine (diagnosi 2026-09-01, priorità #1)**: i risultati composti delle categorie
+> vivono SOLO in memoria (`ContentView.@State resultsStore`); l'unico punto che li riempie
+> è `startScan()`, ma il **ripristino al lancio (FSE-I1) salta la scansione di proposito**
+> → dopo ogni cold relaunch (iOS termina spesso l'app per memoria) lo store è VUOTO e ogni
+> categoria pesante rigira il rilevatore. I fix precedenti (H4, J2, J5, I2) agivano dentro
+> un singolo processo e non hanno mai reso i risultati persistenti; J6 ha persistito i
+> *derivati*, non i *risultati*. Errore di design: «cache in memoria» (P0-1) e «ripristino
+> senza scansione» (FSE-I1) sono contraddittori e mai riconciliati. La CI non fa mai un
+> cold relaunch → li dichiarava verdi (buco di Livello C).
+>
+> **Fondamento (Apple, letto)**: `PHPersistentChangeToken` + `fetchPersistentChanges(since:)`
+> (iOS 16+) — token serializzabile persistito fra i lanci, delta `inserted/updated/deleted`
+> per id, rescan completo SOLO su `persistentChangeTokenExpired` (WWDC22 *Discover PhotoKit
+> change history*); SwiftData `@ModelActor` per la persistenza in background; store
+> `@Observable` posseduto dall'`App` (`@State` + `.environment`, WWDC21 *Demystify SwiftUI*:
+> «whenever the identity changes, the state is replaced»); cache-aside con **token di
+> validità, mai TTL** (Apple *Uploading asset resources in the background*).
+>
+> **Definizione di "fatto" (regola di processo)**: Livello A verde + **Livello B con COLD
+> RELAUNCH** (UITest che scansiona, rilancia l'app e apre una categoria pesante → 0 rilevatori,
+> nessuno spinner) — è esattamente il caso che il gate non ha mai coperto. Ordine: K1 → K2 →
+> K3 → K4 → K5.
+
+```yaml
+- id: FSE-K1
+  title: "Risultati per categoria PERSISTITI (SwiftData) + store idratabile"
+  macrotask: "persistent_results"
+  depends_on: [FSE-J6]
+  objective: >
+    Persistere i risultati composti per categoria (solo id, mai immagini) così sopravvivono a
+    navigazione, background e relaunch; lo store in memoria diventa una cache leggera
+    idratabile dalla persistenza.
+  definition_of_done:
+    - "Domain: `CategoryResultRecordValue {kind, keepIds, removableIds, libraryToken: Data?, computedAt}` + port `CategoryResultStoring` (loadAll / upsert(kind) / remove(kind) / removeAll); null-object `NoCategoryResultStore`"
+    - "Data: `CategoryResultRecord` `@Model` (kind @unique) + `SwiftDataCategoryResultStore` con `ModelContext` DEDICATO per operazione (off-main, come `SwiftDataAssetIndex`/`SwiftDataDerivedStore`); schema del `ModelContainer` esteso a `[AssetRecord, DerivedRecord, CategoryResultRecord]` (App + Preview + container di test)"
+    - "`AnalysisResultsStore.hydrate(from:)` popola le entry `.category(...)` dai record persistiti; ogni `set(_, for: .category)` e `pruneDeleted` ripersiste (write-through) — la persistenza NON è opzionale né best-effort silenziosa: un errore è riportato"
+    - "`AppEnvironment.categoryResultStore` esposto; `live()` costruisce lo store SwiftData reale (non il null-object)"
+  acceptance_criteria:
+    - id: AC-FSE-K1-1
+      given: "risultati di categoria salvati nello store persistente"
+      when: "si crea uno store in memoria NUOVO sullo stesso container (simula il relaunch) e lo si idrata"
+      then: "ogni categoria è servita dalla cache con keep/removable IDENTICI ai salvati"
+    - id: AC-FSE-K1-2
+      given: "uno store idratato"
+      when: "si apre una categoria"
+      then: "0 invocazioni dei rilevatori (contatore spia fermo): la cache è colpita"
+    - id: AC-FSE-K1-3
+      given: "una potatura chirurgica (J2) o un `set` nuovo"
+      when: "si rilegge dalla persistenza"
+      then: "il record persistito riflette la potatura/il nuovo valore (write-through)"
+  target_tests:
+    - file: "Tests/AngavuDataTests/CategoryResultStoreTests.swift"
+      covers: [AC-FSE-K1-1]
+    - file: "Tests/AngavuFeaturesTests/StoreHydrationTests.swift"
+      covers: [AC-FSE-K1-2, AC-FSE-K1-3]
+    - file: "Tests/AngavuFeaturesTests/CompositionRootWiringTests.swift (Livello A: categoryResultStore reale in live())"
+      covers: [AC-FSE-K1-1]
+  security_notes:
+    - "Persistenza locale on-device (SwiftData), solo id: nessun contenuto d'immagine, zero rete. Nessuna usage-description nuova."
+  out_of_scope:
+    - "La validità dei record (K2) e l'idratazione al lancio (K3)"
+
+- id: FSE-K2
+  title: "Change token persistito + delta al rilancio (PHPersistentChangeToken) + policy di validità pura"
+  macrotask: "persistent_results"
+  depends_on: [FSE-K1]
+  objective: >
+    Sapere, al rilancio, COSA è cambiato nella libreria dall'ultima scansione senza
+    riscansionare: si persiste il change token e si applica solo il delta; i risultati
+    persistiti sono validi SSE il token combacia o il delta non tocca i loro id.
+  definition_of_done:
+    - "Domain: port `LibraryChangeTracking` (`currentToken() -> Data?`, `changes(since: Data) -> LibraryChangeOutcome`) con `LibraryChangeOutcome = .delta(inserted, updated, deleted) | .expired | .unavailable`; null-object che riporta `.unavailable` (mai un delta vuoto fabbricato)"
+    - "Domain puro: `ResultValidityPolicy.decide(saved: [kind: (ids, token)], current: token, delta:)` → per ogni categoria `.serve` (token uguale o delta disgiunto dagli id) | `.recompose(touchedIds)` (delta interseca) | `.fullRescan` (token scaduto/assente) — deterministica"
+    - "Data: `PHPersistentChangeTracker` (iOS 16+: `PHPhotoLibrary.shared().currentChangeToken`, `fetchPersistentChanges(since:)` → `PHPersistentObjectChangeDetails` per `.asset`; mappa `persistentChangeTokenExpired` → `.expired`, `persistentChangeDetailsUnavailable` → `.unavailable`); guardato `#if canImport(Photos)`"
+    - "Il token corrente è persistito a FINE scansione (accanto ai `CategoryResultRecord`) e dopo ogni ricomposizione"
+  acceptance_criteria:
+    - id: AC-FSE-K2-1
+      given: "risultati salvati col token T e delta vuoto da T"
+      when: "si valuta la policy"
+      then: "TUTTE le categorie → `.serve` (nessuna ricomposizione, nessun rilevatore)"
+    - id: AC-FSE-K2-2
+      given: "un delta che tocca id presenti SOLO nella categoria X"
+      when: "si valuta la policy"
+      then: "X → `.recompose` con gli id toccati; le altre → `.serve` (mai una ricomposizione globale)"
+    - id: AC-FSE-K2-3
+      given: "token scaduto (`.expired`) o assente"
+      when: "si valuta la policy"
+      then: "→ `.fullRescan` DICHIARATO (mai servire silenziosamente risultati stantìi)"
+    - id: AC-FSE-K2-4
+      given: "un localIdentifier presente in `deleted` E in `inserted` (id cambiato, iOS 16+)"
+      when: "si applica il delta"
+      then: "trattato come delete+insert (l'id vecchio potato, il nuovo ricomposto), mai un match per nome"
+  target_tests:
+    - file: "Tests/AngavuDomainTests/ResultValidityPolicyTests.swift"
+      covers: [AC-FSE-K2-1, AC-FSE-K2-2, AC-FSE-K2-3, AC-FSE-K2-4]
+    - file: "Tests/AngavuFeaturesTests/ChangeTrackerWiringTests.swift (tracker spia; il PHPersistentChange reale è Livello B/C)"
+      covers: [AC-FSE-K2-1, AC-FSE-K2-2]
+  security_notes:
+    - "Il token è opaco e locale (NSSecureCoding → Data), zero rete. `modificationDate` NON è usata come prova di validità (inaffidabile, DTS): per gli `updated` si ricalcola il derivato."
+  out_of_scope:
+    - "L'idratazione/ricomposizione al lancio (K3)"
+
+- id: FSE-K3
+  title: "Idratazione al lancio + ricomposizione INCREMENTALE (il fix del ripristino)"
+  macrotask: "persistent_results"
+  depends_on: [FSE-K1, FSE-K2]
+  objective: >
+    Il ripristino al lancio non lascia più lo store vuoto: idrata dalla persistenza (categorie
+    istantanee), poi in background applica il delta del change token e ricompone SOLO le
+    categorie toccate, mostrandole come «in aggiornamento» finché non sono fresche.
+  definition_of_done:
+    - "Al ripristino (`restoreAtLaunchIfNeeded` / scenePhase J4): `store.hydrate(from: categoryResultStore)` PRIMA di navigare in dashboard; poi `Task` in background: `tracker.changes(since: savedToken)` → `ResultValidityPolicy` → per le `.recompose` rigira il SOLO rilevatore di quella categoria (riusando derivati J6) → ripersiste + nuovo token; `.fullRescan` → stato onesto che invita alla scansione completa (mai automatica silenziosa)"
+    - "Nuovo stato di presentazione per categoria: `.fresh` | `.updating` (servita dalla persistenza ma con delta in applicazione) — la View mostra il badge «in aggiornamento» sul risultato, MAI uno spinner vuoto né un risultato stantìo spacciato per definitivo"
+    - "`startScan()` non fa più `invalidateAll()` cieco: invalida e ripersiste al completamento (un annullamento a metà NON cancella la persistenza precedente valida)"
+  acceptance_criteria:
+    - id: AC-FSE-K3-1
+      given: "risultati persistiti + token T e delta vuoto"
+      when: "si simula il ripristino (store nuovo, idratazione, check delta)"
+      then: "aprire OGNI categoria è cache hit: 0 rilevatori invocati, stato `.fresh`"
+    - id: AC-FSE-K3-2
+      given: "delta che tocca id della sola categoria X"
+      when: "ripristino"
+      then: "X servita subito come `.updating`, poi ricomposta con 1 sola invocazione del suo rilevatore; le altre restano `.fresh` senza rilevatori; token aggiornato"
+    - id: AC-FSE-K3-3
+      given: "l'app REALE sul Simulatore con foto seminate (Livello B)"
+      when: "scansione completa → terminazione forzata dell'app → rilancio → apertura di una categoria pesante"
+      then: "nessuno spinner di ricalcolo: la categoria appare istantanea (0 rilevatori). È il caso MAI coperto finora dal gate."
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/RestoreHydrationTests.swift (store+tracker+rilevatori spia)"
+      covers: [AC-FSE-K3-1, AC-FSE-K3-2]
+    - file: "App/AngavuUITests/RelaunchCategoryCacheUITests.swift (job ios-uitest: scan → kill → relaunch → apri categoria)"
+      covers: [AC-FSE-K3-3]
+  security_notes:
+    - "Onestà: `.updating` è dichiarato a schermo; `.fullRescan` non parte mai in silenzio. Rete di sicurezza invariata (solo proposte; ogni delete resta dal gate)."
+  out_of_scope:
+    - "Ricomposizione incrementale dei CLUSTER dei simili (un delta può fondere/spezzare cluster): in K3 la categoria toccata si ricompone INTERA (corretto, non ancora ottimo); l'ottimizzazione per-cluster è un follow-up dichiarato"
+
+- id: FSE-K4
+  title: "Store posseduto dall'App + observer coalescito (hardening)"
+  macrotask: "persistent_results"
+  depends_on: [FSE-K1]
+  objective: >
+    Allineare l'ownership dello store alla guida Apple (identità stabile) e rendere
+    l'observer in-app coalescito e minimo, così nessuna notifica benigna svuota categorie.
+  definition_of_done:
+    - "`AnalysisResultsStore` (e `LibraryObservationCoordinator`, `AppEnvironment.live`) posseduti da `AngavuApp` (`@State` nell'`App`) e iniettati via `.environment`, non più `@State` di `ContentView` (un branch `if` può ricreare la view e azzerare lo stato)"
+    - "Observer (J5): notifiche coalescite (debounce ~0.5 s) in un unico delta = unione degli id; `hasMoves`-only ignorato; `changedObjects` invalida SOLO i derivati/categorie degli id toccati e ripersiste (write-through K1)"
+  acceptance_criteria:
+    - id: AC-FSE-K4-1
+      given: "N notifiche ravvicinate con id diversi"
+      when: "l'observer le riceve"
+      then: "UNA sola invalidazione, con l'unione degli id (mai N potature separate)"
+    - id: AC-FSE-K4-2
+      given: "una notifica di solo riordino (`hasMoves`, nessun inserted/removed/changed)"
+      when: "l'observer la riceve"
+      then: "nessuna invalidazione: cache e persistenza intatte"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/ObserverCoalescingTests.swift"
+      covers: [AC-FSE-K4-1, AC-FSE-K4-2]
+    - file: "N/A — ownership in App: View-level, verificato dal Livello B di K3 (il relaunch)"
+      covers: []
+  out_of_scope:
+    - "Cambi all'algoritmo dei rilevatori"
+
+- id: FSE-K5
+  title: "Contatore «X di N» onesto e stabile nella fase simili (priorità #2)"
+  macrotask: "persistent_results"
+  depends_on: []
+  objective: >
+    FSE-I2 usa totali interni per-sotto-fase (composizione 2·N, keep-best N+M, nitidezza N)
+    corretti per la matematica della barra ma esposti come «X di N» confondono (il
+    denominatore salta e supera il conteggio foto reale, viola «numeri veri»).
+  definition_of_done:
+    - "Il layer puro di presentazione (`ScanFlowPresentation`) espone per la fase simili un conteggio STABILE = foto realmente elaborate su N foto (N = conteggio reale, mai 2·N), mantenendo la frazione monotòna di FSE-I2 per la barra; il keep-best contribuisce alla frazione ma non gonfia il denominatore mostrato (oppure mostra «Tengo la migliore… X di M cluster»)"
+  acceptance_criteria:
+    - id: AC-FSE-K5-1
+      given: "N foto e M membri di cluster"
+      when: "si osserva l'etichetta lungo tutta la fase simili"
+      then: "il denominatore mostrato non supera MAI N (o è dichiarato come M cluster nel keep-best) e non salta all'indietro; la frazione della barra resta monotòna"
+  target_tests:
+    - file: "Tests/AngavuFeaturesTests/ScanFlowPresentationTests.swift (esteso)"
+      covers: [AC-FSE-K5-1]
+```
+
 ---
 
 ## 6. Onestà & privacy (baseline invariata)
@@ -1321,6 +1507,14 @@ La CI **non** misura la performance. Il guadagno si prova così, e solo così:
    test di Livello A (e, dove indicato, Livello B su Simulatore); solo il **Livello C**
    (memoria/jetsam su ~25k, dHash sulle foto reali, perf, libreria iCloud) resta al device
    dell'utente, dichiarato per-task. Il gate CI torna a coprire anche il cablaggio.
+10. **FSE-K — risultati persistenti + change token** (chiude il bug RICORRENTE «categorie
+   pesanti che riscansionano all'ingresso», diagnosi 2026-09-01): K1 (risultati per
+   categoria persistiti in SwiftData + store idratabile) → K2 (change token
+   `PHPersistentChangeToken` persistito + delta al rilancio + policy di validità pura) →
+   K3 (idratazione al lancio + ricomposizione incrementale, con UITest di COLD RELAUNCH
+   Livello B — il caso mai coperto) → K4 (store in `App` + observer coalescito) → K5
+   (contatore «X di N» onesto, priorità #2). **Regola**: "fatto" = Livello A + il relaunch
+   test di K3 verde; il ripristino non lascia più mai lo store vuoto.
 
 Ogni fase chiude al confine CI per la logica pura; il guadagno si valida on-device
 (§7) prima di dichiararlo.
