@@ -43,10 +43,11 @@ import SwiftData
 enum LiveCompositionRoot {
     static func make() throws -> AppEnvironment {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-        // FSE-J6: lo schema rispecchia la produzione (indice + derivati), così il grafo
-        // costruito qui è quello reale.
+        // FSE-J6/K1: lo schema rispecchia la produzione (indice + derivati + risultati
+        // per categoria), così il grafo costruito qui è quello reale.
         let container = try ModelContainer(
-            for: AssetRecord.self, DerivedRecord.self, configurations: configuration
+            for: AssetRecord.self, DerivedRecord.self, CategoryResultRecord.self,
+            configurations: configuration
         )
         return AppEnvironment.live(container: container)
     }
@@ -127,6 +128,22 @@ final class CompositionRootWiringTests: XCTestCase {
     // se FSE-J6 avesse lasciato lo store sul null-object o l'hasher senza cache — il bug del
     // censimento C3 (derivati ricalcolati a ogni scansione perché mai persistiti). La
     // PERSISTENZA reale fra lanci resta device-only/integrazione (AC-FSE-J6-2, §7).
+    // AC-FSE-K1-1 (Livello A): nel grafo `live()`, lo store dei RISULTATI per categoria
+    // è l'adapter SwiftData REALE, NON il null-object `NoCategoryResultStore`. Questa
+    // asserzione fallirebbe se K1 avesse lasciato il default → nulla sopravviverebbe al
+    // cold relaunch (il bug ricorrente resterebbe, con la CI verde).
+    func test_liveGraph_wiresRealCategoryResultStoreNotNullObject() throws {
+        let env = try LiveCompositionRoot.make()
+        XCTAssertTrue(
+            env.categoryResultStore is SwiftDataCategoryResultStore,
+            "categoryResultStore deve essere lo store SwiftData reale nel grafo live()"
+        )
+        XCTAssertFalse(
+            env.categoryResultStore is NoCategoryResultStore,
+            "categoryResultStore NON deve essere il null-object nel grafo live() (FSE-K1)"
+        )
+    }
+
     func test_liveGraph_wiresRealDerivedStoreAndCachingHasher() throws {
         let env = try LiveCompositionRoot.make()
         XCTAssertTrue(

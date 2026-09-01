@@ -48,7 +48,9 @@ extension CategoryReviewView {
         // D-1 «Ri-analizza»: un refresh esplicito invalida la cache prima di ricalcolare.
         if force { store.invalidate(cacheKey) }
         // D-1 cache hit: rientro istantaneo, nessun ricalcolo (niente rianalisi da capo).
-        if !force, let cached: CategoryReviewData = store.value(for: cacheKey) {
+        // FSE-K1: la decisione hit/miss è la stessa di `CategoryReviewSource.cached`
+        // (oracolata: uno store idratato dalla persistenza serve senza rilevatori).
+        if !force, let cached = CategoryReviewSource.cached(for: category, in: store) {
             vm = CategoryReviewViewModel(
                 review: cached.review,
                 assets: cached.assets,

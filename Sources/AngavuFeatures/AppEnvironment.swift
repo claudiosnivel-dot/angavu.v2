@@ -68,6 +68,11 @@ public struct AppEnvironment {
     /// STESSA istanza che alimenta sia il decoratore della scansione sia il `warm` della
     /// cache, così le chiavi combaciano. `nil` quando la cache non è cablata.
     public let derivedVersioning: (any AssetContentVersioning)?
+    /// FSE-K1: persistenza dei RISULTATI per categoria fra i lanci (solo id). Default
+    /// null-object `NoCategoryResultStore` (nulla sopravvive al relaunch → la categoria
+    /// ricompone) finché `live()` non cabla `SwiftDataCategoryResultStore(container:)`.
+    /// Lo consuma `AnalysisResultsStore` (write-through + idratazione).
+    public let categoryResultStore: any CategoryResultStoring
     public let videoExporter: any VideoExporting
     public let videoSpecProvider: any VideoSpecProviding
     /// Porte dei domini extra-foto (contatti, calendari). `nil` finché non cablate
@@ -94,6 +99,7 @@ public struct AppEnvironment {
         derivedStore: any DerivedResultStoring = NoDerivedResultStore(),
         derivedCache: DerivedResultCache? = nil,
         derivedVersioning: (any AssetContentVersioning)? = nil,
+        categoryResultStore: any CategoryResultStoring = NoCategoryResultStore(),
         videoExporter: any VideoExporting,
         videoSpecProvider: any VideoSpecProviding,
         extraDomains: ExtraDomainsPorts? = nil
@@ -117,6 +123,7 @@ public struct AppEnvironment {
         self.derivedStore = derivedStore
         self.derivedCache = derivedCache
         self.derivedVersioning = derivedVersioning
+        self.categoryResultStore = categoryResultStore
         self.videoExporter = videoExporter
         self.videoSpecProvider = videoSpecProvider
         self.extraDomains = extraDomains
@@ -213,6 +220,10 @@ extension AppEnvironment {
             derivedStore: derivedStore,
             derivedCache: derivedCache,
             derivedVersioning: derivedVersioning,
+            // FSE-K1: store reale dei risultati per categoria. NON il null-object → i
+            // risultati composti sopravvivono al cold relaunch (bug ricorrente «le
+            // categorie pesanti riscansionano all'ingresso»).
+            categoryResultStore: SwiftDataCategoryResultStore(container: container),
             videoExporter: AVFoundationVideoExporter(),
             videoSpecProvider: AVFoundationVideoSpecProvider(),
             extraDomains: liveExtraDomains()

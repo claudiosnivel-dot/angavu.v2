@@ -27,7 +27,9 @@ struct AngavuApp: App {
         }
         // Indice SwiftData on-device (zero backend): il ModelContext creato qui
         // alimenta l'`AppEnvironment.live` costruito in ContentView. FSE-J6: lo schema
-        // include anche `DerivedRecord` così i derivati (digest…) persistono fra i lanci.
-        .modelContainer(for: [AssetRecord.self, DerivedRecord.self])
+        // include anche `DerivedRecord` così i derivati (digest…) persistono fra i lanci;
+        // FSE-K1: `CategoryResultRecord` così i RISULTATI per categoria (solo id)
+        // sopravvivono al cold relaunch.
+        .modelContainer(for: [AssetRecord.self, DerivedRecord.self, CategoryResultRecord.self])
     }
 }

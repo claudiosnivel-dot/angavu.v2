@@ -22,7 +22,11 @@ struct ContentView: View {
     // P0-1: la cache dei risultati d'analisi vive QUI, sopra le view: sopravvive alla
     // navigazione e al ciclo background→foreground (non è `@State` di una schermata,
     // che verrebbe azzerato a ogni ricomparsa). Iniettata nella Home e a valle.
-    @State private var resultsStore = AnalysisResultsStore()
+    // FSE-K1: costruita in `activateHome()` insieme al grafo, perché riceve la
+    // persistenza reale dei risultati per categoria (`environment.categoryResultStore`,
+    // write-through) — così le review sopravvivono al cold relaunch. L'idratazione al
+    // lancio è FSE-K3 (dopo la policy di validità col change token, FSE-K2).
+    @State private var resultsStore: AnalysisResultsStore?
     // FSE-J5 (censimento C4): possiede il sink + l'observer PhotoKit dei cambi libreria
     // (l'observer trattiene il sink solo `weak`, quindi il possesso forte vive qui, per
     // l'intera sessione). Costruito e avviato una volta quando la Home appare; la
@@ -49,7 +53,7 @@ struct ContentView: View {
                 .transition(.opacity)
         } else {
             Group {
-                if let environment {
+                if let environment, let resultsStore {
                     HomeView(environment: environment, store: resultsStore)
                 } else {
                     // Un solo frame mentre il grafo si costruisce (dentro la dissolvenza
@@ -70,9 +74,11 @@ struct ContentView: View {
     private func activateHome() {
         let environment = self.environment ?? .live(container: modelContext.container)
         self.environment = environment
+        let store = resultsStore ?? AnalysisResultsStore(persistence: environment.categoryResultStore)
+        resultsStore = store
         guard libraryObserver == nil else { return }
         let coordinator = LibraryObservationCoordinator(
-            store: resultsStore,
+            store: store,
             derivedCache: environment.derivedCache
         )
         #if canImport(Photos)
@@ -90,5 +96,7 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [AssetRecord.self, DerivedRecord.self], inMemory: true)
+        .modelContainer(
+            for: [AssetRecord.self, DerivedRecord.self, CategoryResultRecord.self], inMemory: true
+        )
 }
