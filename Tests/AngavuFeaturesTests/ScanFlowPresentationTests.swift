@@ -34,7 +34,8 @@ final class ScanFlowPresentationTests: XCTestCase {
     }
 
     // scanning → fase determinata: il riempimento è la frazione UNIFICATA reale
-    // (sull'intera pipeline), il conteggio è quello reale della fase, la fase è nominata.
+    // (sull'intera pipeline), l'etichetta è la percentuale onesta della barra unificata
+    // (mai il conteggio grezzo per-fase), la fase è nominata.
     func test_scanning_determinateFillFromRealProgress() {
         let pipeline = ScanPipelineProgress(
             stage: .resolvingSizes,
@@ -46,8 +47,10 @@ final class ScanFlowPresentationTests: XCTestCase {
         XCTAssertEqual(flow.fill, pipeline.fraction)
         XCTAssertTrue(flow.showsCarousel)
         XCTAssertFalse(flow.isButtonEnabled)
-        XCTAssertEqual(flow.statusLabel, "3 di 12")
-        XCTAssertNotNil(flow.stageTitle, "La fase corrente è nominata sotto il conteggio")
+        let expectedPercent = "\(Int((pipeline.fraction * 100).rounded()))%"
+        XCTAssertEqual(flow.statusLabel, expectedPercent, "la percentuale della barra unificata")
+        XCTAssertFalse(flow.statusLabel?.contains(" di ") ?? true, "mai il denominatore grezzo per-fase")
+        XCTAssertNotNil(flow.stageTitle, "La fase corrente è nominata sotto la percentuale")
         XCTAssertTrue(flow.canCancel, "L'analisi è interrompibile (stop cooperativo)")
     }
 
@@ -116,7 +119,10 @@ final class ScanFlowPresentationTests: XCTestCase {
         let flow = ScanFlowPresentation(state: .scanning(pipeline))
 
         XCTAssertEqual(flow.stageTitle, "Confronto le foto simili…", "il titolo nomina la fase corrente")
-        XCTAssertEqual(flow.statusLabel, "2 di 4", "il conteggio è quello reale della fase")
+        XCTAssertEqual(
+            flow.statusLabel, "\(Int((pipeline.fraction * 100).rounded()))%",
+            "la percentuale della barra unificata, non il conteggio grezzo della fase"
+        )
         // Frazione unificata reale: (indice della fase + frazione della fase) / n fasi.
         let expected = (Double(ScanPipelineProgress.Stage.analyzingSimilarPhotos.rawValue) + 0.5) / stageCount
         XCTAssertEqual(flow.fill ?? -1, expected, accuracy: 0.0001, "frazione reale della fase, mai fabbricata")
@@ -155,5 +161,95 @@ final class ScanFlowPresentationTests: XCTestCase {
             let title = flow.stageTitle ?? ""
             XCTAssertFalse(title.isEmpty, "titolo di fase onesto non vuoto per \(stage)")
         }
+    }
+
+    // MARK: - FSE-I2 follow-up — etichetta di progresso stabile e onesta (percentuale)
+
+    // Il difetto: durante «foto simili» le sotto-fasi usano `total` interni diversi
+    // (composizione dHash = 2·N, keep-best = N+M) per la matematica della barra; esposti
+    // come "X di N" il denominatore saltava e SUPERAVA il conteggio foto reale, violando
+    // «numeri veri». Qui l'oracolo del fix: l'etichetta di scanning è una percentuale
+    // della barra unificata, mai un denominatore grezzo per-fase.
+
+    // Nessun denominatore grezzo in NESSUNA fase: l'etichetta è sempre una percentuale.
+    func test_scanning_statusLabelIsPercentNeverRawDenominator() {
+        for stage in ScanPipelineProgress.Stage.allCases {
+            let pipeline = ScanPipelineProgress(
+                stage: stage,
+                stageProgress: AnalysisProgress(processed: 45_000, total: 90_000)   // finti total "gonfi"
+            )
+            let label = ScanFlowPresentation(state: .scanning(pipeline)).statusLabel ?? ""
+            XCTAssertTrue(label.hasSuffix("%"), "etichetta percentuale in fase \(stage): \(label)")
+            XCTAssertFalse(label.contains(" di "), "nessun denominatore grezzo in fase \(stage): \(label)")
+        }
+    }
+
+    // AC-1 — STABILITÀ al confine delle sotto-fasi simili: a parità di frazione della
+    // barra, `total` interni diversi (2·N vs N+M) danno la STESSA etichetta. Prima il
+    // denominatore trasparivano e saltava; ora non traspare più.
+    func test_similarSubphases_sameFractionSameLabel_despiteDifferentInternalTotals() {
+        // Composizione a metà: 22_500 / 45_000 (=2·N) → frazione di fase 0.5.
+        let composition = ScanPipelineProgress(
+            stage: .analyzingSimilarPhotos,
+            stageProgress: AnalysisProgress(processed: 22_500, total: 45_000)
+        )
+        // Keep-best allo stesso punto di fase 0.5 ma con total N+M diverso: 14_000 / 28_000.
+        let keepBest = ScanPipelineProgress(
+            stage: .analyzingSimilarPhotos,
+            stageProgress: AnalysisProgress(processed: 14_000, total: 28_000)
+        )
+        let compositionLabel = ScanFlowPresentation(state: .scanning(composition)).statusLabel
+        let keepBestLabel = ScanFlowPresentation(state: .scanning(keepBest)).statusLabel
+        XCTAssertEqual(
+            compositionLabel, keepBestLabel,
+            "stessa frazione ⇒ stessa etichetta: il denominatore per-sotto-fase non traspare"
+        )
+    }
+
+    // AC-2 — MONOTONÌA percepita: passando composizione → keep-best (frazione che sale)
+    // la percentuale mostrata non cala mai, benché i `total` interni cambino/diminuiscano.
+    func test_similarSubphases_percentNeverDecreasesAcrossBoundary() {
+        // Fine composizione (headroom): 45_000 / 45_000 → frazione di fase 1.0? No: la
+        // composizione riserva l'headroom in CategoryReviewSource; qui simuliamo la barra
+        // UNIFICATA a due istanti crescenti sulla stessa fase, con total interni diversi.
+        let earlier = ScanPipelineProgress(
+            stage: .analyzingSimilarPhotos,
+            stageProgress: AnalysisProgress(processed: 30_000, total: 45_000)   // 0.666… di fase
+        )
+        let later = ScanPipelineProgress(
+            stage: .analyzingSimilarPhotos,
+            stageProgress: AnalysisProgress(processed: 21_000, total: 28_000)   // 0.75 di fase, total minore
+        )
+        func percent(_ pipe: ScanPipelineProgress) -> Int {
+            let label = ScanFlowPresentation(state: .scanning(pipe)).statusLabel ?? "0%"
+            return Int(label.dropLast()) ?? -1
+        }
+        XCTAssertGreaterThan(later.fraction, earlier.fraction, "la barra unificata sale")
+        XCTAssertGreaterThanOrEqual(
+            percent(later), percent(earlier),
+            "la percentuale non cala mai al confine, nonostante il total interno diminuisca"
+        )
+    }
+
+    // AC-3 — ONESTÀ: la percentuale riflette round(fraction·100) e non supera mai 100 %,
+    // anche con `processed` > `total` (frazione clampata a 1) — mai un numero fabbricato/gonfio.
+    func test_scanning_percentReflectsFractionAndNeverExceeds100() throws {
+        let stageCount = Double(ScanPipelineProgress.Stage.allCases.count)
+        // Caso normale: metà della fase 'indexing'.
+        let mid = ScanPipelineProgress(stage: .indexing, stageProgress: AnalysisProgress(processed: 1, total: 2))
+        let expectedMid = Int(((0.5 / stageCount) * 100).rounded())
+        XCTAssertEqual(ScanFlowPresentation(state: .scanning(mid)).statusLabel, "\(expectedMid)%")
+
+        // Ultima fase completa → 100 %, mai oltre.
+        let last = try XCTUnwrap(ScanPipelineProgress.Stage.allCases.last)
+        let done = ScanPipelineProgress(stage: last, stageProgress: AnalysisProgress(processed: 10, total: 10))
+        XCTAssertEqual(ScanFlowPresentation(state: .scanning(done)).statusLabel, "100%", "fase finale completa = 100 %")
+
+        // `AnalysisProgress` clampa già `processed` a `total` (fraction ≤ 1 per costruzione),
+        // e ogni fase pesa 1/N: la frazione unificata è ≤ 1 in ogni caso, quindi la
+        // percentuale non supera mai il 100 % — mai un numero gonfiato come col vecchio 2·N.
+        let overshoot = ScanPipelineProgress(stage: last, stageProgress: AnalysisProgress(processed: 20, total: 10))
+        let label = ScanFlowPresentation(state: .scanning(overshoot)).statusLabel ?? ""
+        XCTAssertEqual(label, "100%", "mai oltre il 100 %: la barra unificata è ≤ 1 per costruzione")
     }
 }

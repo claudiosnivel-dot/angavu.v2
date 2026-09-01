@@ -45,7 +45,17 @@ public struct ScanFlowPresentation: Equatable, Sendable {
     /// durante il battito indeterminato (nessuna frazione fabbricata).
     public let fill: Double?
     /// Etichetta di stato sempre onesta durante il lavoro ("Chiedo l'accesso…" /
-    /// "X di N"); `nil` a riposo o a esito terminale.
+    /// la percentuale unificata della scansione, es. "45%"); `nil` a riposo o a
+    /// esito terminale.
+    ///
+    /// FSE-I2 follow-up — durante l'analisi NON è più il conteggio grezzo per-fase
+    /// "X di N": nella fase «foto simili» i `total` interni delle sotto-fasi saltano
+    /// di proposito (composizione dHash = 2·N per l'headroom, keep-best = N+M) per la
+    /// matematica della barra, così esposti come denominatore confondevano e potevano
+    /// SUPERARE il conteggio foto reale (violazione di «numeri veri»). Ora l'etichetta
+    /// è la percentuale della barra UNIFICATA (`ScanPipelineProgress.fraction`): una
+    /// sola scala 0…100 %, monotòna non decrescente al confine di fase, mai oltre 100 %,
+    /// mai un numero fabbricato. La fase resta nominata da `stageTitle`.
     public let statusLabel: String?
     /// Titolo della fase corrente della scansione unificata ("Indicizzo…" / "Calcolo
     /// i byte…" / "Spazio sul telefono…"); `nil` fuori dall'analisi. Rende visibile
@@ -96,6 +106,16 @@ public struct ScanFlowPresentation: Equatable, Sendable {
         }
     }
 
+    /// Percentuale onesta della barra UNIFICATA (0…100 %) dalla frazione della
+    /// pipeline. Clampata a [0, 1] per costruzione (la frazione è già in scala, ma il
+    /// clamp rende l'invariante «mai oltre 100 %» un fatto locale, non un'assunzione) e
+    /// arrotondata all'intero. Nessun denominatore grezzo: la scala è una sola per
+    /// l'intera scansione, quindi stabile e monotòna al confine di fase.
+    private static func percentLabel(for fraction: Double) -> String {
+        let clamped = min(max(fraction, 0.0), 1.0)
+        return "\(Int((clamped * 100).rounded()))%"
+    }
+
     /// Deriva il flusso dallo stato di scansione. Deterministica e totale: ogni
     /// `ScanState` ha una e una sola presentazione.
     public init(state: ScanState) {
@@ -116,14 +136,16 @@ public struct ScanFlowPresentation: Equatable, Sendable {
             )
         case .scanning(let pipeline):
             // `fill` è la frazione UNIFICATA sull'intera pipeline (mai per-fase):
-            // un'unica barra monotòna. `statusLabel` resta il conteggio reale entro
-            // la fase; `stageTitle` nomina la fase.
+            // un'unica barra monotòna. `statusLabel` è la stessa frazione resa come
+            // percentuale onesta (mai il conteggio grezzo per-fase, il cui denominatore
+            // saltava/superava il conteggio foto nella fase simili); `stageTitle` nomina
+            // la fase.
             self = .init(
                 phase: .scanning,
                 showsCarousel: true,
                 isIndeterminate: false,
                 fill: pipeline.fraction,
-                statusLabel: "\(pipeline.stageProgress.processed) di \(pipeline.stageProgress.total)",
+                statusLabel: Self.percentLabel(for: pipeline.fraction),
                 stageTitle: Self.phaseLabel(for: pipeline.stage),
                 canCancel: true
             )
