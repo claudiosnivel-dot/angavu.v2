@@ -1246,7 +1246,7 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
 
 ```yaml
 - id: FSE-K1
-  title: "Risultati per categoria PERSISTITI (SwiftData) + store idratabile"
+  title: "Risultati per categoria PERSISTITI (SwiftData) + store idratabile — ✅ DONE 2026-09-01 (commit 7e2d85a, CI #123 verde, 3 job macos-15)"
   macrotask: "persistent_results"
   depends_on: [FSE-J6]
   objective: >
