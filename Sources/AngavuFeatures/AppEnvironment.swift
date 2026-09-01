@@ -73,6 +73,11 @@ public struct AppEnvironment {
     /// ricompone) finché `live()` non cabla `SwiftDataCategoryResultStore(container:)`.
     /// Lo consuma `AnalysisResultsStore` (write-through + idratazione).
     public let categoryResultStore: any CategoryResultStoring
+    /// FSE-K2: tracciamento PERSISTENTE dei cambi di libreria (change token + delta per
+    /// id fra i lanci). Default null-object `NoLibraryChangeTracker` (nessun token →
+    /// la policy di validità dichiara sempre `.fullRescan`, mai un risultato stantìo
+    /// servito) finché `live()` non cabla `PHPersistentChangeTracker`.
+    public let changeTracker: any LibraryChangeTracking
     public let videoExporter: any VideoExporting
     public let videoSpecProvider: any VideoSpecProviding
     /// Porte dei domini extra-foto (contatti, calendari). `nil` finché non cablate
@@ -100,6 +105,7 @@ public struct AppEnvironment {
         derivedCache: DerivedResultCache? = nil,
         derivedVersioning: (any AssetContentVersioning)? = nil,
         categoryResultStore: any CategoryResultStoring = NoCategoryResultStore(),
+        changeTracker: any LibraryChangeTracking = NoLibraryChangeTracker(),
         videoExporter: any VideoExporting,
         videoSpecProvider: any VideoSpecProviding,
         extraDomains: ExtraDomainsPorts? = nil
@@ -124,6 +130,7 @@ public struct AppEnvironment {
         self.derivedCache = derivedCache
         self.derivedVersioning = derivedVersioning
         self.categoryResultStore = categoryResultStore
+        self.changeTracker = changeTracker
         self.videoExporter = videoExporter
         self.videoSpecProvider = videoSpecProvider
         self.extraDomains = extraDomains
@@ -224,6 +231,9 @@ extension AppEnvironment {
             // risultati composti sopravvivono al cold relaunch (bug ricorrente «le
             // categorie pesanti riscansionano all'ingresso»).
             categoryResultStore: SwiftDataCategoryResultStore(container: container),
+            // FSE-K2: tracker reale del change token PhotoKit. NON il null-object → al
+            // rilancio si sa COSA è cambiato senza riscansionare (delta per id).
+            changeTracker: PHPersistentChangeTracker(),
             videoExporter: AVFoundationVideoExporter(),
             videoSpecProvider: AVFoundationVideoSpecProvider(),
             extraDomains: liveExtraDomains()

@@ -188,6 +188,11 @@ public struct HomeView: View {
         // P0-1: una nuova scansione ricostruisce l'indice → i numeri cambiano.
         // Invalidare la cache evita di mostrare cifre stantìe (manifesto: numeri veri).
         store.invalidateAll()
+        // FSE-K2: il change token di libreria è catturato PRIMA della scansione — descrive
+        // lo stato che i risultati rifletteranno; un cambio avvenuto DURANTE la scansione
+        // ricade così nel delta al prossimo lancio (conservativo), mai perso. È persistito
+        // a FINE scansione accanto a ogni `CategoryResultRecord` (write-through).
+        let libraryToken = environment.changeTracker.currentToken()
         let token = CancellationToken()
         cancellation = token
         scanTask?.cancel()
@@ -207,7 +212,7 @@ public struct HomeView: View {
             // cache e non lancia mai una nuova composizione (nessun rilevatore al tap).
             let now = Date()
             for (category, data) in vm.categoryResults {
-                store.set(data, for: .category(category.rawValue), at: now)
+                store.set(data, for: .category(category.rawValue), at: now, libraryToken: libraryToken)
             }
         }
     }

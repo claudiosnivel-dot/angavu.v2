@@ -61,9 +61,11 @@ extension CategoryReviewView {
         }
         loadPhase = .loading(nil)
         do {
+            // FSE-K2: token catturato PRIMA della composizione (stato che il risultato riflette).
+            let libraryToken = environment.changeTracker.currentToken()
             let data = try await CategoryReviewView.composeReviewData(for: category, from: environment)
-            // Memorizza col timestamp per il badge di freschezza (D-1).
-            store.set(data, for: cacheKey, at: Date())
+            // Memorizza col timestamp per il badge di freschezza (D-1) e il change token (K2).
+            store.set(data, for: cacheKey, at: Date(), libraryToken: libraryToken)
             vm = CategoryReviewViewModel(
                 review: data.review,
                 assets: data.assets,

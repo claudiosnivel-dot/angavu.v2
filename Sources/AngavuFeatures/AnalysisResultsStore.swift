@@ -29,6 +29,14 @@ import Observation
 // (`LibraryChangeObserver`, T-013). La persistenza SEGUE la memoria: ciò che è
 // invalidato in memoria è rimosso anche dal record, così un'idratazione futura non
 // resuscita mai un risultato dichiarato stantìo.
+//
+// FSE-K2 — ogni review di categoria porta con sé il CHANGE TOKEN di libreria con cui è
+// stata calcolata (opaco, persistito nel record); `assessPersistedValidity(using:)`
+// chiede al tracker il delta da quel token e applica la `ResultValidityPolicy` pura:
+// per ogni categoria `.serve` / `.recompose(touchedIds)` / `.fullRescan`. È il seam che
+// K3 consuma al lancio. Un `set` senza token AZZERA il token della chiave (il valore
+// non sa a quale stato di libreria corrisponde → al prossimo lancio `.fullRescan`),
+// mai un token vecchio ereditato da un valore nuovo.
 
 /// FSE-J2 — Un valore cachato che sa produrre una copia senza certi id (potatura
 /// chirurgica dopo un'eliminazione reale). Le review di categoria vi conformano, così
@@ -78,6 +86,9 @@ public final class AnalysisResultsStore {
     /// invariato dai `set` senza timestamp (dashboard/report, che non mostrano il
     /// badge). L'età si formatta con `RelativeFreshness` (dominio puro).
     private var timestamps: [AnalysisResultKey: Date] = [:]
+    /// FSE-K2 — Change token di libreria (opaco) con cui ogni valore è stato calcolato.
+    /// Persistito nel record della categoria; ripristinato dall'idratazione.
+    private var libraryTokens: [AnalysisResultKey: Data] = [:]
     /// FSE-K1 — Persistenza dei risultati per categoria (write-through). Default
     /// null-object: nulla sopravvive al relaunch finché il grafo reale non inietta lo
     /// store SwiftData (`AppEnvironment.categoryResultStore`).
@@ -100,11 +111,28 @@ public final class AnalysisResultsStore {
     /// registra per il badge di freschezza; se `nil`, un eventuale timestamp
     /// precedente resta invariato (il valore è stato ricalcolato ma il chiamante non
     /// traccia la freschezza per questa chiave). FSE-K1: una review di categoria è
-    /// anche persistita (write-through).
-    public func set<Value>(_ value: Value, for key: AnalysisResultKey, at timestamp: Date? = nil) {
+    /// anche persistita (write-through). FSE-K2: `libraryToken` è il change token con
+    /// cui il valore è stato calcolato; `nil` azzera il token della chiave (mai un token
+    /// vecchio spacciato per quello del valore nuovo).
+    public func set<Value>(
+        _ value: Value,
+        for key: AnalysisResultKey,
+        at timestamp: Date? = nil,
+        libraryToken: Data? = nil
+    ) {
         storage[key] = value
         if let timestamp { timestamps[key] = timestamp }
+        if let libraryToken {
+            libraryTokens[key] = libraryToken
+        } else {
+            libraryTokens.removeValue(forKey: key)
+        }
         persistCategory(key)
+    }
+
+    /// FSE-K2 — Change token con cui il valore per la chiave è stato calcolato, se noto.
+    public func libraryToken(for key: AnalysisResultKey) -> Data? {
+        libraryTokens[key]
     }
 
     /// Istante in cui il valore per la chiave è stato calcolato, se tracciato.
@@ -117,6 +145,7 @@ public final class AnalysisResultsStore {
     public func invalidate(_ key: AnalysisResultKey) {
         storage.removeValue(forKey: key)
         timestamps.removeValue(forKey: key)
+        libraryTokens.removeValue(forKey: key)
         if case .category(let kind) = key {
             report(.remove, kind: kind) { try persistence.remove(kind: kind) }
         }
@@ -128,6 +157,7 @@ public final class AnalysisResultsStore {
     public func invalidateAll() {
         storage.removeAll()
         timestamps.removeAll()
+        libraryTokens.removeAll()
         report(.removeAll, kind: nil) { try persistence.removeAll() }
     }
 
@@ -159,8 +189,9 @@ public final class AnalysisResultsStore {
     /// Regole: (1) la memoria VINCE — una categoria già in cache non è sovrascritta
     /// (è lei che ha scritto la persistenza); (2) un id senza metadati nell'indice
     /// (asset sparito fra i lanci) è escluso dalla review idratata — mai una riga
-    /// fantasma; la validità fine (change token) è FSE-K2; (3) il timestamp di
-    /// freschezza è ripristinato da `computedAt`. Lancia se la lettura fallisce.
+    /// fantasma; la validità fine col change token è `assessPersistedValidity` (FSE-K2);
+    /// (3) il timestamp di freschezza è ripristinato da `computedAt` e il change token
+    /// dal record. Lancia se la lettura fallisce.
     ///
     /// - Returns: i kind idratati (per diagnostica/test), in ordine stabile.
     @discardableResult
@@ -178,23 +209,62 @@ public final class AnalysisResultsStore {
             let assets = Dictionary(pairs, uniquingKeysWith: { first, _ in first })
             storage[key] = CategoryReviewData(review: review, assets: assets)
             timestamps[key] = record.computedAt
+            if let token = record.libraryToken { libraryTokens[key] = token }
             hydrated.append(record.kind)
         }
         return hydrated
     }
 
+    // MARK: - FSE-K2 Validità dei risultati persistiti (change token + delta)
+
+    /// Valuta la validità di OGNI risultato persistito rispetto allo stato corrente
+    /// della libreria: legge i record (id + token), chiede al tracker il token corrente
+    /// e — SOLO per i token salvati diversi dal corrente — il delta da quel token (una
+    /// richiesta per token distinto, mai una per categoria), poi applica la
+    /// `ResultValidityPolicy` pura. A token uguale non si interroga nulla: `.serve`.
+    /// Lancia se la lettura della persistenza fallisce. È il seam che K3 consuma al
+    /// lancio per decidere cosa servire, cosa ricomporre e cosa dichiarare da riscansionare.
+    ///
+    /// - Returns: decisione per kind (solo i kind persistiti).
+    public func assessPersistedValidity(
+        using tracker: any LibraryChangeTracking
+    ) throws -> [String: ResultValidityDecision] {
+        let records = try persistence.loadAll()
+        let current = tracker.currentToken()
+        var outcomesByToken: [Data: LibraryChangeOutcome] = [:]
+        var decisions: [String: ResultValidityDecision] = [:]
+        for record in records {
+            let saved = SavedCategoryResult(
+                kind: record.kind,
+                ids: Set(record.keepIds).union(record.removableIds),
+                token: record.libraryToken
+            )
+            var outcome: LibraryChangeOutcome = .unavailable
+            if let token = record.libraryToken, let current, token != current {
+                if let known = outcomesByToken[token] {
+                    outcome = known
+                } else {
+                    outcome = tracker.changes(since: token)
+                    outcomesByToken[token] = outcome
+                }
+            }
+            decisions[record.kind] = ResultValidityPolicy.decide(saved, current: current, outcome: outcome)
+        }
+        return decisions
+    }
+
     /// Write-through: se la chiave è una categoria e il valore è una review di
-    /// categoria, la persiste (solo id). Altri valori sotto `.category` (usati dai
-    /// test) e gli aggregati restano solo in memoria. Senza timestamp tracciato,
-    /// `computedAt` è l'istante della scrittura (il momento reale in cui il valore
-    /// è entrato in cache, mai una data inventata).
+    /// categoria, la persiste (solo id + change token). Altri valori sotto `.category`
+    /// (usati dai test) e gli aggregati restano solo in memoria. Senza timestamp
+    /// tracciato, `computedAt` è l'istante della scrittura (il momento reale in cui il
+    /// valore è entrato in cache, mai una data inventata).
     private func persistCategory(_ key: AnalysisResultKey) {
         guard case .category(let kind) = key, let data = storage[key] as? CategoryReviewData else { return }
         let record = CategoryResultRecordValue(
             kind: kind,
             keepIds: data.review.keepIds,
             removableIds: data.review.removableIds,
-            libraryToken: nil,
+            libraryToken: libraryTokens[key],
             computedAt: timestamps[key] ?? Date()
         )
         report(.upsert, kind: kind) { try persistence.upsert(record) }
