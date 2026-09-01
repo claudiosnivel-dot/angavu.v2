@@ -1386,7 +1386,7 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
     - "Cambi all'algoritmo dei rilevatori"
 
 - id: FSE-K5
-  title: "Contatore «X di N» onesto e stabile nella fase simili (priorità #2)"
+  title: "Contatore «X di N» onesto e stabile nella fase simili (priorità #2) — ✅ GIÀ RISOLTO (2026-09-01, commit d60043d, CI #122 verde): «X di N» sostituito dalla PERCENTUALE unificata della barra in ScanFlowPresentation; nessun build necessario in FSE-K"
   macrotask: "persistent_results"
   depends_on: []
   objective: >
