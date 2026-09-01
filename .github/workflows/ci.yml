@@ -120,6 +120,17 @@ jobs:
           # Immagine sintetica di fixture (mai dati reali); zero rete. Riusata dai
           # test end-to-end di FSE-J1 (eliminazione reale).
           xcrun simctl addmedia "${{ steps.sim.outputs.udid }}" fixtures/uitest-seed.png
+          # FSE-K3: una SECONDA copia identica → un duplicato esatto REALE nella libreria,
+          # così «Duplicati esatti» ha un risultato non vuoto da persistere e ritrovare
+          # dopo il cold relaunch (RelaunchCategoryCacheUITests).
+          xcrun simctl addmedia "${{ steps.sim.outputs.udid }}" fixtures/uitest-seed.png
+
+      - name: Pre-concede l'accesso alla libreria foto (best-effort)
+        run: |
+          # FSE-K3: evita l'alert di sistema durante la scansione del UITest. Best-effort:
+          # se il grant non è applicabile prima dell'installazione, il test gestisce
+          # l'alert da Springboard.
+          xcrun simctl privacy "${{ steps.sim.outputs.udid }}" grant photos com.angavu.app || true
 
       - name: xcodebuild test (UITest sul Simulatore)
         run: |

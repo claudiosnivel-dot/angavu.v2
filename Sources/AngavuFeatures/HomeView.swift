@@ -38,6 +38,10 @@ public struct HomeView: View {
     // subito in dashboard (loop). Dopo il ripristino, la Home resta il «Ri-scansiona»
     // esplicito (tasto di scansione idle).
     @State private var didAttemptRestore = false
+    // FSE-K3: il ripristino dei risultati (idratazione + delta del change token +
+    // ricomposizione delle sole categorie toccate) gira in un task cancellabile: una
+    // nuova scansione lo annulla (i suoi risultati rimpiazzeranno tutto).
+    @State private var restoreTask: Task<Void, Never>?
     // Conservato per costruire le schermate a valle (Dashboard) con lo stesso grafo
     // di dipendenze iniettato: nessun singleton nascosto.
     private let environment: AppEnvironment
@@ -137,13 +141,36 @@ public struct HomeView: View {
     /// difetto del cold relaunch). Una-tantum e solo dallo stato `.idle`: dopo un ripristino
     /// tornare in Home mostra il tasto di scansione — il «Ri-scansiona» esplicito. Il
     /// ripristino NON avvia `run()`: la dashboard leggerà i numeri freschi dall'indice.
+    /// FSE-K3: PRIMA di navigare lo store è IDRATATO dai risultati persistiti (le categorie
+    /// sono istantanee, 0 rilevatori), poi in background si applica il delta del change token.
     private func restoreAtLaunchIfNeeded() {
         guard !didAttemptRestore else { return }
         didAttemptRestore = true
         guard case .idle = vm.state else { return }
-        if LaunchRestoreCoordinator(environment: environment).decision() == .restore {
-            goToDashboard = true
-        }
+        guard LaunchRestoreCoordinator(environment: environment).decision() == .restore else { return }
+        restoreTask?.cancel()
+        restoreTask = Task { await restorePersistedResults(thenNavigate: true) }
+    }
+
+    /// FSE-K3 — Il fix del ripristino, in tre passi (`RestoreHydrationCoordinator`):
+    ///  1. idratazione dalla persistenza (lettura dell'indice OFF-main, idratazione sul
+    ///     main) PRIMA di navigare: ogni categoria persistita è servita subito, `.updating`;
+    ///  2. piano di validità col change token (persistenza + delta PhotoKit, off-main) →
+    ///     `.serve` diventa `.fresh`, `.fullRescan` diventa un invito dichiarato;
+    ///  3. ricomposizione delle SOLE categorie toccate dal delta (una invocazione del
+    ///     rispettivo rilevatore, off-main), ripersistite col token corrente.
+    /// Un errore di lettura lascia la categoria non idratata: si ricompone al tap, come
+    /// prima di K3 — mai un risultato inventato. Nessuna scansione parte da qui.
+    private func restorePersistedResults(thenNavigate: Bool) async {
+        let coordinator = RestoreHydrationCoordinator(store: store, environment: environment)
+        let assetsById = (try? await RestoreHydrationCoordinator.readAssetsByIdOffMain(from: environment)) ?? [:]
+        _ = try? coordinator.hydrate(assetsById: assetsById)
+        if thenNavigate { goToDashboard = true }
+        guard !Task.isCancelled,
+              let plan = try? await RestoreHydrationCoordinator.planOffMain(store: store, environment: environment)
+        else { return }
+        coordinator.apply(plan)
+        await coordinator.recompose(plan)
     }
 
     /// FSE-J4 — Gestione esplicita del ciclo di vita. Mappa la fase SwiftUI, collassa
@@ -173,8 +200,13 @@ public struct HomeView: View {
         case .restore:
             // Ritorno reale dal background con dati indicizzati: riporta alla schermata
             // ESATTA (dashboard se si guardavano i risultati, altrimenti la Home idle —
-            // mai una ri-scansione forzata).
+            // mai una ri-scansione forzata). FSE-K3: se nel frattempo lo store è rimasto
+            // vuoto (ricreato), lo si idrata dalla persistenza senza cambiare schermata.
             goToDashboard = wasViewingResults
+            if store.isEmpty, case .idle = vm.state {
+                restoreTask?.cancel()
+                restoreTask = Task { await restorePersistedResults(thenNavigate: false) }
+            }
         case .fresh:
             // Nessun dato indicizzato (primo avvio): il tasto di scansione, mai un restore
             // fantasma su una libreria non ancora scansionata.
@@ -185,9 +217,13 @@ public struct HomeView: View {
     }
 
     private func startScan() {
-        // P0-1: una nuova scansione ricostruisce l'indice → i numeri cambiano.
-        // Invalidare la cache evita di mostrare cifre stantìe (manifesto: numeri veri).
-        store.invalidateAll()
+        // FSE-K3: NIENTE `invalidateAll()` cieco all'avvio (svuotava anche la persistenza
+        // K1: un annullamento a metà cancellava i risultati validi della scansione
+        // precedente). Il commit avviene SOLO a scansione completata
+        // (`ScanResultsCommit`): rimpiazza le categorie raggiunte, invalida quelle il cui
+        // rilevatore è fallito, aggiorna gli aggregati. Un ripristino in corso è annullato:
+        // la nuova scansione rimpiazzerà tutto.
+        restoreTask?.cancel()
         // FSE-K2: il change token di libreria è catturato PRIMA della scansione — descrive
         // lo stato che i risultati rifletteranno; un cambio avvenuto DURANTE la scansione
         // ricade così nel delta al prossimo lancio (conservativo), mai perso. È persistito
@@ -197,23 +233,19 @@ public struct HomeView: View {
         cancellation = token
         scanTask?.cancel()
         scanTask = Task {
-            await vm.run(cancellation: token)
-            // La scansione unificata ha già calcolato i numeri veri (fasi 2-3):
-            // li mettiamo nella cache sopra le view così, toccando «È ora di fare
-            // pulizia!», la dashboard è ISTANTANEA — nessuna seconda attesa
-            // «Calcolo dei numeri veri…», nessun ricalcolo.
-            if let figures = vm.figures {
-                store.set(figures, for: .dashboard)
-            }
-            // FSE-F1: la scansione unificata ha già calcolato le review di categoria
-            // (fasi dei rilevatori): le mettiamo nella cache sopra le view (chiavi
-            // `.category(...)`) col timestamp per il badge di freschezza, così aprire
-            // una categoria è ISTANTANEO — la `CategoryReviewView` trova il valore in
-            // cache e non lancia mai una nuova composizione (nessun rilevatore al tap).
-            let now = Date()
-            for (category, data) in vm.categoryResults {
-                store.set(data, for: .category(category.rawValue), at: now, libraryToken: libraryToken)
-            }
+            let outcome = await vm.run(cancellation: token)
+            // La scansione unificata ha già calcolato i numeri veri (fasi 2-3) e le review
+            // di categoria (FSE-F1): a esito `completed` entrano nella cache sopra le view
+            // (write-through col token, timbro di freschezza) così dashboard e categorie
+            // sono ISTANTANEE — nessun ricalcolo, nessun rilevatore al tap. Su
+            // `cancelled`/`failed` nulla è scritto: memoria e persistenza precedenti intatte.
+            ScanResultsCommit.apply(
+                state: outcome,
+                figures: vm.figures,
+                categoryResults: vm.categoryResults,
+                into: store,
+                libraryToken: libraryToken
+            )
         }
     }
 

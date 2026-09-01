@@ -51,14 +51,10 @@ extension CategoryReviewView {
         // FSE-K1: la decisione hit/miss è la stessa di `CategoryReviewSource.cached`
         // (oracolata: uno store idratato dalla persistenza serve senza rilevatori).
         if !force, let cached = CategoryReviewSource.cached(for: category, in: store) {
-            vm = CategoryReviewViewModel(
-                review: cached.review,
-                assets: cached.assets,
-                deleter: environment.assetDeleter
-            )
-            loadPhase = .loaded
+            applyCached(cached)
             return
         }
+        servedFromCache = false
         loadPhase = .loading(nil)
         do {
             // FSE-K2: token catturato PRIMA della composizione (stato che il risultato riflette).
@@ -75,6 +71,45 @@ extension CategoryReviewView {
         } catch {
             loadPhase = .failed(String(describing: error))
         }
+    }
+
+    /// FSE-K3 — Applica un valore servito dalla cache (idratato dalla persistenza o
+    /// calcolato dalla scansione/ricomposizione): nessun rilevatore, nessuno spinner.
+    /// Riusato all'apertura (cache hit) e quando la ricomposizione in background
+    /// sostituisce il valore `.updating` con quello `.fresh` (la lista si aggiorna sul posto).
+    @MainActor
+    func applyCached(_ cached: CategoryReviewData) {
+        vm = CategoryReviewViewModel(
+            review: cached.review,
+            assets: cached.assets,
+            deleter: environment.assetDeleter
+        )
+        servedFromCache = true
+        loadPhase = .loaded
+    }
+
+    /// FSE-K3 — Reagisce al cambio di freschezza della categoria mentre la schermata è
+    /// aperta: `.updating` → `.fresh` significa che la ricomposizione in background ha
+    /// scritto il nuovo valore in cache → si riapplica (mai un valore ricomposto che
+    /// resta invisibile finché non si esce e rientra). Gli altri passaggi non toccano `vm`.
+    @MainActor
+    func freshnessDidChange(from old: CategoryFreshness?, to new: CategoryFreshness?) {
+        guard old == .updating, new == .fresh, loadPhase == .loaded,
+              let cached = CategoryReviewSource.cached(for: category, in: store) else { return }
+        applyCached(cached)
+    }
+
+    /// FSE-K3 — Identificatore d'accessibilità che DICHIARA la provenienza del contenuto
+    /// caricato: `cache` (servito senza rilevatore) o `detector` (composto ora). È
+    /// l'osservabile che il Livello B (`RelaunchCategoryCacheUITests`) legge dopo il
+    /// cold relaunch per provare «0 rilevatori» dall'esterno del processo.
+    var loadedSourceIdentifier: String {
+        servedFromCache ? "category.review.loaded.cache" : "category.review.loaded.detector"
+    }
+
+    /// FSE-K3 — Stato di freschezza corrente della categoria (badge), dallo store.
+    var freshnessState: CategoryFreshness? {
+        store.freshness(for: cacheKey)
     }
 
     /// D-1 — Etichetta di freschezza per il badge, dal timestamp cachato. `Date()` a

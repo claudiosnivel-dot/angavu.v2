@@ -37,6 +37,26 @@ import Observation
 // K3 consuma al lancio. Un `set` senza token AZZERA il token della chiave (il valore
 // non sa a quale stato di libreria corrisponde → al prossimo lancio `.fullRescan`),
 // mai un token vecchio ereditato da un valore nuovo.
+//
+// FSE-K3 — ogni categoria porta anche uno STATO DI FRESCHEZZA presentabile
+// (`CategoryFreshness`): `.fresh` (calcolata o verificata contro la libreria corrente),
+// `.updating` (servita dalla persistenza mentre il delta del change token è in
+// applicazione: un risultato idratato nasce `.updating` finché il ripristino non lo
+// verifica) o `.needsFullRescan` (token scaduto/assente: verificabile solo con una
+// scansione completa, dichiarata — mai automatica). La View mostra il badge, mai uno
+// spinner vuoto né un risultato stantìo spacciato per definitivo.
+
+/// FSE-K3 — Stato di freschezza presentabile di una categoria servita dallo store.
+public enum CategoryFreshness: Equatable, Sendable {
+    /// Calcolata ora, o verificata valida contro lo stato corrente della libreria.
+    case fresh
+    /// Servita dalla persistenza, ma il delta di libreria è ancora in applicazione
+    /// (ricomposizione in corso): mostrata col badge «in aggiornamento».
+    case updating
+    /// Non verificabile (token scaduto/assente): serve una scansione completa,
+    /// dichiarata all'utente, mai avviata in silenzio.
+    case needsFullRescan
+}
 
 /// FSE-J2 — Un valore cachato che sa produrre una copia senza certi id (potatura
 /// chirurgica dopo un'eliminazione reale). Le review di categoria vi conformano, così
@@ -89,6 +109,8 @@ public final class AnalysisResultsStore {
     /// FSE-K2 — Change token di libreria (opaco) con cui ogni valore è stato calcolato.
     /// Persistito nel record della categoria; ripristinato dall'idratazione.
     private var libraryTokens: [AnalysisResultKey: Data] = [:]
+    /// FSE-K3 — Stato di freschezza per chiave (solo categorie). Assente = non tracciato.
+    private var freshness: [AnalysisResultKey: CategoryFreshness] = [:]
     /// FSE-K1 — Persistenza dei risultati per categoria (write-through). Default
     /// null-object: nulla sopravvive al relaunch finché il grafo reale non inietta lo
     /// store SwiftData (`AppEnvironment.categoryResultStore`).
@@ -127,6 +149,35 @@ public final class AnalysisResultsStore {
         } else {
             libraryTokens.removeValue(forKey: key)
         }
+        // FSE-K3: un valore appena calcolato è fresco per costruzione.
+        freshness[key] = .fresh
+        persistCategory(key)
+    }
+
+    // MARK: - FSE-K3 Freschezza presentabile + validazione del token
+
+    /// FSE-K3 — Stato di freschezza della chiave, se tracciato (`nil` = non tracciato,
+    /// p.es. aggregati o chiave assente).
+    public func freshness(for key: AnalysisResultKey) -> CategoryFreshness? {
+        freshness[key]
+    }
+
+    /// FSE-K3 — Imposta lo stato di freschezza di una chiave PRESENTE (no-op su chiave
+    /// assente: uno stato senza valore non ha senso). Non tocca la persistenza: la
+    /// freschezza è presentazione, il record resta quello del valore.
+    public func markFreshness(_ value: CategoryFreshness, for key: AnalysisResultKey) {
+        guard storage[key] != nil else { return }
+        freshness[key] = value
+    }
+
+    /// FSE-K3 — Dichiara il valore della chiave VALIDO rispetto al token dato (esito
+    /// `.serve` della policy con delta disgiunto): aggiorna il token in memoria e nel
+    /// record persistito, così il prossimo lancio confronta col token più recente
+    /// invece di chiedere un delta sempre più lungo (che prima o poi scadrebbe →
+    /// `.fullRescan` evitabile). No-op su chiave assente o token già uguale.
+    public func markValid(at token: Data, for key: AnalysisResultKey) {
+        guard storage[key] != nil, libraryTokens[key] != token else { return }
+        libraryTokens[key] = token
         persistCategory(key)
     }
 
@@ -146,6 +197,7 @@ public final class AnalysisResultsStore {
         storage.removeValue(forKey: key)
         timestamps.removeValue(forKey: key)
         libraryTokens.removeValue(forKey: key)
+        freshness.removeValue(forKey: key)
         if case .category(let kind) = key {
             report(.remove, kind: kind) { try persistence.remove(kind: kind) }
         }
@@ -158,6 +210,7 @@ public final class AnalysisResultsStore {
         storage.removeAll()
         timestamps.removeAll()
         libraryTokens.removeAll()
+        freshness.removeAll()
         report(.removeAll, kind: nil) { try persistence.removeAll() }
     }
 
@@ -191,7 +244,10 @@ public final class AnalysisResultsStore {
     /// (asset sparito fra i lanci) è escluso dalla review idratata — mai una riga
     /// fantasma; la validità fine col change token è `assessPersistedValidity` (FSE-K2);
     /// (3) il timestamp di freschezza è ripristinato da `computedAt` e il change token
-    /// dal record. Lancia se la lettura fallisce.
+    /// dal record; (4) FSE-K3: ogni categoria idratata nasce `.updating` — servita
+    /// subito, ma dichiarata «in verifica» finché il ripristino non applica il delta del
+    /// change token (`RestoreHydrationCoordinator`) e la marca `.fresh`. Lancia se la
+    /// lettura fallisce.
     ///
     /// - Returns: i kind idratati (per diagnostica/test), in ordine stabile.
     @discardableResult
@@ -210,6 +266,7 @@ public final class AnalysisResultsStore {
             storage[key] = CategoryReviewData(review: review, assets: assets)
             timestamps[key] = record.computedAt
             if let token = record.libraryToken { libraryTokens[key] = token }
+            freshness[key] = .updating
             hydrated.append(record.kind)
         }
         return hydrated

@@ -21,16 +21,21 @@ final class SmokeTests: XCTestCase {
     // AC-FSE-J0-2: l'app si avvia e la CI ora ESEGUE l'app (non la sola compilazione).
     // Su un Simulatore appena creato (UserDefaults pulite) il primo avvio mostra
     // l'onboarding-manifesto: il wordmark "Angavu" (brand DI-005, stabile) prova che
-    // l'app è viva. Fallback sul bottone "Inizia" per robustezza.
+    // l'app è viva. Fallback sul bottone "Inizia" per robustezza. FSE-K3: se un test
+    // precedente dello stesso run ha già scansionato (`RelaunchCategoryCacheUITests`),
+    // il lancio RIPRISTINA e atterra in dashboard («Numeri veri»): anche quella è la
+    // schermata iniziale legittima di un'app viva.
     func test_appLaunches_showsInitialScreen() {
         let app = XCUIApplication()
         app.launch()
 
         let wordmark = app.staticTexts["Angavu"]
         let startButton = app.buttons["Inizia"]
+        let restoredDashboard = app.navigationBars["Numeri veri"]
         let appeared = wordmark.waitForExistence(timeout: 30)
             || startButton.waitForExistence(timeout: 5)
+            || restoredDashboard.waitForExistence(timeout: 5)
 
-        XCTAssertTrue(appeared, "l'app deve avviarsi e mostrare la schermata iniziale (onboarding/Home)")
+        XCTAssertTrue(appeared, "l'app deve avviarsi e mostrare la schermata iniziale (onboarding/Home/dashboard)")
     }
 }

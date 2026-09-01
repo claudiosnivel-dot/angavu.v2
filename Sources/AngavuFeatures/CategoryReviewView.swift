@@ -50,6 +50,10 @@ public struct CategoryReviewView: View {
     /// FSE-J1 — Motivo dell'eliminazione REALE fallita (mai un falso successo). `nil`
     /// quando non c'è errore; presente → alert onesto.
     @State var deletionError: String?
+    /// FSE-K3 — Vero se il contenuto mostrato è stato servito dalla cache (idratata o
+    /// calcolata a monte) senza invocare il rilevatore; falso se composto ora al tap.
+    /// Alimenta `loadedSourceIdentifier` (osservabile del Livello B).
+    @State var servedFromCache = false
 
     public init(environment: AppEnvironment, category: CleanupCategory, store: AnalysisResultsStore) {
         self.environment = environment
@@ -109,6 +113,9 @@ public struct CategoryReviewView: View {
             Text(deletionError ?? "")
         }
         .task { await loadIfNeeded() }
+        // FSE-K3: la ricomposizione in background (`.updating` → `.fresh`) riapplica il
+        // valore ricomposto sul posto.
+        .onChange(of: freshnessState) { old, new in freshnessDidChange(from: old, to: new) }
         // D-1: pull-to-refresh = «Ri-analizza» manuale. Invalida la cache e ricalcola
         // dai dati veri, ri-timbrando la freschezza.
         .refreshable { await loadIfNeeded(force: true) }
@@ -166,62 +173,22 @@ extension CategoryReviewView {
     @ViewBuilder
     var loadedContent: some View {
         let pres = presentation
+        // FSE-K3: badge di freschezza — «in aggiornamento» (servita dalla persistenza,
+        // delta in applicazione) o «da riscansionare» (non verificabile). Mai uno spinner
+        // vuoto, mai un risultato stantìo spacciato per definitivo.
+        if let badge = CategoryFreshnessPresentation.label(for: freshnessState) {
+            freshnessBadge(badge, symbol: CategoryFreshnessPresentation.symbol(for: freshnessState))
+        }
         if pres.phase == .confirmed {
             confirmedCard(pres)
         } else if pres.isEmpty {
             emptyCard
+                .accessibilityIdentifier(loadedSourceIdentifier)
         } else {
             summaryCard(pres)
             if !pres.removableRows.isEmpty { rowsSection("Da eliminare", pres.removableRows) }
             if !pres.keepRows.isEmpty { rowsSection("Da tenere", pres.keepRows) }
         }
-    }
-
-    // MARK: Riepilogo
-
-    func summaryCard(_ pres: CategoryReviewPresentation) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("\(pres.removableCount)")
-                .auroraHeroNumber()
-                .foregroundStyle(AuroraBrand.gradient)
-            Text(pres.removableCount == 1 ? "elemento da eliminare" : "elementi da eliminare")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            if pres.keepCount > 0 {
-                Text("\(pres.keepCount) da tenere")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            // D-1: badge di freschezza — dichiara quando i dati sono stati calcolati,
-            // così un numero cachato non è mai spacciato per appena letto. Assente se
-            // non tracciato (categoria non ancora timbrata).
-            if let freshness = freshnessLabel {
-                Label {
-                    Text(freshness)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } icon: {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                }
-                .padding(.top, 2)
-            }
-            Label {
-                Text(pres.safetyNote)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "arrow.uturn.backward.circle")
-                    .foregroundStyle(AuroraBrand.accentAzzurro)
-                    .accessibilityHidden(true)
-            }
-            .padding(.top, 4)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: .rect(cornerRadius: 16))
     }
 
     // MARK: Sezioni di righe
