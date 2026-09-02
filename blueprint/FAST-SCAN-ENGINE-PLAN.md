@@ -1324,7 +1324,7 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
     - "L'idratazione/ricomposizione al lancio (K3)"
 
 - id: FSE-K3
-  title: "Idratazione al lancio + ricomposizione INCREMENTALE (il fix del ripristino)"
+  title: "Idratazione al lancio + ricomposizione INCREMENTALE (il fix del ripristino) — ✅ DONE 2026-09-02 (commit 8cedc8d + 887b047 + 817bdff, CI #127 verde, 3 job macos-15 incl. UITest cold relaunch)"
   macrotask: "persistent_results"
   depends_on: [FSE-K1, FSE-K2]
   objective: >
