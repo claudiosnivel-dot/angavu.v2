@@ -38,8 +38,11 @@ struct ScanButtonView: View {
         .onChange(of: flow.isIndeterminate) { _, indeterminate in
             beating = indeterminate
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityAddTraits(flow.isButtonEnabled ? .isButton : [])
+        // Un `Button` È già un elemento di accessibilità col tratto `.isButton`:
+        // etichetta e valore vanno applicati DIRETTAMENTE su di esso. Avvolgerlo in un
+        // secondo elemento (`accessibilityElement(children: .ignore)` + `.isButton`)
+        // esponeva DUE Button annidati con la stessa etichetta — il cold-relaunch
+        // UITest (FSE-K3, CI #126) falliva con «Multiple matching elements» al tap.
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(flow.statusLabel ?? "")
     }
