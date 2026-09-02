@@ -1359,7 +1359,7 @@ Regola: ogni fase si chiude al confine CI (`swift build -warnings-as-errors` +
     - "Ricomposizione incrementale dei CLUSTER dei simili (un delta può fondere/spezzare cluster): in K3 la categoria toccata si ricompone INTERA (corretto, non ancora ottimo); l'ottimizzazione per-cluster è un follow-up dichiarato"
 
 - id: FSE-K4
-  title: "Store posseduto dall'App + observer coalescito (hardening)"
+  title: "Store posseduto dall'App + observer coalescito (hardening) — ✅ DONE 2026-09-02 (commit 8c2cc62, CI #128 verde, 3 job macos-15)"
   macrotask: "persistent_results"
   depends_on: [FSE-K1]
   objective: >
