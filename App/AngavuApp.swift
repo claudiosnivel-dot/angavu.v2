@@ -19,17 +19,45 @@ struct AngavuApp: App {
     /// una schermata secondaria. Ritenuto per l'intera vita del processo.
     private let telemetry = AppTelemetry()
 
+    /// Indice SwiftData on-device (zero backend). FSE-J6: lo schema include anche
+    /// `DerivedRecord` così i derivati (digest…) persistono fra i lanci; FSE-K1:
+    /// `CategoryResultRecord` così i RISULTATI per categoria (solo id) sopravvivono al
+    /// cold relaunch. Creato qui, una volta, perché alimenta il grafo di sessione.
+    private let container: ModelContainer
+
+    /// FSE-K4 — Il grafo di sessione (`AppEnvironment.live` + cache dei risultati +
+    /// observer dei cambi libreria) è POSSEDUTO dall'`App` (guida Apple: lo stato di
+    /// modello con identità stabile vive in `@State` dell'`App` e viaggia via
+    /// `.environment`), non più da una view intermedia che un ramo `if` può ricreare
+    /// azzerando cache e observer. Un'unica istanza per l'intera vita del processo.
+    @State private var runtime: AppRuntime
+
+    init() {
+        let container = AngavuApp.makeContainer()
+        self.container = container
+        _runtime = State(initialValue: AppRuntime(environment: .live(container: container)))
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(runtime)
                 // nil per `.system` → segue iOS; altrimenti forza chiaro/scuro.
                 .preferredColorScheme(theme.preferredColorScheme)
         }
-        // Indice SwiftData on-device (zero backend): il ModelContext creato qui
-        // alimenta l'`AppEnvironment.live` costruito in ContentView. FSE-J6: lo schema
-        // include anche `DerivedRecord` così i derivati (digest…) persistono fra i lanci;
-        // FSE-K1: `CategoryResultRecord` così i RISULTATI per categoria (solo id)
-        // sopravvivono al cold relaunch.
-        .modelContainer(for: [AssetRecord.self, DerivedRecord.self, CategoryResultRecord.self])
+        .modelContainer(container)
+    }
+
+    /// Contenitore SwiftData dell'app. Un fallimento qui (schema/negozio corrotto) è
+    /// irrecuperabile per costruzione — lo stesso esito del modificatore
+    /// `.modelContainer(for:)` usato prima di K4: si preferisce fermarsi a un'app che
+    /// finge di funzionare senza persistenza (onestà).
+    private static func makeContainer() -> ModelContainer {
+        let schema = Schema([AssetRecord.self, DerivedRecord.self, CategoryResultRecord.self])
+        do {
+            return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema))
+        } catch {
+            fatalError("Impossibile creare il ModelContainer SwiftData: \(error)")
+        }
     }
 }
